@@ -1,0 +1,31 @@
+rules_version = '2';
+
+// Kanon Firestore security rules.
+// Deploy with: firebase deploy --only firestore:rules
+// See README for Firebase CLI setup.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Placeholder: allow read/write for authenticated users only.
+    // Tighten for production: restrict by community whitelist, validate fields, etc.
+    match /communities/{communityId} {
+      allow read, write: if request.auth != null;
+    }
+    match /users/{userId} {
+      allow read, write: if request.auth != null;
+    }
+    match /items/{itemId} {
+      allow read, write: if request.auth != null;
+    }
+    match /connections/{connectionId} {
+      allow read, write: if request.auth != null;
+      match /items/{connectionItemId} {
+        allow read, write: if request.auth != null;
+      }
+      match /responses/{responseId} {
+        allow read, write: if request.auth != null;
+      }
+    }
+  }
+}
