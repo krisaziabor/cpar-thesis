@@ -7,6 +7,21 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // Helper: check if the authenticated user is an admin.
+    function isAdmin() {
+      return request.auth != null
+        && get(/databases/$(database)/documents/whitelist/$(request.auth.token.email)).data.role == 'admin';
+    }
+
+    // Whitelist: anyone may look up a specific document by ID (needed for the
+    // pre-login email check), but listing the collection is blocked.
+    // Write access is intentionally blocked — manage entries in the Firebase Console.
+    match /whitelist/{email} {
+      allow get: if true;
+      allow list: if false;
+      allow write: if false;
+    }
+
     // Placeholder: allow read/write for authenticated users only.
     // Tighten for production: restrict by community whitelist, validate fields, etc.
     match /communities/{communityId} {
@@ -16,7 +31,31 @@ service cloud.firestore {
       allow read, write: if request.auth != null;
     }
     match /items/{itemId} {
-      allow read, write: if request.auth != null;
+      // Published items are readable by any authenticated user.
+      // Draft items are readable only by their author (added_by == email).
+      allow read: if request.auth != null
+        && (!resource.data.is_draft
+            || resource.data.added_by == request.auth.token.email);
+      // Anyone authenticated may create an item (they become the author).
+      allow create: if request.auth != null;
+      // Author may update their own items; admins and authors may delete.
+      allow update: if request.auth != null
+        && resource.data.added_by == request.auth.token.email;
+      allow delete: if request.auth != null
+        && (resource.data.added_by == request.auth.token.email || isAdmin());
+
+      // Audio versions subcollection
+      match /audio_versions/{versionId} {
+        // Any authenticated user can read version history.
+        allow read: if request.auth != null;
+        // Only the item's author may add a new version.
+        allow create: if request.auth != null
+          && get(/databases/$(database)/documents/items/$(itemId)).data.added_by
+             == request.auth.token.email;
+        // Admins may delete versions; no one else may update or delete.
+        allow delete: if isAdmin();
+        allow update: if false;
+      }
     }
     match /connections/{connectionId} {
       allow read, write: if request.auth != null;
@@ -26,6 +65,23 @@ service cloud.firestore {
       match /responses/{responseId} {
         allow read, write: if request.auth != null;
       }
+    }
+
+    // connection_items: junction table used for connection checks.
+    match /connection_items/{docId} {
+      allow read, write: if request.auth != null;
+    }
+
+    // Deletion requests
+    match /deletion_requests/{requestId} {
+      // Any authenticated user may submit a deletion request.
+      allow create: if request.auth != null;
+      // Requester or admin may read their own request; admin sees all.
+      allow read: if request.auth != null
+        && (resource.data.requested_by == request.auth.token.email || isAdmin());
+      // Only admins may resolve (update) requests.
+      allow update: if isAdmin();
+      allow delete: if false;
     }
   }
 }

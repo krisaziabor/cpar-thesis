@@ -59,3 +59,24 @@ export interface Response {
   created_by: string;
   created_at: Timestamp;
 }
+
+/** AudioVersion: a recorded version of an item's testimony */
+export interface AudioVersion {
+  id: string;
+  url: string;
+  created_at: Timestamp;
+  created_by: string;
+}
+
+/** DeletionRequest: submitted when a user wants to delete an item with connections */
+export interface DeletionRequest {
+  id: string;
+  item_id: string;
+  item_title: string;
+  requested_by: string;
+  reason: string;
+  status: "pending" | "approved" | "rejected";
+  created_at: Timestamp;
+  resolved_at?: Timestamp;
+  resolved_by?: string;
+}
