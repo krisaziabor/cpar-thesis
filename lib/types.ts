@@ -68,6 +68,15 @@ export interface AudioVersion {
   created_by: string;
 }
 
+/** KanonSave: a user's personal save of an item or connection */
+export interface KanonSave {
+  id: string;
+  user_email: string;
+  reference_type: "item" | "connection";
+  reference_id: string;
+  created_at: Timestamp;
+}
+
 /** DeletionRequest: submitted when a user wants to delete an item with connections */
 export interface DeletionRequest {
   id: string;

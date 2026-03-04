@@ -4,12 +4,14 @@ import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
 import { subscribeToItems, subscribeToDrafts, discardDraft } from "@/lib/items";
-import type { Item } from "@/lib/types";
+import { saveToKanon, removeFromKanon, subscribeToUserKanon } from "@/lib/kanon";
+import type { Item, KanonSave } from "@/lib/types";
 
 export default function Home() {
   const { user, role, loading: authLoading, signOut } = useAuth();
   const [items, setItems] = useState<Item[]>([]);
   const [drafts, setDrafts] = useState<Item[]>([]);
+  const [kanonSaves, setKanonSaves] = useState<KanonSave[]>([]);
   const [dataLoading, setDataLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
@@ -30,6 +32,12 @@ export default function Home() {
     return unsubscribe;
   }, [user?.email]);
 
+  useEffect(() => {
+    if (!user?.email) return;
+    const unsub = subscribeToUserKanon(user.email, setKanonSaves);
+    return unsub;
+  }, [user?.email]);
+
   // Derive filter options from live data
   const typeOptions = useMemo(
     () => ["all", ...Array.from(new Set(items.map((i) => i.type))).sort()],
@@ -42,6 +50,11 @@ export default function Home() {
   const personOptions = useMemo(
     () => ["all", ...Array.from(new Set(items.map((i) => i.added_by))).sort()],
     [items]
+  );
+
+  const savedItemIds = useMemo(
+    () => new Set(kanonSaves.filter((s) => s.reference_type === "item").map((s) => s.reference_id)),
+    [kanonSaves]
   );
 
   if (authLoading) {
@@ -85,6 +98,12 @@ export default function Home() {
               className="px-3 py-1 text-sm text-zinc-400 hover:text-zinc-900 dark:text-zinc-500 dark:hover:text-zinc-50"
             >
               Activity
+            </Link>
+            <Link
+              href={`/kanon/${encodeURIComponent(user.email ?? "")}`}
+              className="px-3 py-1 text-sm text-zinc-400 hover:text-zinc-900 dark:text-zinc-500 dark:hover:text-zinc-50"
+            >
+              My Kanon
             </Link>
             {role === "admin" && (
               <Link
@@ -210,13 +229,14 @@ export default function Home() {
                 <Th>Creator</Th>
                 <Th>Added by</Th>
                 <Th>Date</Th>
+                <th className="px-4 py-2" />
               </tr>
             </thead>
             <tbody>
               {!dataLoading && filtered.length === 0 && (
                 <tr>
                   <td
-                    colSpan={5}
+                    colSpan={6}
                     className="px-4 py-8 text-center font-mono text-xs text-zinc-400"
                   >
                     {items.length === 0 ? (
@@ -247,8 +267,35 @@ export default function Home() {
                   </td>
                   <Td mono>{item.type}</Td>
                   <Td>{item.creator}</Td>
-                  <Td mono>{item.added_by}</Td>
+                  <td className="px-4 py-3 font-mono text-xs text-zinc-600 dark:text-zinc-400">
+                    <Link
+                      href={`/kanon/${encodeURIComponent(item.added_by)}`}
+                      className="hover:underline underline-offset-2"
+                    >
+                      {item.added_by}
+                    </Link>
+                  </td>
                   <Td mono>{formatDate(item.created_at)}</Td>
+                  <td className="px-4 py-3 text-right">
+                    <button
+                      onClick={async (e) => {
+                        e.preventDefault();
+                        if (!user?.email) return;
+                        const saveId = kanonSaves.find(
+                          (s) => s.reference_type === "item" && s.reference_id === item.id
+                        )?.id ?? null;
+                        if (saveId) {
+                          await removeFromKanon(saveId);
+                        } else {
+                          await saveToKanon(user.email, "item", item.id);
+                        }
+                      }}
+                      className="font-mono text-xs text-zinc-300 hover:text-zinc-700 dark:text-zinc-700 dark:hover:text-zinc-300"
+                      title={savedItemIds.has(item.id) ? "remove from kanon" : "save to kanon"}
+                    >
+                      {savedItemIds.has(item.id) ? "●" : "○"}
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>

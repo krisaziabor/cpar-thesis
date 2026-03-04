@@ -14,6 +14,7 @@ import {
   createDeletionRequest,
   subscribeToItemConnections,
 } from "@/lib/items";
+import { saveToKanon, removeFromKanon, subscribeToKanonSaveStatus } from "@/lib/kanon";
 import type { Item, AudioVersion, Connection } from "@/lib/types";
 import AudioRecorder from "@/components/AudioRecorder";
 
@@ -45,6 +46,10 @@ export default function ItemDetailPage() {
   // Connections for this item
   const [connections, setConnections] = useState<Array<Connection & { itemIds: string[] }>>([]);
 
+  // Kanon save state
+  const [kanonSaveId, setKanonSaveId] = useState<string | null>(null);
+  const [savingKanon, setSavingKanon] = useState(false);
+
   // Connection check + deletion request
   const [hasConnections, setHasConnections] = useState(false);
   const [deletionReason, setDeletionReason] = useState("");
@@ -73,6 +78,12 @@ export default function ItemDetailPage() {
     });
     return unsub;
   }, [id]);
+
+  useEffect(() => {
+    if (!user?.email) return;
+    const unsub = subscribeToKanonSaveStatus(user.email, "item", id, setKanonSaveId);
+    return unsub;
+  }, [user?.email, id]);
 
   if (authLoading || item === undefined) {
     return (
@@ -197,6 +208,25 @@ export default function ItemDetailPage() {
                 edit
               </button>
             )}
+            <button
+              disabled={savingKanon}
+              onClick={async () => {
+                if (!user?.email) return;
+                setSavingKanon(true);
+                try {
+                  if (kanonSaveId) {
+                    await removeFromKanon(kanonSaveId);
+                  } else {
+                    await saveToKanon(user.email, "item", id);
+                  }
+                } finally {
+                  setSavingKanon(false);
+                }
+              }}
+              className="text-sm text-zinc-400 underline underline-offset-2 hover:text-zinc-700 disabled:opacity-40 dark:hover:text-zinc-200"
+            >
+              {kanonSaveId ? "saved ✓" : "save"}
+            </button>
             <Link
               href={`/connect?itemId=${id}`}
               className="border border-zinc-900 px-3 py-1 text-sm font-medium text-zinc-900 hover:bg-zinc-900 hover:text-white dark:border-zinc-100 dark:text-zinc-100 dark:hover:bg-zinc-100 dark:hover:text-zinc-900"

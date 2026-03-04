@@ -72,6 +72,16 @@ service cloud.firestore {
       allow read, write: if request.auth != null;
     }
 
+    // Personal Kanon saves
+    match /kanon_saves/{saveId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null
+        && request.resource.data.user_email == request.auth.token.email;
+      allow delete: if request.auth != null
+        && resource.data.user_email == request.auth.token.email;
+      allow update: if false;
+    }
+
     // Deletion requests
     match /deletion_requests/{requestId} {
       // Any authenticated user may submit a deletion request.
