@@ -5,8 +5,6 @@ const nextConfig: NextConfig = {
   // required at runtime by Node.js directly.
   serverExternalPackages: [
     "@napi-rs/canvas",
-    "@napi-rs/canvas-darwin-arm64",
-    "@napi-rs/canvas-darwin-universal",
     "canvas",
     "mupdf",
     "pdf-parse",
