@@ -1,0 +1,106 @@
+import type { SourceType } from "./types";
+
+const DOI_PATTERN = /10\.\d{4,9}\/[^\s"<>]+/i;
+
+const MUSIC_DOMAINS = [
+  "open.spotify.com",
+  "spotify.com",
+  "music.apple.com",
+  "itunes.apple.com",
+  "soundcloud.com",
+  "deezer.com",
+  "tidal.com",
+  "music.amazon.com",
+  "music.youtube.com",
+  "song.link",
+  "odesli.co",
+  "geo.music.apple.com",
+];
+
+// bandcamp uses arbitrary subdomains (artist.bandcamp.com)
+const MUSIC_DOMAIN_SUFFIXES = ["bandcamp.com"];
+
+const ACADEMIC_DOMAINS = [
+  "jstor.org",
+  "pubmed.ncbi.nlm.nih.gov",
+  "ncbi.nlm.nih.gov",
+  "dl.acm.org",
+  "acm.org",
+  "ieeexplore.ieee.org",
+  "link.springer.com",
+  "nature.com",
+  "science.org",
+  "onlinelibrary.wiley.com",
+  "tandfonline.com",
+  "sagepub.com",
+  "academic.oup.com",
+  "cambridge.org",
+  "sciencedirect.com",
+  "elsevier.com",
+  "pubs.acs.org",
+];
+
+export function classifyUrl(input: string): SourceType {
+  try {
+    const normalized = input.startsWith("http") ? input : `https://${input}`;
+    const url = new URL(normalized);
+    const hostname = url.hostname.toLowerCase().replace(/^www\./, "");
+    const pathname = url.pathname.toLowerCase();
+
+    // YouTube (music.youtube.com is caught by music check below)
+    if (
+      hostname === "youtube.com" ||
+      hostname === "youtu.be" ||
+      hostname === "m.youtube.com"
+    ) {
+      return "youtube";
+    }
+
+    // Music platforms
+    if (
+      MUSIC_DOMAINS.includes(hostname) ||
+      MUSIC_DOMAIN_SUFFIXES.some((s) => hostname === s || hostname.endsWith(`.${s}`))
+    ) {
+      return "music";
+    }
+
+    // arXiv
+    if (hostname === "arxiv.org") return "doi";
+
+    // DOI resolvers
+    if (hostname === "doi.org" || hostname === "dx.doi.org") return "doi";
+
+    // Academic publisher domains
+    if (ACADEMIC_DOMAINS.some((d) => hostname === d || hostname.endsWith(`.${d}`))) {
+      return "doi";
+    }
+
+    // Raw DOI pattern in path (e.g. springer, nature direct links)
+    if (DOI_PATTERN.test(pathname)) return "doi";
+
+    // Social media
+    if (hostname === "instagram.com") return "instagram";
+    if (hostname === "tiktok.com") return "tiktok";
+    if (hostname === "twitter.com" || hostname === "x.com") return "twitter";
+
+    return "url";
+  } catch {
+    // Might be a raw DOI string like "10.1038/nature12373"
+    if (DOI_PATTERN.test(input)) return "doi";
+    return "unknown";
+  }
+}
+
+export function classifyFile(file: { name: string; type: string }): SourceType {
+  const mime = file.type.toLowerCase();
+  const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
+
+  if (mime === "application/pdf" || ext === "pdf") return "pdf";
+  if (
+    mime.startsWith("image/") ||
+    ["jpg", "jpeg", "png", "gif", "webp", "avif", "svg"].includes(ext)
+  ) {
+    return "image";
+  }
+  return "unknown";
+}

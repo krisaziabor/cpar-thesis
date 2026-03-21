@@ -1,4 +1,5 @@
 import type { Timestamp } from "firebase/firestore";
+import type { SourceMetadata } from "./metadata/types";
 
 /** Community: name and email whitelist for access */
 export interface Community {
@@ -31,6 +32,8 @@ export interface Item {
   is_draft: boolean;
   is_hidden: boolean;
   created_at: Timestamp;
+  /** Rich metadata extracted at add-time; stored as a map on the item document */
+  source_metadata?: SourceMetadata;
 }
 
 /** Connection: links 2+ items with required audio description */
