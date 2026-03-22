@@ -9,12 +9,23 @@ export interface Community {
   created_at: Timestamp;
 }
 
+export type MusicPlatform =
+  | "youtube"
+  | "spotify"
+  | "apple_music"
+  | "soundcloud"
+  | "tidal"
+  | "amazon_music"
+  | "deezer";
+
 /** User: identity for contributors */
 export interface User {
   id: string;
   email: string;
   name: string;
   created_at: Timestamp;
+  /** Preferred streaming platform for music links. Defaults to "youtube". */
+  preferred_music_platform?: MusicPlatform;
 }
 
 /** Item: library entry (film, book, article, etc.) with required voice testimony */
