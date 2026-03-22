@@ -253,6 +253,12 @@ export default function MetadataLab() {
                     <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-sm">
                       <Field label="Creator" value={result.data.creator} />
                       <Field label="Type" value={result.data.type} />
+                      {result.data.source_metadata.confidence_score != null && (
+                        <Field
+                          label="Confidence"
+                          value={`${Math.round(result.data.source_metadata.confidence_score * 100)}%${result.data.source_metadata.ai_enriched ? " (AI enriched)" : ""}`}
+                        />
+                      )}
                       {result.data.source_metadata.year && (
                         <Field label="Year" value={String(result.data.source_metadata.year)} />
                       )}

@@ -7,6 +7,9 @@ import { fetchInstagramMetadata, fetchTikTokMetadata, fetchTwitterMetadata } fro
 import { fetchUrlMetadata } from "./handlers/url";
 import { fetchImageMetadata } from "./handlers/image";
 import { fetchNewsMetadata } from "./handlers/news";
+import { scoreMetadata, AI_CONFIDENCE_THRESHOLD } from "./score";
+import { getCachedMetadata, setCachedMetadata, logEnrichment } from "./cache";
+import { aiEnrichMetadata, mergeMetadata } from "./ai-enrich";
 import type { CanonItemMetadata, MetadataResult, SourceType } from "./types";
 
 interface PipelineInput {
@@ -38,6 +41,13 @@ export async function runMetadataPipeline(
     } else if (input.url) {
       sourceType = classifyUrl(input.url);
 
+      // ── Cache check (all URL-based handlers) ─────────────────────────────
+      const cached = await getCachedMetadata(input.url);
+      if (cached) {
+        return { success: true, data: cached, source_type: sourceType };
+      }
+
+      // ── Handler dispatch ──────────────────────────────────────────────────
       switch (sourceType) {
         case "pdf": {
           const res = await fetch(input.url);
@@ -69,10 +79,62 @@ export async function runMetadataPipeline(
           metadata = await fetchNewsMetadata(input.url);
           break;
         case "url":
-        default:
-          metadata = await fetchUrlMetadata(input.url);
+        default: {
+          const scraped = await fetchUrlMetadata(input.url);
+          const scoreBeforeAI = scoreMetadata(scraped);
+
+          if (scoreBeforeAI >= AI_CONFIDENCE_THRESHOLD) {
+            // Confident enough — skip AI
+            metadata = scraped;
+            metadata.source_metadata.confidence_score = scoreBeforeAI;
+          } else {
+            // Low confidence — attempt AI enrichment
+            const t0 = Date.now();
+            const aiResult = await aiEnrichMetadata(input.url, scraped);
+            const latencyMs = Date.now() - t0;
+            const hasAIData = Object.keys(aiResult).length > 0;
+
+            if (hasAIData) {
+              const merged = mergeMetadata(scraped, aiResult, input.url);
+              const scoreAfterAI = scoreMetadata(merged);
+              merged.source_metadata.confidence_score = scoreAfterAI;
+
+              // Fire-and-forget enrichment log
+              logEnrichment({
+                url: input.url,
+                scoreBeforeAI,
+                scoreAfterAI,
+                aiUsed: true,
+                aiImproved: scoreAfterAI > scoreBeforeAI,
+                latencyMs,
+                model: "gemini-2.0-flash-lite",
+              }).catch(() => {});
+
+              metadata = merged;
+            } else {
+              // AI returned nothing — use scraped as-is
+              metadata = scraped;
+              metadata.source_metadata.confidence_score = scoreBeforeAI;
+
+              logEnrichment({
+                url: input.url,
+                scoreBeforeAI,
+                scoreAfterAI: scoreBeforeAI,
+                aiUsed: false,
+                aiImproved: false,
+                latencyMs,
+                model: "gemini-2.0-flash-lite",
+              }).catch(() => {});
+            }
+          }
           break;
+        }
       }
+
+      // ── Cache write (URL-based handlers only) ────────────────────────────
+      const finalScore = metadata.source_metadata.confidence_score ?? scoreMetadata(metadata);
+      const aiEnriched = metadata.source_metadata.ai_enriched ?? false;
+      setCachedMetadata(input.url, metadata, aiEnriched, finalScore).catch(() => {});
     } else {
       throw new Error("Either url or file must be provided");
     }

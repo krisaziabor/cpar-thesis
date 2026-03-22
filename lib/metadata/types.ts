@@ -59,6 +59,11 @@ export interface SourceMetadata {
   page_count?: number;
   full_text?: string;
 
+  // AI enrichment
+  published_date?: string;    // ISO date string (e.g. "2024-03-15")
+  ai_enriched?: boolean;      // true when AI enrichment layer was applied
+  confidence_score?: number;  // final confidence score after enrichment
+
   // Raw API response for debugging / future use
   raw?: Record<string, unknown>;
 }
