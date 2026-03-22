@@ -9,8 +9,8 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.80.0",
     "@distube/ytdl-core": "^4.16.12",
-    "@google/generative-ai": "^0.24.1",
     "@napi-rs/canvas": "^0.1.97",
     "canvas": "^3.2.1",
     "d3": "^7.9.0",

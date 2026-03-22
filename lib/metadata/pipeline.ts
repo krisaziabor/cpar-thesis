@@ -107,7 +107,7 @@ export async function runMetadataPipeline(
                 aiUsed: true,
                 aiImproved: scoreAfterAI > scoreBeforeAI,
                 latencyMs,
-                model: "gemini-2.0-flash-lite",
+                model: "claude-haiku-4-5-20251001",
               }).catch(() => {});
 
               metadata = merged;
@@ -123,7 +123,7 @@ export async function runMetadataPipeline(
                 aiUsed: false,
                 aiImproved: false,
                 latencyMs,
-                model: "gemini-2.0-flash-lite",
+                model: "claude-haiku-4-5-20251001",
               }).catch(() => {});
             }
           }

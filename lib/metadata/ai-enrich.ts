@@ -1,12 +1,12 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import Anthropic from "@anthropic-ai/sdk";
 import type { CanonItemMetadata, ItemType } from "./types";
 
-const MODEL = "gemini-2.0-flash-lite";
+const MODEL = "claude-haiku-4-5-20251001";
 
 // Max page text fed to the model (~3000 tokens at ~4 chars/token)
 const MAX_PAGE_CHARS = 12_000;
 
-const SYSTEM_INSTRUCTION = `You are a metadata extraction tool. Given the URL and text content of a web page, extract structured metadata. Respond with ONLY a JSON object, no other text. If you cannot confidently determine a field, omit it entirely — do not guess.
+const SYSTEM_PROMPT = `You are a metadata extraction tool. Given the URL and text content of a web page, extract structured metadata. Respond with ONLY a JSON object, no other text. If you cannot confidently determine a field, omit it entirely — do not guess.
 
 JSON schema:
 {
@@ -47,7 +47,7 @@ export async function aiEnrichMetadata(
   url: string,
   existingMetadata: CanonItemMetadata
 ): Promise<AIEnrichmentResult> {
-  const apiKey = process.env.GEMINI_API_KEY;
+  const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return {};
 
   // Fetch page for text extraction
@@ -80,26 +80,23 @@ export async function aiEnrichMetadata(
   if (pageText.length > 0)
     parts.push(`\nPage content:\n${pageText}`);
 
-  const genAI = new GoogleGenerativeAI(apiKey);
-  const model = genAI.getGenerativeModel({
-    model: MODEL,
-    systemInstruction: SYSTEM_INSTRUCTION,
-  });
+  const client = new Anthropic({ apiKey });
 
   try {
-    const resultPromise = model.generateContent({
-      contents: [{ role: "user", parts: [{ text: parts.join("") }] }],
-      generationConfig: { maxOutputTokens: 500 },
-    });
-
-    const result = await Promise.race([
-      resultPromise,
+    const message = await Promise.race([
+      client.messages.create({
+        model: MODEL,
+        max_tokens: 500,
+        system: SYSTEM_PROMPT,
+        messages: [{ role: "user", content: parts.join("") }],
+      }),
       new Promise<never>((_, reject) =>
         setTimeout(() => reject(new Error("AI enrichment timeout")), 5_000)
       ),
     ]);
 
-    const text = result.response.text();
+    const text =
+      message.content[0].type === "text" ? message.content[0].text : "";
 
     try {
       const cleaned = text
