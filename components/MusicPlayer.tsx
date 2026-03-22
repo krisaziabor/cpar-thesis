@@ -35,16 +35,28 @@ export default function MusicPlayer({
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(30);
 
-  // Preferred platform → any fallback → song.link
-  const streamUrl =
-    platformLinks[preferredPlatform] ??
-    platformLinks.youtube ??
-    platformLinks.spotify ??
-    (Object.values(platformLinks)[0] as string | undefined) ??
-    songLinkUrl;
+  // Resolve stream URL and track which platform it actually came from
+  function resolveStream(): { url: string; label: string } | null {
+    if (platformLinks[preferredPlatform]) {
+      return { url: platformLinks[preferredPlatform], label: PLATFORM_LABELS[preferredPlatform] ?? preferredPlatform };
+    }
+    if (platformLinks.youtube) {
+      return { url: platformLinks.youtube, label: PLATFORM_LABELS.youtube };
+    }
+    if (platformLinks.spotify) {
+      return { url: platformLinks.spotify, label: PLATFORM_LABELS.spotify };
+    }
+    const first = Object.entries(platformLinks)[0] as [string, string] | undefined;
+    if (first) {
+      return { url: first[1], label: PLATFORM_LABELS[first[0] as MusicPlatform] ?? first[0] };
+    }
+    if (songLinkUrl) {
+      return { url: songLinkUrl, label: "song.link" };
+    }
+    return null;
+  }
 
-  const platformLabel =
-    PLATFORM_LABELS[preferredPlatform] ?? preferredPlatform;
+  const stream = resolveStream();
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -87,7 +99,7 @@ export default function MusicPlayer({
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-col gap-0.5">
-        <p className="text-sm font-medium text-zinc-900 dark:text-zinc-50">{title}</p>
+        <p className="text-sm font-medium text-zinc-900">{title}</p>
         <p className="font-mono text-xs text-zinc-500">{creator}</p>
       </div>
 
@@ -97,15 +109,15 @@ export default function MusicPlayer({
           <div className="flex items-center gap-3">
             <button
               onClick={togglePlay}
-              className="w-4 shrink-0 font-mono text-xs text-zinc-900 dark:text-zinc-50"
+              className="w-4 shrink-0 font-mono text-xs text-zinc-900"
               aria-label={playing ? "pause" : "play"}
             >
               {playing ? "■" : "▶"}
             </button>
             <div className="flex flex-1 flex-col gap-1">
-              <div className="relative h-px bg-zinc-200 dark:bg-zinc-800">
+              <div className="relative h-px bg-zinc-200">
                 <div
-                  className="absolute left-0 top-0 h-px bg-zinc-900 transition-all dark:bg-zinc-100"
+                  className="absolute left-0 top-0 h-px bg-zinc-900 transition-all"
                   style={{ width: `${progress * 100}%` }}
                 />
               </div>
@@ -122,18 +134,18 @@ export default function MusicPlayer({
         </>
       )}
 
-      {streamUrl && (
+      {stream && (
         <a
-          href={streamUrl}
+          href={stream.url}
           target="_blank"
           rel="noopener noreferrer"
-          className="w-fit font-mono text-xs text-zinc-500 underline underline-offset-2 hover:text-zinc-900 dark:hover:text-zinc-100"
+          className="w-fit font-mono text-xs text-zinc-500 underline underline-offset-2 hover:text-zinc-900"
         >
-          listen on {platformLabel} ↗
+          listen on {stream.label} ↗
         </a>
       )}
 
-      {!previewUrl && !streamUrl && (
+      {!previewUrl && !stream && (
         <p className="font-mono text-xs text-zinc-400">no preview available</p>
       )}
     </div>
