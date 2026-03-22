@@ -83,6 +83,16 @@ export function classifyUrl(input: string): SourceType {
     if (hostname === "tiktok.com") return "tiktok";
     if (hostname === "twitter.com" || hostname === "x.com") return "twitter";
 
+    // Long-form writing platforms
+    if (
+      hostname === "medium.com" ||
+      hostname.endsWith(".medium.com") ||
+      hostname.endsWith(".substack.com") ||
+      hostname.endsWith(".ghost.io")
+    ) {
+      return "news";
+    }
+
     return "url";
   } catch {
     // Might be a raw DOI string like "10.1038/nature12373"

@@ -15,6 +15,7 @@ export type ItemType =
   | "book"
   | "film"
   | "article"
+  | "essay"
   | "song"
   | "podcast"
   | "other";

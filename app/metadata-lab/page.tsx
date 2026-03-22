@@ -142,7 +142,7 @@ export default function MetadataLab() {
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept=".pdf,application/pdf"
+                  accept=".pdf,application/pdf,image/*"
                   className="hidden"
                   onChange={(e) => setFile(e.target.files?.[0] ?? null)}
                 />
@@ -158,7 +158,7 @@ export default function MetadataLab() {
                     <p className="text-sm text-gray-600">
                       Drop a PDF here or click to browse
                     </p>
-                    <p className="text-xs text-gray-400">PDF only</p>
+                    <p className="text-xs text-gray-400">PDF or image file</p>
                   </div>
                 )}
               </div>
@@ -292,6 +292,13 @@ export default function MetadataLab() {
                           value={result.data.source_metadata.view_count.toLocaleString()}
                         />
                       )}
+                      {result.data.source_metadata.source_type === "news" &&
+                        typeof (result.data.source_metadata.raw as Record<string, unknown> | undefined)?.readingTime === "number" && (
+                          <Field
+                            label="Reading time"
+                            value={`~${(result.data.source_metadata.raw as Record<string, unknown>).readingTime} min`}
+                          />
+                        )}
                     </div>
 
                     {/* Tags */}

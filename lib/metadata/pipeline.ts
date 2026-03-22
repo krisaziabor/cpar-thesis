@@ -5,7 +5,8 @@ import { fetchYouTubeMetadata } from "./handlers/youtube";
 import { fetchMusicMetadata } from "./handlers/music";
 import { fetchInstagramMetadata, fetchTikTokMetadata, fetchTwitterMetadata } from "./handlers/social";
 import { fetchUrlMetadata } from "./handlers/url";
-import { fetchImageMetadata } from "./handlers/stubs";
+import { fetchImageMetadata } from "./handlers/image";
+import { fetchNewsMetadata } from "./handlers/news";
 import type { CanonItemMetadata, MetadataResult, SourceType } from "./types";
 
 interface PipelineInput {
@@ -63,6 +64,9 @@ export async function runMetadataPipeline(
           break;
         case "twitter":
           metadata = await fetchTwitterMetadata(input.url);
+          break;
+        case "news":
+          metadata = await fetchNewsMetadata(input.url);
           break;
         case "url":
         default:
