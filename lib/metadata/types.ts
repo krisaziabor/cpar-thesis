@@ -47,10 +47,12 @@ export interface SourceMetadata {
   view_count?: number;
 
   // Music (Odesli/song.link)
-  platform?: string;          // originating platform slug (e.g. "spotify")
+  platform?: string;              // originating platform slug (e.g. "spotify")
   album?: string;
-  platforms?: string[];       // all platforms the track is available on
-  song_link_url?: string;     // cross-platform song.link aggregator URL
+  platforms?: string[];           // all platforms the track is available on
+  song_link_url?: string;         // cross-platform song.link aggregator URL
+  preview_url?: string;           // 30s Spotify preview MP3 URL (null if unavailable)
+  platform_links?: Record<string, string>; // MusicPlatform slug → stream URL
 
   // Social (Instagram / TikTok / Twitter)
   author_url?: string;        // profile URL of the post author

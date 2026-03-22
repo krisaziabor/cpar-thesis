@@ -15,8 +15,10 @@ import {
   subscribeToItemConnections,
 } from "@/lib/items";
 import { saveToKanon, removeFromKanon, subscribeToKanonSaveStatus } from "@/lib/kanon";
-import type { Item, AudioVersion, Connection } from "@/lib/types";
+import type { Item, AudioVersion, Connection, MusicPlatform } from "@/lib/types";
 import AudioRecorder from "@/components/AudioRecorder";
+import MusicPlayer from "@/components/MusicPlayer";
+import { getUserProfile } from "@/lib/users";
 
 const TYPES = ["book", "film", "article", "song", "podcast", "other"];
 
@@ -49,6 +51,9 @@ export default function ItemDetailPage() {
   // Kanon save state
   const [kanonSaveId, setKanonSaveId] = useState<string | null>(null);
   const [savingKanon, setSavingKanon] = useState(false);
+
+  // User preferred music platform
+  const [preferredPlatform, setPreferredPlatform] = useState<MusicPlatform>("youtube");
 
   // Connection check + deletion request
   const [hasConnections, setHasConnections] = useState(false);
@@ -84,6 +89,15 @@ export default function ItemDetailPage() {
     const unsub = subscribeToKanonSaveStatus(user.email, "item", id, setKanonSaveId);
     return unsub;
   }, [user?.email, id]);
+
+  useEffect(() => {
+    if (!user?.email) return;
+    getUserProfile(user.email).then((profile) => {
+      if (profile?.preferred_music_platform) {
+        setPreferredPlatform(profile.preferred_music_platform);
+      }
+    });
+  }, [user?.email]);
 
   if (authLoading || item === undefined) {
     return (
@@ -272,6 +286,19 @@ export default function ItemDetailPage() {
                     {tag}
                   </span>
                 ))}
+              </div>
+            )}
+
+            {item.type === "song" && item.source_metadata && (
+              <div className="mt-4">
+                <MusicPlayer
+                  title={item.title}
+                  creator={item.creator}
+                  previewUrl={item.source_metadata.preview_url}
+                  platformLinks={item.source_metadata.platform_links}
+                  songLinkUrl={item.source_metadata.song_link_url}
+                  preferredPlatform={preferredPlatform}
+                />
               </div>
             )}
           </>
