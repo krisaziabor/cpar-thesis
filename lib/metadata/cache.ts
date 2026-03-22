@@ -76,6 +76,21 @@ export async function getCachedMetadata(url: string): Promise<CanonItemMetadata 
   }
 }
 
+// Firestore rejects undefined values — strip them recursively before writing
+function stripUndefined<T>(obj: T): T {
+  if (Array.isArray(obj)) {
+    return obj.map(stripUndefined) as unknown as T;
+  }
+  if (obj !== null && typeof obj === "object") {
+    return Object.fromEntries(
+      Object.entries(obj)
+        .filter(([, v]) => v !== undefined)
+        .map(([k, v]) => [k, stripUndefined(v)])
+    ) as T;
+  }
+  return obj;
+}
+
 export async function setCachedMetadata(
   url: string,
   metadata: CanonItemMetadata,
@@ -84,13 +99,13 @@ export async function setCachedMetadata(
 ): Promise<void> {
   if (!db) return;
   try {
-    const entry: CacheEntry = {
+    const entry: CacheEntry = stripUndefined({
       url: normalizeUrl(url),
       metadata,
       resolvedAt: Timestamp.now(),
       aiEnriched,
       confidenceScore,
-    };
+    });
     await setDoc(doc(db, CACHE_COLLECTION, urlCacheKey(url)), entry);
   } catch (err) {
     console.warn("[metadata-cache] write failed:", err);

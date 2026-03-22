@@ -82,6 +82,20 @@ service cloud.firestore {
       allow update: if false;
     }
 
+    // Metadata cache — written by server-side API routes (no user auth context).
+    // Contains only public URL metadata; no user PII.
+    match /metadataCache/{docId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // Enrichment logs — written by server-side API routes (no user auth context).
+    // Internal monitoring data only; no user PII.
+    match /metadataEnrichmentLogs/{docId} {
+      allow read: if request.auth != null && isAdmin();
+      allow write: if true;
+    }
+
     // Deletion requests
     match /deletion_requests/{requestId} {
       // Any authenticated user may submit a deletion request.
