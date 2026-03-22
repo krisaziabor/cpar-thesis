@@ -2,6 +2,7 @@
 
 import { useState, useRef } from "react";
 import type { MetadataResult, SourceType } from "@/lib/metadata/types";
+import MusicPlayer from "@/components/MusicPlayer";
 
 // ─── Source type badge ────────────────────────────────────────────────────────
 
@@ -444,6 +445,20 @@ export default function MetadataLab() {
                     )}
                   </div>
                 </div>
+
+                {/* Music player */}
+                {result.data.source_metadata.source_type === "music" && (
+                  <div className="border border-gray-200 rounded-lg p-4">
+                    <MusicPlayer
+                      title={result.data.title}
+                      creator={result.data.creator}
+                      previewUrl={result.data.source_metadata.preview_url}
+                      platformLinks={result.data.source_metadata.platform_links}
+                      songLinkUrl={result.data.source_metadata.song_link_url}
+                      preferredPlatform="youtube"
+                    />
+                  </div>
+                )}
 
                 {/* Description / abstract */}
                 {result.data.source_metadata.description && (
