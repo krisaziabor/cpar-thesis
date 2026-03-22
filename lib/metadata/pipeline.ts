@@ -82,8 +82,12 @@ export async function runMetadataPipeline(
         default: {
           const scraped = await fetchUrlMetadata(input.url);
           const scoreBeforeAI = scoreMetadata(scraped);
+          const creatorUnknown =
+            scraped.creator === "Unknown" ||
+            scraped.creator === scraped.source_metadata.site_name ||
+            scraped.creator.trim() === "";
 
-          if (scoreBeforeAI >= AI_CONFIDENCE_THRESHOLD) {
+          if (scoreBeforeAI >= AI_CONFIDENCE_THRESHOLD && !creatorUnknown) {
             // Confident enough — skip AI
             metadata = scraped;
             metadata.source_metadata.confidence_score = scoreBeforeAI;
