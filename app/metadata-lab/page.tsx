@@ -102,6 +102,103 @@ export default function MetadataLab() {
           </p>
         </div>
 
+        {/* Pipeline documentation */}
+        <details className="group bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+          <summary className="cursor-pointer px-5 py-4 flex items-center justify-between list-none select-none hover:bg-gray-50 transition-colors">
+            <span className="text-sm font-medium text-gray-700">How the pipeline works</span>
+            <span className="text-gray-400 transition-transform group-open:rotate-180 text-xs">▼</span>
+          </summary>
+          <div className="px-5 pb-5 pt-1 space-y-5 text-sm text-gray-600 border-t border-gray-100">
+
+            {/* Handler routing */}
+            <div>
+              <p className="font-medium text-gray-800 mb-2">Handler routing</p>
+              <p className="text-xs text-gray-500 mb-2">
+                URLs are classified before any fetch. Specific handlers run for known source types;
+                everything else falls through to the generic OG scraper.
+              </p>
+              <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-xs">
+                {[
+                  ["PDF", "File upload or direct .pdf URL"],
+                  ["DOI / Scholarly", "doi.org, arxiv.org, major academic publishers"],
+                  ["YouTube", "youtube.com, youtu.be"],
+                  ["Music", "Spotify, Apple Music, SoundCloud, Bandcamp, etc."],
+                  ["Instagram / TikTok / Twitter", "Platform oEmbed endpoints"],
+                  ["News / Essay", "Substack, Medium, Ghost — JSON-LD + article:* OG tags"],
+                  ["Image", "Uploaded image file — EXIF + sharp thumbnail"],
+                  ["Generic URL", "Everything else — Open Graph scraper + AI fallback"],
+                ].map(([label, desc]) => (
+                  <div key={label} className="contents">
+                    <span className="text-gray-700 font-medium">{label}</span>
+                    <span className="text-gray-400">{desc}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Confidence scoring */}
+            <div>
+              <p className="font-medium text-gray-800 mb-2">Confidence scoring <span className="text-gray-400 font-normal">(generic URL only)</span></p>
+              <p className="text-xs text-gray-500 mb-2">
+                After the OG scrape, each result is scored 0–1. Scores below 0.5 trigger
+                AI enrichment. Creator unknown also triggers AI regardless of score.
+              </p>
+              <div className="rounded-lg bg-gray-50 border border-gray-200 overflow-hidden">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b border-gray-200">
+                      <th className="text-left px-3 py-2 text-gray-500 font-medium">Signal</th>
+                      <th className="text-left px-3 py-2 text-gray-500 font-medium">Condition</th>
+                      <th className="text-right px-3 py-2 text-gray-500 font-medium">Score</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {[
+                      ["Title", "Present, ≥ 5 chars, not a URL or generic bad title", "+0.30"],
+                      ["Creator", 'Non-empty and not "Unknown"', "+0.20"],
+                      ["Description", "Present and longer than 20 characters", "+0.20"],
+                      ["Thumbnail", "Any thumbnail URL present", "+0.15"],
+                      ["Date", "Published year or date present", "+0.15"],
+                    ].map(([signal, condition, score]) => (
+                      <tr key={signal}>
+                        <td className="px-3 py-2 font-medium text-gray-700">{signal}</td>
+                        <td className="px-3 py-2 text-gray-500">{condition}</td>
+                        <td className="px-3 py-2 text-right font-mono text-gray-700">{score}</td>
+                      </tr>
+                    ))}
+                    <tr className="bg-gray-100">
+                      <td className="px-3 py-2 font-medium text-gray-700" colSpan={2}>Max</td>
+                      <td className="px-3 py-2 text-right font-mono font-semibold text-gray-900">1.00</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* AI enrichment */}
+            <div>
+              <p className="font-medium text-gray-800 mb-2">
+                AI enrichment{" "}
+                <span className="inline-block text-[10px] px-1 py-px rounded bg-violet-100 text-violet-600 font-medium leading-none align-middle">AI</span>
+              </p>
+              <p className="text-xs text-gray-500 mb-1.5">
+                When triggered, the page HTML is fetched, stripped of nav/footer/script/style,
+                truncated to ~3,000 tokens, and sent to <span className="font-mono">claude-haiku-4-5-20251001</span> with
+                the existing scraped metadata for context. The model returns structured JSON;
+                the pipeline merges it field-by-field.
+              </p>
+              <div className="text-xs space-y-1 text-gray-500">
+                <p><span className="font-medium text-gray-700">Triggers:</span> confidence score &lt; 0.5, or creator is unknown</p>
+                <p><span className="font-medium text-gray-700">Timeout:</span> 5 s — on failure, scraped result is used as-is</p>
+                <p><span className="font-medium text-gray-700">Fields filled:</span> title, creator, description, published date, content type</p>
+                <p><span className="font-medium text-gray-700">Merge rules:</span> AI wins on missing/garbage values; scraped wins on description length and thumbnail</p>
+                <p><span className="font-medium text-gray-700">Caching:</span> all URL results cached in Firestore for 30 days keyed on normalised URL (tracking params stripped)</p>
+              </div>
+            </div>
+
+          </div>
+        </details>
+
         {/* Input card */}
         <form onSubmit={handleSubmit} className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
           {/* Tabs */}
