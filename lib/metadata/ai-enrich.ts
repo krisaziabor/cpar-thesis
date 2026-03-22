@@ -163,10 +163,12 @@ export function mergeMetadata(
     ...scraped,
     source_metadata: { ...scraped.source_metadata },
   };
+  const enrichedFields: string[] = [];
 
   // Title: prefer AI if scraped looks like a site name or generic garbage
   if (ai.title && looksLikeSiteName(scraped.title, url)) {
     merged.title = ai.title;
+    enrichedFields.push("title");
   }
 
   // Creator: prefer AI if scraped is "Unknown" or equal to site_name
@@ -177,6 +179,7 @@ export function mergeMetadata(
       scraped.creator.trim() === "";
     if (isUnknown) {
       merged.creator = ai.authors.join(", ");
+      enrichedFields.push("creator");
     }
   }
 
@@ -185,6 +188,7 @@ export function mergeMetadata(
     const existing = scraped.source_metadata.description;
     if (!existing || existing.length < 20) {
       merged.source_metadata.description = ai.description;
+      enrichedFields.push("description");
     }
   }
 
@@ -197,14 +201,19 @@ export function mergeMetadata(
     const year = parseInt(ai.publishedDate.slice(0, 4), 10);
     merged.source_metadata.published_date = ai.publishedDate;
     if (!isNaN(year)) merged.source_metadata.year = year;
+    enrichedFields.push("year");
   }
 
   // Item type: prefer AI classification
   const aiType = aiSourceTypeToItemType(ai.sourceType);
-  if (aiType) merged.type = aiType;
+  if (aiType) {
+    merged.type = aiType;
+    enrichedFields.push("type");
+  }
 
   // Mark enriched
   merged.source_metadata.ai_enriched = true;
+  merged.source_metadata.ai_enriched_fields = enrichedFields;
 
   return merged;
 }

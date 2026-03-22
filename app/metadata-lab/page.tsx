@@ -246,21 +246,32 @@ export default function MetadataLab() {
 
                   {/* Fields */}
                   <div className="flex-1 min-w-0 space-y-2">
-                    <h2 className="text-base font-semibold text-gray-900 leading-snug">
-                      {result.data.title}
+                    {(() => {
+                      const aiFields = new Set(result.data.source_metadata.ai_enriched_fields ?? []);
+                      const wasAI = (field: string) => aiFields.has(field);
+                      return (<>
+                    <h2 className="text-base font-semibold leading-snug flex items-center gap-1.5">
+                      <span className={wasAI("title") ? "text-violet-900" : "text-gray-900"}>
+                        {result.data.title}
+                      </span>
+                      {wasAI("title") && (
+                        <span className="text-[10px] px-1 py-px rounded bg-violet-100 text-violet-600 font-medium leading-none shrink-0">
+                          AI
+                        </span>
+                      )}
                     </h2>
 
                     <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-sm">
-                      <Field label="Creator" value={result.data.creator} />
-                      <Field label="Type" value={result.data.type} />
+                      <Field label="Creator" value={result.data.creator} ai={wasAI("creator")} />
+                      <Field label="Type" value={result.data.type} ai={wasAI("type")} />
                       {result.data.source_metadata.confidence_score != null && (
                         <Field
                           label="Confidence"
-                          value={`${Math.round(result.data.source_metadata.confidence_score * 100)}%${result.data.source_metadata.ai_enriched ? " (AI enriched)" : ""}`}
+                          value={`${Math.round(result.data.source_metadata.confidence_score * 100)}%`}
                         />
                       )}
                       {result.data.source_metadata.year && (
-                        <Field label="Year" value={String(result.data.source_metadata.year)} />
+                        <Field label="Year" value={String(result.data.source_metadata.year)} ai={wasAI("year")} />
                       )}
                       {result.data.source_metadata.doi && (
                         <Field label="DOI" value={result.data.source_metadata.doi} mono />
@@ -320,6 +331,8 @@ export default function MetadataLab() {
                         ))}
                       </div>
                     )}
+                    </>);
+                    })()}
 
                     {/* External link */}
                     {result.data.link && (
@@ -338,10 +351,15 @@ export default function MetadataLab() {
                 {/* Description / abstract */}
                 {result.data.source_metadata.description && (
                   <div>
-                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">
+                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1 flex items-center gap-1.5">
                       {result.data.source_metadata.doi ? "Abstract" : "Description"}
+                      {result.data.source_metadata.ai_enriched_fields?.includes("description") && (
+                        <span className="text-[10px] px-1 py-px rounded bg-violet-100 text-violet-600 font-medium leading-none">
+                          AI
+                        </span>
+                      )}
                     </p>
-                    <p className="text-sm text-gray-700 leading-relaxed line-clamp-5">
+                    <p className={`text-sm leading-relaxed line-clamp-5 ${result.data.source_metadata.ai_enriched_fields?.includes("description") ? "text-violet-800" : "text-gray-700"}`}>
                       {result.data.source_metadata.description}
                     </p>
                   </div>
@@ -469,15 +487,27 @@ function Field({
   label,
   value,
   mono = false,
+  ai = false,
 }: {
   label: string;
   value: string;
   mono?: boolean;
+  ai?: boolean;
 }) {
   return (
     <div className="min-w-0">
-      <span className="text-xs text-gray-400">{label}: </span>
-      <span className={`text-xs text-gray-700 ${mono ? "font-mono" : ""}`}>
+      <span className="text-xs text-gray-400">
+        {label}:{" "}
+        {ai && (
+          <span
+            className="inline-block text-[10px] px-1 py-px rounded bg-violet-100 text-violet-600 font-medium leading-none align-middle mr-0.5"
+            title="Filled in by AI"
+          >
+            AI
+          </span>
+        )}
+      </span>
+      <span className={`text-xs ${ai ? "text-violet-800" : "text-gray-700"} ${mono ? "font-mono" : ""}`}>
         {value}
       </span>
     </div>
