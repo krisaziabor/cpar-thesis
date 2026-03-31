@@ -1,317 +1,176 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
-import Link from "next/link";
+import { useState, useEffect, useMemo, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { ReactFlow, type Node, type NodeTypes } from "@xyflow/react";
+import "@xyflow/react/dist/style.css";
 import { useAuth } from "@/lib/auth-context";
-import { subscribeToItems, subscribeToDrafts, discardDraft } from "@/lib/items";
+import { subscribeToItems } from "@/lib/items";
 import type { Item } from "@/lib/types";
+import { COLS, NODE_W, NODE_H, GAP_X, GAP_Y } from "@/lib/graph-constants";
+import ItemThumbnailNode from "@/components/ItemThumbnailNode";
+import { AnimatePresence } from "framer-motion";
+import RightPanel from "@/components/RightPanel";
+import ItemPanel from "@/components/ItemPanel";
+import ActivityPanel from "@/components/ActivityPanel";
+import { AddItemPageInnerWithSuspense } from "@/app/add/page";
+
+const NODE_TYPES: NodeTypes = {
+  itemThumbnail: ItemThumbnailNode,
+};
 
 export default function Home() {
-  const { user, role, loading: authLoading, signOut } = useAuth();
+  return (
+    <Suspense>
+      <HomeInner />
+    </Suspense>
+  );
+}
+
+function HomeInner() {
+  const { user, loading: authLoading } = useAuth();
   const [items, setItems] = useState<Item[]>([]);
-  const [drafts, setDrafts] = useState<Item[]>([]);
   const [dataLoading, setDataLoading] = useState(true);
-  const [search, setSearch] = useState("");
-  const [typeFilter, setTypeFilter] = useState("all");
-  const [tagFilter, setTagFilter] = useState("all");
-  const [personFilter, setPersonFilter] = useState("all");
+  const [{ isFirst, shuffleSeed }] = useState<{
+    isFirst: boolean;
+    shuffleSeed: number | null;
+  }>(() => {
+    if (typeof window === "undefined") return { isFirst: false, shuffleSeed: null };
+
+    const seen = sessionStorage.getItem("kanon-seen");
+    if (!seen) sessionStorage.setItem("kanon-seen", "1");
+
+    const seedBuf = new Uint32Array(1);
+    crypto.getRandomValues(seedBuf);
+
+    return { isFirst: !seen, shuffleSeed: seedBuf[0] ?? 1 };
+  });
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
+  const panelItemId = searchParams.get("item");
+  const panelMode   = searchParams.get("panel");
 
   useEffect(() => {
-    const unsubscribe = subscribeToItems((fetched) => {
+    return subscribeToItems((fetched) => {
       setItems(fetched);
       setDataLoading(false);
     });
-    return unsubscribe;
   }, []);
+  const nodes = useMemo<Node[]>(() => {
+    if (shuffleSeed == null) return [];
 
-  useEffect(() => {
-    if (!user?.email) return;
-    const unsubscribe = subscribeToDrafts(user.email, setDrafts);
-    return unsubscribe;
-  }, [user?.email]);
+    const mulberry32 = (seed: number) => {
+      let t = seed >>> 0;
+      return () => {
+        t += 0x6d2b79f5;
+        let r = Math.imul(t ^ (t >>> 15), t | 1);
+        r ^= r + Math.imul(r ^ (r >>> 7), r | 61);
+        return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
+      };
+    };
 
-  // Derive filter options from live data
-  const typeOptions = useMemo(
-    () => ["all", ...Array.from(new Set(items.map((i) => i.type))).sort()],
-    [items]
-  );
-  const tagOptions = useMemo(
-    () => ["all", ...Array.from(new Set(items.flatMap((i) => i.tags))).sort()],
-    [items]
-  );
-  const personOptions = useMemo(
-    () => ["all", ...Array.from(new Set(items.map((i) => i.added_by))).sort()],
-    [items]
-  );
+    // Shuffle a copy so order is random per page load (seeded once on mount)
+    const rand = mulberry32(shuffleSeed);
+    const shuffled = [...items];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(rand() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
 
-  if (authLoading) {
+    const numRows = Math.max(1, Math.ceil(shuffled.length / COLS));
+
+    const slots: Array<{ row: number; col: number }> = [];
+    outer: for (let row = 0; row < numRows; row++) {
+      for (let col = 0; col < COLS; col++) {
+        slots.push({ row, col });
+        if (slots.length === shuffled.length) break outer;
+      }
+    }
+
+    const result: Node[] = [];
+
+    shuffled.forEach((item, i) => {
+      const slot = slots[i];
+      if (!slot) return;
+      result.push({
+        id: item.id,
+        type: "itemThumbnail",
+        position: {
+          x: slot.col * (NODE_W + GAP_X),
+          y: slot.row * (NODE_H + GAP_Y),
+        },
+        data: { item, isFirst, index: i },
+        draggable: false,
+        selectable: false,
+        focusable: false,
+      });
+    });
+
+    return result;
+  }, [items, isFirst, shuffleSeed]);
+
+  function closePanel() {
+    router.push("/");
+  }
+
+  if (authLoading || shuffleSeed == null) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-white dark:bg-black">
-        <span className="font-mono text-xs text-zinc-400">loading…</span>
+      <div className="flex min-h-screen items-center justify-center bg-black">
+        <span className="text-xs text-zinc-600">loading…</span>
       </div>
     );
   }
   if (!user) return null;
 
-  const filtered = items.filter((item) => {
-    const q = search.toLowerCase();
-    const matchSearch =
-      !q ||
-      item.title.toLowerCase().includes(q) ||
-      item.creator.toLowerCase().includes(q);
-    const matchType = typeFilter === "all" || item.type === typeFilter;
-    const matchTag = tagFilter === "all" || item.tags.includes(tagFilter);
-    const matchPerson = personFilter === "all" || item.added_by === personFilter;
-    return matchSearch && matchType && matchTag && matchPerson;
-  });
-
   return (
-    <div className="min-h-screen bg-white dark:bg-black">
-      {/* Header */}
-      <header className="border-b border-zinc-200 px-6 py-3 dark:border-zinc-800">
-        <div className="mx-auto flex max-w-5xl items-center justify-between">
-          <span className="font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
-            Kanon
-          </span>
-          <nav className="flex items-center gap-1">
-            <span className="px-3 py-1 text-sm text-zinc-300 dark:text-zinc-700 cursor-not-allowed select-none">
-              Graph
-            </span>
-            <span className="px-3 py-1 text-sm font-medium text-zinc-900 underline underline-offset-2 dark:text-zinc-50">
-              List
-            </span>
-            <Link
-              href="/activity"
-              className="px-3 py-1 text-sm text-zinc-400 hover:text-zinc-900 dark:text-zinc-500 dark:hover:text-zinc-50"
-            >
-              Activity
-            </Link>
-            {role === "admin" && (
-              <Link
-                href="/admin"
-                className="px-3 py-1 text-sm text-zinc-400 hover:text-zinc-900 dark:text-zinc-500 dark:hover:text-zinc-50"
-              >
-                Admin
-              </Link>
-            )}
-          </nav>
-          <div className="flex items-center gap-4">
-            <Link
-              href="/add"
-              className="rounded border border-zinc-900 px-3 py-1 text-sm font-medium text-zinc-900 hover:bg-zinc-900 hover:text-white dark:border-zinc-100 dark:text-zinc-100 dark:hover:bg-zinc-100 dark:hover:text-zinc-900"
-            >
-              + Add
-            </Link>
-            <span className="font-mono text-xs text-zinc-400">
-              {user.email}
-              {role === "admin" && (
-                <span className="ml-1 text-zinc-300 dark:text-zinc-600">
-                  · admin
-                </span>
-              )}
-            </span>
-            <button
-              onClick={signOut}
-              className="text-xs text-zinc-400 underline underline-offset-2 hover:text-zinc-600 dark:hover:text-zinc-300"
-            >
-              sign out
-            </button>
+    <div className="flex h-screen flex-col bg-black">
+      <div className="flex-1" style={{ background: "#000000" }}>
+        {dataLoading ? (
+          <div className="flex h-full items-center justify-center">
+            <span className="text-xs text-zinc-600">loading…</span>
           </div>
-        </div>
-      </header>
-
-      <main className="mx-auto max-w-5xl px-6 py-6">
-        {/* Drafts — visible only to the current user */}
-        {drafts.length > 0 && (
-          <div className="mb-6">
-            <p className="mb-2 font-mono text-xs text-zinc-400">
-              your drafts ({drafts.length})
-            </p>
-            <div className="border border-zinc-200 dark:border-zinc-800">
-              {drafts.map((d) => (
-                <div
-                  key={d.id}
-                  className="flex items-center justify-between border-b border-zinc-100 px-4 py-3 last:border-0 dark:border-zinc-900"
-                >
-                  <div>
-                    <p className="text-sm font-medium text-zinc-900 dark:text-zinc-50">
-                      {d.title || (
-                        <span className="text-zinc-400">Untitled draft</span>
-                      )}
-                    </p>
-                    <p className="font-mono text-xs text-zinc-500">
-                      {d.type} · {d.creator || "—"} · {formatDate(d.created_at)}
-                      {d.voice_recording_url && (
-                        <span className="ml-2 text-zinc-400">· audio saved</span>
-                      )}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-4">
-                    <Link
-                      href={`/add?draft=${d.id}`}
-                      className="text-xs text-zinc-700 underline underline-offset-2 hover:text-zinc-900 dark:text-zinc-300 dark:hover:text-zinc-50"
-                    >
-                      resume
-                    </Link>
-                    <button
-                      onClick={() => discardDraft(d)}
-                      className="text-xs text-zinc-400 underline underline-offset-2 hover:text-red-500"
-                    >
-                      discard
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+        ) : (
+          <ReactFlow
+            nodes={nodes}
+            edges={[]}
+            nodeTypes={NODE_TYPES}
+            nodesDraggable={false}
+            nodesConnectable={false}
+            elementsSelectable={false}
+            zoomOnScroll={true}
+            zoomOnPinch={true}
+            zoomOnDoubleClick={false}
+            panOnDrag={true}
+            panOnScroll={false}
+            fitView={true}
+            fitViewOptions={{ padding: 0.1 }}
+            onNodeClick={(_, node) => {
+              router.push(`/?item=${node.id}`);
+            }}
+            style={{ background: "#000000" }}
+            proOptions={{ hideAttribution: true }}
+          />
         )}
+      </div>
 
-        {/* Search + Filters */}
-        <div className="mb-4 flex flex-wrap items-center gap-2">
-          <input
-            type="search"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by title or creator…"
-            className="min-w-48 flex-1 border border-zinc-300 bg-white px-3 py-1.5 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-zinc-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50 dark:placeholder:text-zinc-600"
-          />
-          <FilterSelect
-            value={typeFilter}
-            onChange={setTypeFilter}
-            options={typeOptions}
-            label="Type"
-          />
-          <FilterSelect
-            value={tagFilter}
-            onChange={setTagFilter}
-            options={tagOptions}
-            label="Tag"
-          />
-          <FilterSelect
-            value={personFilter}
-            onChange={setPersonFilter}
-            options={personOptions}
-            label="Person"
-          />
-        </div>
-
-        {/* Count */}
-        <p className="mb-3 font-mono text-xs text-zinc-400">
-          {dataLoading ? "loading…" : `${filtered.length} item${filtered.length !== 1 ? "s" : ""}`}
-        </p>
-
-        {/* Table */}
-        <div className="border border-zinc-200 dark:border-zinc-800">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-zinc-200 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950">
-                <Th>Title</Th>
-                <Th>Type</Th>
-                <Th>Creator</Th>
-                <Th>Added by</Th>
-                <Th>Date</Th>
-              </tr>
-            </thead>
-            <tbody>
-              {!dataLoading && filtered.length === 0 && (
-                <tr>
-                  <td
-                    colSpan={5}
-                    className="px-4 py-8 text-center font-mono text-xs text-zinc-400"
-                  >
-                    {items.length === 0 ? (
-                      <>
-                        library is empty —{" "}
-                        <Link href="/add" className="underline underline-offset-2">
-                          add the first item
-                        </Link>
-                      </>
-                    ) : (
-                      "no items match"
-                    )}
-                  </td>
-                </tr>
-              )}
-              {filtered.map((item) => (
-                <tr
-                  key={item.id}
-                  className="border-b border-zinc-100 transition-colors last:border-0 hover:bg-zinc-50 dark:border-zinc-900 dark:hover:bg-zinc-950"
-                >
-                  <td className="px-4 py-3">
-                    <Link
-                      href={`/items/${item.id}`}
-                      className="font-medium text-zinc-900 hover:underline dark:text-zinc-50"
-                    >
-                      {item.title}
-                    </Link>
-                  </td>
-                  <Td mono>{item.type}</Td>
-                  <Td>{item.creator}</Td>
-                  <Td mono>{item.added_by}</Td>
-                  <Td mono>{formatDate(item.created_at)}</Td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </main>
+      <AnimatePresence>
+        {panelItemId && (
+          <RightPanel key="item-panel" onClose={closePanel} fullPageHref={`/items/${panelItemId}`}>
+            <ItemPanel key={panelItemId} itemId={panelItemId} />
+          </RightPanel>
+        )}
+        {panelMode === "add" && (
+          <RightPanel key="add-panel" title="Add item" onClose={closePanel} fullPageHref="/add">
+            <AddItemPageInnerWithSuspense hideHeader />
+          </RightPanel>
+        )}
+        {panelMode === "activity" && (
+          <RightPanel key="activity-panel" onClose={closePanel} fullPageHref="/activity">
+            <ActivityPanel />
+          </RightPanel>
+        )}
+      </AnimatePresence>
     </div>
-  );
-}
-
-function formatDate(ts: unknown): string {
-  if (!ts) return "—";
-  // Firestore Timestamp
-  if (typeof ts === "object" && ts !== null && "toDate" in ts) {
-    return (ts as { toDate: () => Date }).toDate().toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    });
-  }
-  return String(ts);
-}
-
-function Th({ children }: { children: React.ReactNode }) {
-  return (
-    <th className="px-4 py-2 text-left font-mono text-xs font-normal text-zinc-500">
-      {children}
-    </th>
-  );
-}
-
-function Td({ children, mono }: { children: React.ReactNode; mono?: boolean }) {
-  return (
-    <td
-      className={`px-4 py-3 text-zinc-600 dark:text-zinc-400 ${mono ? "font-mono text-xs" : "text-sm"}`}
-    >
-      {children}
-    </td>
-  );
-}
-
-function FilterSelect({
-  value,
-  onChange,
-  options,
-  label,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  options: string[];
-  label: string;
-}) {
-  return (
-    <select
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      className="border border-zinc-300 bg-white px-2 py-1.5 font-mono text-xs text-zinc-700 focus:border-zinc-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-300"
-    >
-      {options.map((opt) => (
-        <option key={opt} value={opt}>
-          {opt === "all" ? `all ${label.toLowerCase()}s` : opt}
-        </option>
-      ))}
-    </select>
   );
 }

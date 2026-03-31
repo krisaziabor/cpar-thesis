@@ -11,6 +11,7 @@ import {
   subscribeToItems,
   deleteConnection,
 } from "@/lib/items";
+import { saveToKanon, removeFromKanon, subscribeToKanonSaveStatus } from "@/lib/kanon";
 import type { Connection, Item, Response } from "@/lib/types";
 
 function formatDate(ts: unknown): string {
@@ -38,6 +39,8 @@ export default function ConnectionDetailPage() {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState("");
+  const [kanonSaveId, setKanonSaveId] = useState<string | null>(null);
+  const [savingKanon, setSavingKanon] = useState(false);
 
   useEffect(() => {
     const unsub = subscribeToConnection(id, setConnection);
@@ -57,6 +60,12 @@ export default function ConnectionDetailPage() {
     const unsub = subscribeToResponses(id, setResponses);
     return unsub;
   }, [id]);
+
+  useEffect(() => {
+    if (!user?.email) return;
+    const unsub = subscribeToKanonSaveStatus(user.email, "connection", id, setKanonSaveId);
+    return unsub;
+  }, [user?.email, id]);
 
   if (authLoading || connection === undefined) {
     return (
@@ -108,12 +117,33 @@ export default function ConnectionDetailPage() {
           >
             ← back
           </button>
-          <Link
-            href={`/respond/${id}`}
-            className="rounded border border-zinc-900 px-3 py-1 text-sm font-medium text-zinc-900 hover:bg-zinc-900 hover:text-white dark:border-zinc-100 dark:text-zinc-100 dark:hover:bg-zinc-100 dark:hover:text-zinc-900"
-          >
-            + Respond
-          </Link>
+          <div className="flex items-center gap-3">
+            <button
+              disabled={savingKanon}
+              onClick={async () => {
+                if (!user?.email) return;
+                setSavingKanon(true);
+                try {
+                  if (kanonSaveId) {
+                    await removeFromKanon(kanonSaveId);
+                  } else {
+                    await saveToKanon(user.email, "connection", id);
+                  }
+                } finally {
+                  setSavingKanon(false);
+                }
+              }}
+              className="text-sm text-zinc-400 underline underline-offset-2 hover:text-zinc-700 disabled:opacity-40 dark:hover:text-zinc-200"
+            >
+              {kanonSaveId ? "saved ✓" : "save"}
+            </button>
+            <Link
+              href={`/respond/${id}`}
+              className="rounded border border-zinc-900 px-3 py-1 text-sm font-medium text-zinc-900 hover:bg-zinc-900 hover:text-white dark:border-zinc-100 dark:text-zinc-100 dark:hover:bg-zinc-100 dark:hover:text-zinc-900"
+            >
+              + Respond
+            </Link>
+          </div>
         </div>
       </header>
 

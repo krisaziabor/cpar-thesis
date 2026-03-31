@@ -18,6 +18,7 @@ import {
 import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
 import { db, storage } from "./firebase";
 import type { Item, AudioVersion, DeletionRequest, Connection, ConnectionItem, Response as ItemResponse } from "./types";
+import type { SourceMetadata } from "./metadata/types";
 
 // ─── Storage ─────────────────────────────────────────────────────────────────
 
@@ -68,6 +69,8 @@ export async function uploadItemFile(file: File, itemId: string): Promise<string
 
 type ItemFields = Pick<Item, "title" | "type" | "creator" | "tags" | "added_by" | "media_url"> & {
   link?: string;
+  thumbnail_url?: string;
+  source_metadata?: SourceMetadata;
 };
 
 // ─── Published items ──────────────────────────────────────────────────────────
@@ -103,9 +106,11 @@ export function subscribeToItems(callback: (items: Item[]) => void): Unsubscribe
     where("is_draft", "==", false),
     orderBy("created_at", "desc")
   );
-  return onSnapshot(q, (snap) => {
-    callback(snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Item));
-  });
+  return onSnapshot(
+    q,
+    (snap) => { callback(snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Item)); },
+    (err) => { console.warn("[subscribeToItems]", err.code); }
+  );
 }
 
 /** Real-time listener for a single item. */
@@ -114,9 +119,11 @@ export function subscribeToItem(
   callback: (item: Item | null) => void
 ): Unsubscribe {
   if (!db) return () => {};
-  return onSnapshot(doc(db, "items", id), (snap) => {
-    callback(snap.exists() ? ({ id: snap.id, ...snap.data() } as Item) : null);
-  });
+  return onSnapshot(
+    doc(db, "items", id),
+    (snap) => { callback(snap.exists() ? ({ id: snap.id, ...snap.data() } as Item) : null); },
+    (err) => { console.warn("[subscribeToItem]", err.code); }
+  );
 }
 
 /** Fetch a single item once (no listener). */
@@ -129,7 +136,7 @@ export async function getItem(id: string): Promise<Item | null> {
 /** Update editable metadata fields on a published item. */
 export async function updateItem(
   id: string,
-  data: Partial<Pick<Item, "title" | "type" | "creator" | "link" | "tags" | "media_url">>
+  data: Partial<Pick<Item, "title" | "type" | "creator" | "link" | "tags" | "media_url" | "thumbnail_url" | "source_metadata">>
 ): Promise<void> {
   if (!db) throw new Error("Firestore not initialised");
   await updateDoc(doc(db, "items", id), data);
@@ -255,9 +262,11 @@ export function subscribeToDrafts(
     where("is_draft", "==", true),
     orderBy("created_at", "desc")
   );
-  return onSnapshot(q, (snap) => {
-    callback(snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Item));
-  });
+  return onSnapshot(
+    q,
+    (snap) => { callback(snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Item)); },
+    (err) => { console.warn("[subscribeToDrafts]", err.code); }
+  );
 }
 
 /** Discard a draft: deletes the Firestore doc and any uploaded audio. */
@@ -311,9 +320,11 @@ export function subscribeToAudioVersions(
     collection(db, "items", itemId, "audio_versions"),
     orderBy("created_at", "desc")
   );
-  return onSnapshot(q, (snap) => {
-    callback(snap.docs.map((d) => ({ id: d.id, ...d.data() }) as AudioVersion));
-  });
+  return onSnapshot(
+    q,
+    (snap) => { callback(snap.docs.map((d) => ({ id: d.id, ...d.data() }) as AudioVersion)); },
+    (err) => { console.warn("[subscribeToAudioVersions]", err.code); }
+  );
 }
 
 // ─── Deletion requests ────────────────────────────────────────────────────────
@@ -362,9 +373,11 @@ export function subscribeToDeletionRequests(
     where("status", "==", "pending"),
     orderBy("created_at", "desc")
   );
-  return onSnapshot(q, (snap) => {
-    callback(snap.docs.map((d) => ({ id: d.id, ...d.data() }) as DeletionRequest));
-  });
+  return onSnapshot(
+    q,
+    (snap) => { callback(snap.docs.map((d) => ({ id: d.id, ...d.data() }) as DeletionRequest)); },
+    (err) => { console.warn("[subscribeToDeletionRequests]", err.code); }
+  );
 }
 
 /**
@@ -446,9 +459,11 @@ export function subscribeToAllConnections(
 ): Unsubscribe {
   if (!db) return () => {};
   const q = query(collection(db, "connections"), orderBy("created_at", "desc"));
-  return onSnapshot(q, (snap) => {
-    callback(snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Connection));
-  });
+  return onSnapshot(
+    q,
+    (snap) => { callback(snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Connection)); },
+    (err) => { console.warn("[subscribeToAllConnections]", err.code); }
+  );
 }
 
 /** Real-time listener for all connection_items junction docs. */
@@ -456,9 +471,11 @@ export function subscribeToAllConnectionItems(
   callback: (items: ConnectionItem[]) => void
 ): Unsubscribe {
   if (!db) return () => {};
-  return onSnapshot(collection(db, "connection_items"), (snap) => {
-    callback(snap.docs.map((d) => ({ id: d.id, ...d.data() }) as ConnectionItem));
-  });
+  return onSnapshot(
+    collection(db, "connection_items"),
+    (snap) => { callback(snap.docs.map((d) => ({ id: d.id, ...d.data() }) as ConnectionItem)); },
+    (err) => { console.warn("[subscribeToAllConnectionItems]", err.code); }
+  );
 }
 
 /** Real-time listener for a single connection doc. */
@@ -467,9 +484,11 @@ export function subscribeToConnection(
   callback: (connection: Connection | null) => void
 ): Unsubscribe {
   if (!db) return () => {};
-  return onSnapshot(doc(db, "connections", id), (snap) => {
-    callback(snap.exists() ? ({ id: snap.id, ...snap.data() } as Connection) : null);
-  });
+  return onSnapshot(
+    doc(db, "connections", id),
+    (snap) => { callback(snap.exists() ? ({ id: snap.id, ...snap.data() } as Connection) : null); },
+    (err) => { console.warn("[subscribeToConnection]", err.code); }
+  );
 }
 
 /** One-time fetch of item IDs belonging to a connection. */
@@ -491,9 +510,11 @@ export function subscribeToResponses(
     collection(db, "connections", connectionId, "responses"),
     orderBy("created_at", "desc")
   );
-  return onSnapshot(q, (snap) => {
-    callback(snap.docs.map((d) => ({ id: d.id, ...d.data() }) as ItemResponse));
-  });
+  return onSnapshot(
+    q,
+    (snap) => { callback(snap.docs.map((d) => ({ id: d.id, ...d.data() }) as ItemResponse)); },
+    (err) => { console.warn("[subscribeToResponses]", err.code); }
+  );
 }
 
 /**
@@ -527,7 +548,7 @@ export function subscribeToItemConnections(
       })
     );
     callback(results);
-  });
+  }, (err) => { console.warn("[subscribeToItemConnections]", err.code); });
 }
 
 /**

@@ -1,26 +1,114 @@
 @import "tailwindcss";
 
+/* Force class-based dark mode — html.dark activates all dark: variants */
+@variant dark (&:where(.dark, .dark *));
+
+/* ─── Lector ──────────────────────────────────────────────────────────────── */
+
+@font-face {
+  font-family: "Lector";
+  src: url("https://framerusercontent.com/assets/vVIFTY2PuwIapN7qdnad4UmbNg.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* ─── Die Grotesk ─────────────────────────────────────────────────────────── */
+
+@font-face {
+  font-family: "DieGrotesk";
+  src: url("/fonts/DieGrotesk-A-Hairline.woff2") format("woff2");
+  font-weight: 100;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "DieGrotesk";
+  src: url("/fonts/DieGrotesk-A-Thin.woff2") format("woff2");
+  font-weight: 200;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "DieGrotesk";
+  src: url("/fonts/DieGrotesk-A-Light.woff2") format("woff2");
+  font-weight: 300;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "DieGrotesk";
+  src: url("/fonts/DieGrotesk-A-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "DieGrotesk";
+  src: url("/fonts/DieGrotesk-A-Medium.woff2") format("woff2");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "DieGrotesk";
+  src: url("/fonts/DieGrotesk-A-Bold.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "DieGrotesk";
+  src: url("/fonts/DieGrotesk-A-Heavy.woff2") format("woff2");
+  font-weight: 800;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "DieGrotesk";
+  src: url("/fonts/DieGrotesk-A-Black.woff2") format("woff2");
+  font-weight: 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* ─── Theme ───────────────────────────────────────────────────────────────── */
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #000000;
+  --foreground: #ededed;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: "DieGrotesk", sans-serif;
+  --font-mono: ui-monospace, "SFMono-Regular", "Menlo", monospace;
+  --font-lector: "Lector", serif;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+@utility font-lector {
+  font-family: "Lector", serif;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: "DieGrotesk", sans-serif;
+}
+
+/* Remove ReactFlow's default node chrome from item thumbnail nodes */
+.react-flow__node-itemThumbnail {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  overflow: visible !important;
 }

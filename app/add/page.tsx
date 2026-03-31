@@ -7,14 +7,15 @@ import { useAuth } from "@/lib/auth-context";
 import AudioRecorder from "@/components/AudioRecorder";
 import {
   createAndPublishItem,
-  subscribeToItems,
   getItem,
   upsertDraft,
   publishDraft,
   uploadItemFile,
   updateItem,
 } from "@/lib/items";
-import type { Item } from "@/lib/types";
+import { mirrorThumbnail, mirrorPreviewAudio, mirrorVideo, uploadBase64Thumbnail } from "@/lib/media-upload";
+import { isDownloadableVideoPageUrl } from "@/lib/metadata/classify";
+import type { MetadataResult, SourceMetadata } from "@/lib/metadata/types";
 
 export default function AddItemPage() {
   return (
@@ -24,7 +25,15 @@ export default function AddItemPage() {
   );
 }
 
-type Step = "url" | "metadata" | "record" | "connect";
+export function AddItemPageInnerWithSuspense({ hideHeader }: { hideHeader?: boolean }) {
+  return (
+    <Suspense>
+      <AddItemPageInner hideHeader={hideHeader} />
+    </Suspense>
+  );
+}
+
+type Step = "url" | "metadata" | "record";
 
 const TYPES = ["book", "film", "article", "song", "podcast", "other"];
 
@@ -43,6 +52,10 @@ interface ItemDraft {
   fileFile: File | null;
   /** File URL already stored in Firestore (from a saved draft). */
   existingFileUrl: string | null;
+  /** Thumbnail URL returned by the metadata pipeline. */
+  thumbnailUrl: string | null;
+  /** Full source_metadata blob returned by the metadata pipeline. */
+  sourceMetadata: SourceMetadata | null;
 }
 
 const EMPTY: ItemDraft = {
@@ -57,13 +70,15 @@ const EMPTY: ItemDraft = {
   existingAudioUrl: null,
   fileFile: null,
   existingFileUrl: null,
+  thumbnailUrl: null,
+  sourceMetadata: null,
 };
 
 function parseTags(raw: string): string[] {
   return raw.split(",").map((t) => t.trim()).filter(Boolean);
 }
 
-function AddItemPageInner() {
+function AddItemPageInner({ hideHeader = false }: { hideHeader?: boolean }) {
   const { loading: authLoading, user } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -92,10 +107,6 @@ function AddItemPageInner() {
     return () => clearTimeout(t);
   }, [saving]);
 
-  const [libraryItems, setLibraryItems] = useState<Item[]>([]);
-  const [connectSearch, setConnectSearch] = useState("");
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
-
   // Load existing draft when resuming
   useEffect(() => {
     if (!urlDraftId) return;
@@ -103,7 +114,7 @@ function AddItemPageInner() {
     getItem(urlDraftId).then((item) => {
       if (item?.is_draft) {
         setDraft({
-          url: "",
+          url: item.link ?? "",
           title: item.title,
           type: item.type,
           creator: item.creator,
@@ -114,6 +125,8 @@ function AddItemPageInner() {
           existingAudioUrl: item.voice_recording_url || null,
           fileFile: null,
           existingFileUrl: item.media_url || null,
+          thumbnailUrl: item.thumbnail_url ?? null,
+          sourceMetadata: item.source_metadata ?? null,
         });
         setCurrentDraftId(urlDraftId);
         setStep("metadata");
@@ -122,11 +135,6 @@ function AddItemPageInner() {
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // intentionally only on mount
-
-  useEffect(() => {
-    const unsubscribe = subscribeToItems(setLibraryItems);
-    return unsubscribe;
-  }, []);
 
   useEffect(() => {
     return () => {
@@ -158,6 +166,12 @@ function AddItemPageInner() {
           ...(draft.link ? { link: draft.link } : {}),
           tags: parseTags(draft.tags),
           added_by: user.email,
+          // Never write base64 data URIs to Firestore — they exceed the 1 MB field limit.
+          // The full-save flow uploads them to Storage; drafts just omit the thumbnail.
+          ...(draft.thumbnailUrl && !draft.thumbnailUrl.startsWith("data:")
+            ? { thumbnail_url: draft.thumbnailUrl }
+            : {}),
+          ...(draft.sourceMetadata ? { source_metadata: draft.sourceMetadata } : {}),
         },
         draft.audioBlob ?? undefined
       );
@@ -183,15 +197,59 @@ function AddItemPageInner() {
   }
 
   async function handleUrlNext() {
-    if (!draft.url) { setStep("metadata"); return; }
+    const hasUrl = !!draft.url.trim();
+    const hasFile = !!draft.fileFile;
+
+    if (!hasUrl && !hasFile) {
+      setStep("metadata");
+      return;
+    }
+
     setFetching(true);
-    await new Promise((r) => setTimeout(r, 500)); // placeholder fetch
-    setPrefilled(false);
-    setFetching(false);
-    setStep("metadata");
+    try {
+      let res: Response;
+
+      if (hasFile && draft.fileFile) {
+        const fd = new FormData();
+        fd.append("file", draft.fileFile);
+        res = await fetch("/api/metadata", { method: "POST", body: fd });
+      } else {
+        res = await fetch("/api/metadata", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url: draft.url.trim() }),
+        });
+      }
+
+      const result: MetadataResult = await res.json();
+
+      if (result.success && result.data) {
+        const d = result.data;
+        // Map "essay" → "article" since the add form doesn't have that type
+        const mappedType = d.type === "essay" ? "article" : d.type;
+        patch({
+          title: d.title || draft.title,
+          type: TYPES.includes(mappedType) ? mappedType : draft.type,
+          creator: d.creator || draft.creator,
+          link: d.link || draft.link,
+          tags: d.tags.length > 0 ? d.tags.join(", ") : draft.tags,
+          thumbnailUrl: d.thumbnail_url ?? d.thumbnail_base64 ?? null,
+          sourceMetadata: d.source_metadata,
+        });
+        setPrefilled(true);
+      } else {
+        setPrefilled(false);
+      }
+    } catch {
+      // Non-fatal: let the user fill in details manually
+      setPrefilled(false);
+    } finally {
+      setFetching(false);
+      setStep("metadata");
+    }
   }
 
-  async function saveItem(withConnections: boolean) {
+  async function saveItem() {
     if (!user?.email || !hasAudio) return;
     setSaving(true);
     setSaveStage("");
@@ -214,6 +272,11 @@ function AddItemPageInner() {
             ...(draft.link ? { link: draft.link } : {}),
             tags: parseTags(draft.tags),
             added_by: user.email,
+            // Never write base64 data URIs to Firestore — uploaded to Storage below.
+            ...(draft.thumbnailUrl && !draft.thumbnailUrl.startsWith("data:")
+              ? { thumbnail_url: draft.thumbnailUrl }
+              : {}),
+            ...(draft.sourceMetadata ? { source_metadata: draft.sourceMetadata } : {}),
           },
           draft.audioBlob!
         );
@@ -225,11 +288,59 @@ function AddItemPageInner() {
         await updateItem(itemId, { media_url: fileUrl });
       }
 
-      if (withConnections && selectedIds.length > 0) {
-        router.push(`/connect?itemId=${itemId}`);
-      } else {
-        router.push(`/items/${itemId}`);
+      const thumbUrl = draft.thumbnailUrl;
+      if (thumbUrl) {
+        setSaveStage("saving thumbnail…");
+        try {
+          const storedThumbUrl = thumbUrl.startsWith("data:")
+            ? await uploadBase64Thumbnail(thumbUrl, itemId)   // base64 from image/PDF upload
+            : await mirrorThumbnail(thumbUrl, itemId);        // external URL from metadata
+          await updateItem(itemId, { thumbnail_url: storedThumbUrl });
+        } catch (err) {
+          console.warn("[saveItem] thumbnail upload failed:", err);
+        }
       }
+
+      // Mirror Spotify/preview audio to Firebase Storage (music source type only)
+      const previewUrl = draft.sourceMetadata?.preview_url;
+      if (previewUrl) {
+        setSaveStage("saving audio preview…");
+        try {
+          const storedPreviewUrl = await mirrorPreviewAudio(previewUrl, itemId);
+          await updateItem(itemId, {
+            source_metadata: { ...draft.sourceMetadata!, preview_url: storedPreviewUrl },
+          });
+        } catch (err) {
+          console.warn("[saveItem] preview audio mirror failed:", err);
+        }
+      }
+
+      // Download and store the actual video for social / YouTube sources
+      const videoSourceTypes = ["instagram", "tiktok", "twitter", "youtube"];
+      const sourceType = draft.sourceMetadata?.source_type;
+      const pageUrl = (draft.link || draft.url).trim();
+      const shouldMirrorVideo =
+        !!pageUrl &&
+        ((sourceType != null && (videoSourceTypes as readonly string[]).includes(sourceType)) ||
+          isDownloadableVideoPageUrl(pageUrl));
+
+      if (shouldMirrorVideo) {
+        setSaveStage("downloading video…");
+        try {
+          const idToken = await user.getIdToken();
+          const { downloadUrl: videoUrl, totalMediaCount } = await mirrorVideo(pageUrl, itemId, idToken);
+          await updateItem(itemId, { media_url: videoUrl });
+          if (totalMediaCount && totalMediaCount > 1) {
+            setSaveStage(`video saved — note: this post had ${totalMediaCount} media items, only the first was saved`);
+            await new Promise((r) => setTimeout(r, 2500));
+          }
+        } catch (err) {
+          // Non-fatal: item is still saved; video can be added manually
+          console.warn("[saveItem] video mirror failed:", err);
+        }
+      }
+
+      router.push(`/items/${itemId}`);
     } catch (err) {
       // Surface the Firebase error code if available (e.g. storage/unauthorized)
       const msg =
@@ -243,29 +354,16 @@ function AddItemPageInner() {
     }
   }
 
-  function toggleId(id: string) {
-    setSelectedIds((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
-    );
-  }
-
-  const connectItems = libraryItems.filter(
-    (item) =>
-      !connectSearch ||
-      item.title.toLowerCase().includes(connectSearch.toLowerCase()) ||
-      item.creator.toLowerCase().includes(connectSearch.toLowerCase())
-  );
-
   if (saving) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-white dark:bg-black">
-        <span className="font-mono text-xs text-zinc-400">saving…</span>
+        <span className="text-xs text-zinc-400">saving…</span>
         {saveStage && (
-          <p className="font-mono text-xs text-zinc-400">{saveStage}</p>
+          <p className="text-xs text-zinc-400">{saveStage}</p>
         )}
         {saveError ? (
           <>
-            <p className="mt-2 max-w-sm text-center font-mono text-xs text-red-500">{saveError}</p>
+            <p className="mt-2 max-w-sm text-center text-xs text-red-500">{saveError}</p>
             <button
               onClick={() => { setSaving(false); setSaveError(""); setSaveStage(""); }}
               className="mt-1 text-xs text-zinc-400 underline underline-offset-2 hover:text-zinc-700"
@@ -307,30 +405,31 @@ function AddItemPageInner() {
   return (
     <div className="min-h-screen bg-white dark:bg-black">
       {fileInput}
-      <header className="border-b border-zinc-200 px-6 py-3 dark:border-zinc-800">
-        <div className="mx-auto flex max-w-xl items-center justify-between">
-          <Link
-            href="/"
-            className="text-sm text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200"
-          >
-            ← cancel
-          </Link>
-          <span className="font-mono text-xs text-zinc-400">
-            {step === "url" && "step 1 of 4 — source"}
-            {step === "metadata" && (currentDraftId ? "draft — details" : "step 2 of 4 — details")}
-            {step === "record" && (currentDraftId ? "draft — testimony" : "step 3 of 4 — testimony")}
-            {step === "connect" && "step 4 of 4 — connect"}
-          </span>
-          <div className="flex gap-1">
-            {(["url", "metadata", "record", "connect"] as Step[]).map((s) => (
-              <div
-                key={s}
-                className={`h-1 w-6 ${s === step ? "bg-zinc-900 dark:bg-zinc-100" : "bg-zinc-200 dark:bg-zinc-800"}`}
-              />
-            ))}
+      {!hideHeader && (
+        <header className="border-b border-zinc-200 px-6 py-3 dark:border-zinc-800">
+          <div className="mx-auto flex max-w-xl items-center justify-between">
+            <Link
+              href="/"
+              className="text-sm text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200"
+            >
+              ← cancel
+            </Link>
+            <span className="text-xs text-zinc-400">
+              {step === "url" && "step 1 of 3 — source"}
+              {step === "metadata" && (currentDraftId ? "draft — details" : "step 2 of 3 — details")}
+              {step === "record" && (currentDraftId ? "draft — testimony" : "step 3 of 3 — testimony")}
+            </span>
+            <div className="flex gap-1">
+              {(["url", "metadata", "record"] as Step[]).map((s) => (
+                <div
+                  key={s}
+                  className={`h-1 w-6 ${s === step ? "bg-zinc-900 dark:bg-zinc-100" : "bg-zinc-200 dark:bg-zinc-800"}`}
+                />
+              ))}
+            </div>
           </div>
-        </div>
-      </header>
+        </header>
+      )}
 
       <main className="mx-auto max-w-xl px-6 py-10">
         {/* Step 1: URL */}
@@ -353,7 +452,7 @@ function AddItemPageInner() {
             />
             <div className="flex items-center gap-3">
               <div className="h-px flex-1 bg-zinc-200 dark:bg-zinc-800" />
-              <span className="font-mono text-xs text-zinc-400">or</span>
+              <span className="text-xs text-zinc-400">or</span>
               <div className="h-px flex-1 bg-zinc-200 dark:bg-zinc-800" />
             </div>
             {!draft.fileFile && !draft.existingFileUrl && (
@@ -375,7 +474,7 @@ function AddItemPageInner() {
                   />
                 )}
                 <div className="flex items-center gap-3">
-                  <span className="font-mono text-xs text-zinc-500 truncate max-w-xs">
+                  <span className="text-xs text-zinc-500 truncate max-w-xs">
                     {draft.fileFile.name}
                   </span>
                   <button
@@ -392,7 +491,7 @@ function AddItemPageInner() {
                 </div>
               </div>
             )}
-            <p className="font-mono text-xs text-zinc-400">
+            <p className="text-xs text-zinc-400">
               If a URL is provided, title and creator will be pre-filled where possible.
             </p>
             <button onClick={handleUrlNext} disabled={fetching} className={primaryBtn}>
@@ -409,12 +508,12 @@ function AddItemPageInner() {
                 Item details
               </h1>
               {prefilled && (
-                <p className="mt-1 font-mono text-xs text-zinc-400">
+                <p className="mt-1 text-xs text-zinc-400">
                   ✓ fields pre-filled from URL
                 </p>
               )}
               {currentDraftId && (
-                <p className="mt-1 font-mono text-xs text-zinc-400">
+                <p className="mt-1 text-xs text-zinc-400">
                   resuming draft
                 </p>
               )}
@@ -475,7 +574,7 @@ function AddItemPageInner() {
                     />
                   )}
                   <div className="flex items-center gap-3">
-                    <span className="font-mono text-xs text-zinc-500 truncate max-w-xs">
+                    <span className="text-xs text-zinc-500 truncate max-w-xs">
                       {draft.fileFile.name}
                     </span>
                     <button
@@ -498,7 +597,7 @@ function AddItemPageInner() {
                     href={draft.existingFileUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="font-mono text-xs text-zinc-500 underline underline-offset-2 hover:text-zinc-700 dark:hover:text-zinc-300"
+                    className="text-xs text-zinc-500 underline underline-offset-2 hover:text-zinc-700 dark:hover:text-zinc-300"
                   >
                     file attached ↗
                   </a>
@@ -544,7 +643,7 @@ function AddItemPageInner() {
           </div>
         )}
 
-        {/* Step 3: Audio */}
+        {/* Step 3: Testimony */}
         {step === "record" && (
           <div className="flex flex-col gap-6">
             <h1 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">
@@ -552,11 +651,11 @@ function AddItemPageInner() {
             </h1>
             <div className="border border-zinc-200 px-4 py-3 dark:border-zinc-800">
               <p className="font-medium text-zinc-900 dark:text-zinc-50">{draft.title}</p>
-              <p className="font-mono text-xs text-zinc-500">
+              <p className="text-xs text-zinc-500">
                 {draft.type} · {draft.creator}
               </p>
               {draft.tags && (
-                <p className="mt-1 font-mono text-xs text-zinc-400">{draft.tags}</p>
+                <p className="mt-1 text-xs text-zinc-400">{draft.tags}</p>
               )}
             </div>
             <AudioRecorder
@@ -571,96 +670,17 @@ function AddItemPageInner() {
                 back
               </button>
               <button
-                onClick={() => {
-                  if (!hasAudio) return;
-                  if (libraryItems.length > 0) setStep("connect");
-                  else saveItem(false);
-                }}
+                onClick={() => { if (hasAudio) void saveItem(); }}
                 disabled={!hasAudio}
                 className={primaryBtn}
               >
-                {libraryItems.length > 0 ? "next" : "save item"}
+                save item
               </button>
               <SaveDraftButton
                 status={draftSaveStatus}
                 disabled={!canSaveDraft}
                 onSave={handleSaveDraft}
               />
-            </div>
-          </div>
-        )}
-
-        {/* Step 4: Connect */}
-        {step === "connect" && (
-          <div className="flex flex-col gap-6">
-            <div>
-              <h1 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">
-                Connect to existing items
-              </h1>
-              <p className="mt-1 text-sm text-zinc-500">
-                Select items this relates to, or skip.
-              </p>
-            </div>
-            <div className="border border-zinc-900 px-4 py-3 dark:border-zinc-100">
-              <p className="font-mono text-xs text-zinc-500">new item</p>
-              <p className="font-medium text-zinc-900 dark:text-zinc-50">{draft.title}</p>
-              <p className="font-mono text-xs text-zinc-500">
-                {draft.type} · {draft.creator}
-              </p>
-            </div>
-            <input
-              type="search"
-              value={connectSearch}
-              onChange={(e) => setConnectSearch(e.target.value)}
-              placeholder="Search library…"
-              className={inputCx}
-            />
-            {selectedIds.length > 0 && (
-              <div className="flex flex-wrap gap-2">
-                {selectedIds.map((id) => {
-                  const item = libraryItems.find((i) => i.id === id);
-                  if (!item) return null;
-                  return (
-                    <button
-                      key={id}
-                      onClick={() => toggleId(id)}
-                      className="border border-zinc-900 px-2 py-0.5 font-mono text-xs text-zinc-900 dark:border-zinc-100 dark:text-zinc-100"
-                    >
-                      {item.title} ✕
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-            <div className="border border-zinc-200 dark:border-zinc-800">
-              {connectItems.map((item) => (
-                <button
-                  key={item.id}
-                  onClick={() => toggleId(item.id)}
-                  className={`flex w-full items-center justify-between border-b border-zinc-100 px-4 py-3 text-left last:border-0 hover:bg-zinc-50 dark:border-zinc-900 dark:hover:bg-zinc-950 ${selectedIds.includes(item.id) ? "bg-zinc-50 dark:bg-zinc-950" : ""}`}
-                >
-                  <div>
-                    <p className="text-sm font-medium text-zinc-900 dark:text-zinc-50">{item.title}</p>
-                    <p className="font-mono text-xs text-zinc-500">{item.type} · {item.creator}</p>
-                  </div>
-                  <span className="font-mono text-xs text-zinc-400">
-                    {selectedIds.includes(item.id) ? "✓" : "+"}
-                  </span>
-                </button>
-              ))}
-            </div>
-            {saveError && <p className="text-sm text-red-500">{saveError}</p>}
-            <div className="flex gap-3">
-              <button onClick={() => saveItem(false)} className={ghostBtn}>
-                skip
-              </button>
-              <button
-                onClick={() => saveItem(true)}
-                disabled={selectedIds.length === 0}
-                className={primaryBtn}
-              >
-                save & connect
-              </button>
             </div>
           </div>
         )}
@@ -695,8 +715,8 @@ function SaveDraftButton({
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="flex flex-col gap-1">
-      <label className="font-mono text-xs text-zinc-500">{label}</label>
+    <div className="flex flex-col gap-1.5">
+      <label className="text-xs text-zinc-500">{label}</label>
       {children}
     </div>
   );
@@ -714,7 +734,7 @@ const ghostBtn =
 function Loading() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-white dark:bg-black">
-      <span className="font-mono text-xs text-zinc-400">loading…</span>
+      <span className="text-xs text-zinc-400">loading…</span>
     </div>
   );
 }
