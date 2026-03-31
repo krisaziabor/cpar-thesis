@@ -10,6 +10,8 @@ const nextConfig: NextConfig = {
     "pdf-parse",
     "pdfjs-dist",
     "@distube/ytdl-core",
+    // Ships a real yt-dlp binary under bin/ — must not be bundled or __dirname breaks (ENOENT).
+    "yt-dlp-exec",
   ],
 
   // Turbopack (dev default in Next.js 16) handles native modules without

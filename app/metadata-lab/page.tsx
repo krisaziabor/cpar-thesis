@@ -3,6 +3,20 @@
 import { useState, useRef } from "react";
 import type { MetadataResult, SourceType } from "@/lib/metadata/types";
 import MusicPlayer from "@/components/MusicPlayer";
+import { useAuth } from "@/lib/auth-context";
+import { ref as storageRef, deleteObject } from "firebase/storage";
+import { storage } from "@/lib/firebase";
+
+function isDownloadableUrl(url: string): boolean {
+  try {
+    const { hostname } = new URL(url);
+    return /(?:^|\.)(?:tiktok\.com|twitter\.com|x\.com|instagram\.com)$/.test(hostname);
+  } catch {
+    return false;
+  }
+}
+
+type MediaStatus = "idle" | "loading" | "success" | "error";
 
 // ─── Source type badge ────────────────────────────────────────────────────────
 
@@ -37,6 +51,7 @@ const SOURCE_COLORS: Record<SourceType, string> = {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function MetadataLab() {
+  const { user } = useAuth();
   const [tab, setTab] = useState<"url" | "file">("url");
   const [url, setUrl] = useState("");
   const [file, setFile] = useState<File | null>(null);
@@ -46,11 +61,70 @@ export default function MetadataLab() {
   const [sourceMetaOpen, setSourceMetaOpen] = useState(true);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Media download state
+  const [mediaStatus, setMediaStatus] = useState<MediaStatus>("idle");
+  const [mediaFileUrl, setMediaFileUrl] = useState<string | null>(null);
+  const [mediaStoragePath, setMediaStoragePath] = useState<string | null>(null);
+  const [mediaError, setMediaError] = useState<string | null>(null);
+  const [mediaRemoving, setMediaRemoving] = useState(false);
+  const [mediaTotalCount, setMediaTotalCount] = useState<number | null>(null);
+
+  async function handleDownloadMedia() {
+    if (!user) return;
+    setMediaStatus("loading");
+    setMediaFileUrl(null);
+    setMediaStoragePath(null);
+    setMediaError(null);
+    setMediaTotalCount(null);
+    try {
+      const idToken = await user.getIdToken();
+      const itemId = `lab-${Date.now()}`;
+      const res = await fetch("/api/media/upload-video", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url, itemId, idToken }),
+      });
+      const data = await res.json() as { downloadUrl?: string; storagePath?: string; error?: string; totalMediaCount?: number };
+      if (!res.ok || data.error) {
+        setMediaError(data.error ?? `HTTP ${res.status}`);
+        setMediaStatus("error");
+      } else {
+        setMediaFileUrl(data.downloadUrl ?? null);
+        setMediaStoragePath(data.storagePath ?? null);
+        if (data.totalMediaCount) setMediaTotalCount(data.totalMediaCount);
+        setMediaStatus("success");
+      }
+    } catch (err) {
+      setMediaError(err instanceof Error ? err.message : "Network error");
+      setMediaStatus("error");
+    }
+  }
+
+  async function handleRemoveMedia() {
+    if (!mediaStoragePath || !storage) return;
+    setMediaRemoving(true);
+    try {
+      await deleteObject(storageRef(storage, mediaStoragePath));
+      setMediaStatus("idle");
+      setMediaFileUrl(null);
+      setMediaStoragePath(null);
+    } catch (err) {
+      setMediaError(err instanceof Error ? err.message : "Delete failed");
+    } finally {
+      setMediaRemoving(false);
+    }
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
     setResult(null);
     setRawOpen(false);
+    setMediaStatus("idle");
+    setMediaFileUrl(null);
+    setMediaStoragePath(null);
+    setMediaError(null);
+    setMediaTotalCount(null);
 
     try {
       let res: Response;
@@ -450,12 +524,9 @@ export default function MetadataLab() {
                 {result.data.source_metadata.source_type === "music" && (
                   <div className="border border-gray-200 rounded-lg p-4">
                     <MusicPlayer
-                      title={result.data.title}
-                      creator={result.data.creator}
                       previewUrl={result.data.source_metadata.preview_url}
                       platformLinks={result.data.source_metadata.platform_links}
                       songLinkUrl={result.data.source_metadata.song_link_url}
-                      preferredPlatform="youtube"
                     />
                   </div>
                 )}
@@ -489,6 +560,69 @@ export default function MetadataLab() {
                     <p className="text-xs text-rose-500 mt-1">
                       Use this URL to upload the video to Firebase Storage.
                     </p>
+                  </div>
+                )}
+
+                {/* Media download (TikTok / X / Instagram) */}
+                {tab === "url" && isDownloadableUrl(url) && (
+                  <div className="border border-gray-200 rounded-lg p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs font-medium text-gray-700">Download media to Storage</p>
+                      {mediaStatus === "idle" && (
+                        <button
+                          onClick={handleDownloadMedia}
+                          disabled={!user}
+                          className="text-xs px-3 py-1.5 bg-gray-900 text-white rounded-lg hover:bg-gray-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                        >
+                          Download
+                        </button>
+                      )}
+                      {mediaStatus === "loading" && (
+                        <span className="text-xs text-gray-500 animate-pulse">Uploading…</span>
+                      )}
+                    </div>
+
+                    {mediaStatus === "success" && mediaFileUrl && (
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-1.5">
+                          <span className="inline-block w-2 h-2 rounded-full bg-green-500 flex-shrink-0" />
+                          <span className="text-xs font-medium text-green-700">Upload successful</span>
+                        </div>
+                        {mediaTotalCount && mediaTotalCount > 1 && (
+                          <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5">
+                            This post has {mediaTotalCount} media items — only the first was saved.
+                          </p>
+                        )}
+                        <p className="text-xs text-gray-500 font-mono break-all bg-gray-50 rounded px-2 py-1.5 border border-gray-200">
+                          {mediaFileUrl}
+                        </p>
+                        <button
+                          onClick={handleRemoveMedia}
+                          disabled={mediaRemoving}
+                          className="text-xs px-3 py-1.5 border border-red-200 text-red-600 rounded-lg hover:bg-red-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                        >
+                          {mediaRemoving ? "Removing…" : "Remove from Storage"}
+                        </button>
+                      </div>
+                    )}
+
+                    {mediaStatus === "error" && (
+                      <div className="space-y-1.5">
+                        <div className="flex items-center gap-1.5">
+                          <span className="inline-block w-2 h-2 rounded-full bg-red-500 flex-shrink-0" />
+                          <span className="text-xs font-medium text-red-700">Upload failed</span>
+                        </div>
+                        <p className="text-xs text-red-600 font-mono break-all bg-red-50 rounded px-2 py-1.5 border border-red-100">
+                          {mediaError}
+                        </p>
+                        <button
+                          onClick={handleDownloadMedia}
+                          className="text-xs px-3 py-1.5 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors"
+                        >
+                          Retry
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )}
 

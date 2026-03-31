@@ -53,7 +53,7 @@ export default function ItemDetailPage() {
   const [savingKanon, setSavingKanon] = useState(false);
 
   // User preferred music platform
-  const [preferredPlatform, setPreferredPlatform] = useState<MusicPlatform>("youtube");
+  const [preferredPlatform, setPreferredPlatform] = useState<MusicPlatform | undefined>(undefined);
 
   // Connection check + deletion request
   const [hasConnections, setHasConnections] = useState(false);
@@ -292,8 +292,6 @@ export default function ItemDetailPage() {
             {item.type === "song" && item.source_metadata && (
               <div className="mt-4">
                 <MusicPlayer
-                  title={item.title}
-                  creator={item.creator}
                   previewUrl={item.source_metadata.preview_url}
                   platformLinks={item.source_metadata.platform_links}
                   songLinkUrl={item.source_metadata.song_link_url}

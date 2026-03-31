@@ -14,7 +14,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" className="dark">
       <body className="antialiased">
         <Providers>{children}</Providers>
         {process.env.NODE_ENV === "development" && <Agentation />}

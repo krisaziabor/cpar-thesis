@@ -35,6 +35,7 @@ export interface Item {
   type: string;
   creator: string;
   link?: string;
+  thumbnail_url?: string;
   media_url?: string;
   voice_recording_url: string;
   transcript: string;

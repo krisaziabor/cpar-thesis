@@ -1,5 +1,18 @@
 @import "tailwindcss";
 
+/* Force class-based dark mode — html.dark activates all dark: variants */
+@variant dark (&:where(.dark, .dark *));
+
+/* ─── Lector ──────────────────────────────────────────────────────────────── */
+
+@font-face {
+  font-family: "Lector";
+  src: url("https://framerusercontent.com/assets/vVIFTY2PuwIapN7qdnad4UmbNg.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
 /* ─── Die Grotesk ─────────────────────────────────────────────────────────── */
 
 @font-face {
@@ -69,8 +82,8 @@
 /* ─── Theme ───────────────────────────────────────────────────────────────── */
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #000000;
+  --foreground: #ededed;
 }
 
 @theme inline {
@@ -78,17 +91,24 @@
   --color-foreground: var(--foreground);
   --font-sans: "DieGrotesk", sans-serif;
   --font-mono: ui-monospace, "SFMono-Regular", "Menlo", monospace;
+  --font-lector: "Lector", serif;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+@utility font-lector {
+  font-family: "Lector", serif;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: "DieGrotesk", sans-serif;
+}
+
+/* Remove ReactFlow's default node chrome from item thumbnail nodes */
+.react-flow__node-itemThumbnail {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  overflow: visible !important;
 }

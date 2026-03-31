@@ -40,7 +40,7 @@ function ConnectPageInner() {
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
-        <span className="font-mono text-xs text-zinc-400">loading…</span>
+        <span className="text-xs text-zinc-400">loading…</span>
       </div>
     );
   }
@@ -90,10 +90,10 @@ function ConnectPageInner() {
   if (saving) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-white dark:bg-black">
-        <span className="font-mono text-xs text-zinc-400">saving…</span>
+        <span className="text-xs text-zinc-400">saving…</span>
         {saveError && (
           <>
-            <p className="mt-2 max-w-sm text-center font-mono text-xs text-red-500">{saveError}</p>
+            <p className="mt-2 max-w-sm text-center text-xs text-red-500">{saveError}</p>
             <button
               onClick={() => { setSaving(false); setSaveError(""); }}
               className="mt-1 text-xs text-zinc-400 underline underline-offset-2 hover:text-zinc-700"
@@ -116,7 +116,7 @@ function ConnectPageInner() {
           >
             ← cancel
           </Link>
-          <span className="font-mono text-xs text-zinc-400">
+          <span className="text-xs text-zinc-400">
             {step === "select" ? "connect — select items" : "connect — add audio"}
           </span>
           <div className="flex gap-1">
@@ -144,11 +144,11 @@ function ConnectPageInner() {
 
             {anchorItem && (
               <div className="border border-zinc-900 px-4 py-3 dark:border-zinc-100">
-                <p className="font-mono text-xs text-zinc-500">anchor item</p>
+                <p className="text-xs text-zinc-500">anchor item</p>
                 <p className="font-medium text-zinc-900 dark:text-zinc-50">
                   {anchorItem.title}
                 </p>
-                <p className="font-mono text-xs text-zinc-500">
+                <p className="text-xs text-zinc-500">
                   {anchorItem.type} · {anchorItem.creator}
                 </p>
               </div>
@@ -164,7 +164,7 @@ function ConnectPageInner() {
                       <button
                         key={id}
                         onClick={() => toggle(id)}
-                        className="border border-zinc-900 px-2 py-0.5 font-mono text-xs text-zinc-900 dark:border-zinc-100 dark:text-zinc-100"
+                        className="border border-zinc-900 px-2 py-0.5 text-xs text-zinc-900 dark:border-zinc-100 dark:text-zinc-100"
                       >
                         {item.title} ✕
                       </button>
@@ -183,7 +183,7 @@ function ConnectPageInner() {
 
             <div className="border border-zinc-200 dark:border-zinc-800">
               {filtered.length === 0 && (
-                <p className="px-4 py-6 text-center font-mono text-xs text-zinc-400">
+                <p className="px-4 py-6 text-center text-xs text-zinc-400">
                   no items found
                 </p>
               )}
@@ -199,11 +199,11 @@ function ConnectPageInner() {
                       <p className="text-sm font-medium text-zinc-900 dark:text-zinc-50">
                         {item.title}
                       </p>
-                      <p className="font-mono text-xs text-zinc-500">
+                      <p className="text-xs text-zinc-500">
                         {item.type} · {item.creator}
                       </p>
                     </div>
-                    <span className="font-mono text-xs text-zinc-400">
+                    <span className="text-xs text-zinc-400">
                       {isSelected ? "✓" : "+"}
                     </span>
                   </button>
@@ -233,7 +233,7 @@ function ConnectPageInner() {
             </div>
 
             <div className="border border-zinc-200 px-4 py-3 dark:border-zinc-800">
-              <p className="font-mono text-xs text-zinc-400">connecting</p>
+              <p className="text-xs text-zinc-400">connecting</p>
               <div className="mt-1 flex flex-col gap-1">
                 {selectedItems.map((item, i) => (
                   <p key={item!.id} className="text-sm text-zinc-700 dark:text-zinc-300">

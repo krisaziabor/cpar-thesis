@@ -78,10 +78,24 @@ export function classifyUrl(input: string): SourceType {
     // Raw DOI pattern in path (e.g. springer, nature direct links)
     if (DOI_PATTERN.test(pathname)) return "doi";
 
-    // Social media
-    if (hostname === "instagram.com") return "instagram";
-    if (hostname === "tiktok.com") return "tiktok";
-    if (hostname === "twitter.com" || hostname === "x.com") return "twitter";
+    // Social media (subdomains: l.instagram.com, vm.tiktok.com, mobile.twitter.com, …)
+    if (
+      hostname === "instagram.com" ||
+      hostname.endsWith(".instagram.com") ||
+      hostname === "instagr.am"
+    ) {
+      return "instagram";
+    }
+    if (hostname === "tiktok.com" || hostname.endsWith(".tiktok.com")) {
+      return "tiktok";
+    }
+    if (
+      hostname === "twitter.com" ||
+      hostname === "x.com" ||
+      hostname.endsWith(".twitter.com")
+    ) {
+      return "twitter";
+    }
 
     // Long-form writing platforms
     if (
@@ -98,6 +112,45 @@ export function classifyUrl(input: string): SourceType {
     // Might be a raw DOI string like "10.1038/nature12373"
     if (DOI_PATTERN.test(input)) return "doi";
     return "unknown";
+  }
+}
+
+/**
+ * True when this URL points at a page we can fetch hosted video for (see
+ * /api/media/upload-video). Used when saving items so downloads still run if
+ * metadata was cached or classified as generic "url" (e.g. old cache entries).
+ */
+export function isDownloadableVideoPageUrl(input: string): boolean {
+  try {
+    const normalized = input.startsWith("http") ? input : `https://${input}`;
+    const url = new URL(normalized);
+    let hostname = url.hostname.toLowerCase();
+    if (hostname.startsWith("www.")) hostname = hostname.slice(4);
+
+    if (hostname === "youtu.be") return true;
+    if (hostname === "youtube.com" || hostname === "m.youtube.com") return true;
+    if (hostname.endsWith(".youtube.com") && hostname !== "music.youtube.com") {
+      return true;
+    }
+
+    if (
+      hostname === "instagram.com" ||
+      hostname.endsWith(".instagram.com") ||
+      hostname === "instagr.am"
+    ) {
+      return true;
+    }
+    if (hostname === "tiktok.com" || hostname.endsWith(".tiktok.com")) return true;
+    if (
+      hostname === "twitter.com" ||
+      hostname === "x.com" ||
+      hostname.endsWith(".twitter.com")
+    ) {
+      return true;
+    }
+    return false;
+  } catch {
+    return false;
   }
 }
 

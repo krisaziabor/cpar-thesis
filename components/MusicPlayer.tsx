@@ -14,8 +14,6 @@ const PLATFORM_LABELS: Record<MusicPlatform, string> = {
 };
 
 interface Props {
-  title: string;
-  creator: string;
   previewUrl?: string;
   platformLinks?: Record<string, string>;
   songLinkUrl?: string;
@@ -23,40 +21,23 @@ interface Props {
 }
 
 export default function MusicPlayer({
-  title,
-  creator,
   previewUrl,
   platformLinks = {},
   songLinkUrl,
-  preferredPlatform = "youtube",
+  preferredPlatform,
 }: Props) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const [playing, setPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(30);
 
-  // Resolve stream URL and track which platform it actually came from
-  function resolveStream(): { url: string; label: string } | null {
-    if (platformLinks[preferredPlatform]) {
-      return { url: platformLinks[preferredPlatform], label: PLATFORM_LABELS[preferredPlatform] ?? preferredPlatform };
-    }
-    if (platformLinks.youtube) {
-      return { url: platformLinks.youtube, label: PLATFORM_LABELS.youtube };
-    }
-    if (platformLinks.spotify) {
-      return { url: platformLinks.spotify, label: PLATFORM_LABELS.spotify };
-    }
-    const first = Object.entries(platformLinks)[0] as [string, string] | undefined;
-    if (first) {
-      return { url: first[1], label: PLATFORM_LABELS[first[0] as MusicPlatform] ?? first[0] };
-    }
-    if (songLinkUrl) {
-      return { url: songLinkUrl, label: "song.link" };
-    }
-    return null;
-  }
-
-  const stream = resolveStream();
+  // Only show stream link if the user has a preference AND that platform is available
+  const stream: { url: string; label: string } | null = (() => {
+    if (!preferredPlatform) return null;
+    const url = platformLinks[preferredPlatform];
+    if (!url) return null;
+    return { url, label: PLATFORM_LABELS[preferredPlatform] };
+  })();
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -98,11 +79,6 @@ export default function MusicPlayer({
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex flex-col gap-0.5">
-        <p className="text-sm font-medium text-zinc-900">{title}</p>
-        <p className="font-mono text-xs text-zinc-500">{creator}</p>
-      </div>
-
       {previewUrl && (
         <>
           <audio ref={audioRef} src={previewUrl} preload="metadata" />
@@ -145,9 +121,6 @@ export default function MusicPlayer({
         </a>
       )}
 
-      {!previewUrl && !stream && (
-        <p className="font-mono text-xs text-zinc-400">no preview available</p>
-      )}
     </div>
   );
 }
