@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
@@ -13,6 +13,7 @@ import { saveToKanon, removeFromKanon, subscribeToKanonSaveStatus } from "@/lib/
 import type { Item, Connection, MusicPlatform } from "@/lib/types";
 import MusicPlayer from "@/components/MusicPlayer";
 import AudioPlayer from "@/components/AudioPlayer";
+import MinimalPdfViewer from "@/components/MinimalPdfViewer";
 import { getUserProfile } from "@/lib/users";
 
 function formatDate(ts: unknown): string {
@@ -36,6 +37,146 @@ function guessMediaType(url: string): "image" | "pdf" | "video" {
     if (["mp4", "webm", "mov", "ogg"].includes(ext)) return "video";
   } catch {}
   return "image";
+}
+
+function formatMediaTime(totalSeconds: number): string {
+  if (!Number.isFinite(totalSeconds) || totalSeconds < 0) return "00:00";
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = Math.floor(totalSeconds % 60);
+  return `${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
+}
+
+function VideoMediaPlayer({ url, title }: { url: string; title: string }) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    const syncState = () => {
+      setCurrentTime(video.currentTime || 0);
+      setDuration(Number.isFinite(video.duration) ? video.duration : 0);
+      setIsPlaying(!video.paused && !video.ended);
+      setIsMuted(video.muted);
+    };
+
+    syncState();
+    video.addEventListener("timeupdate", syncState);
+    video.addEventListener("loadedmetadata", syncState);
+    video.addEventListener("durationchange", syncState);
+    video.addEventListener("play", syncState);
+    video.addEventListener("pause", syncState);
+    video.addEventListener("ended", syncState);
+    video.addEventListener("volumechange", syncState);
+
+    return () => {
+      video.removeEventListener("timeupdate", syncState);
+      video.removeEventListener("loadedmetadata", syncState);
+      video.removeEventListener("durationchange", syncState);
+      video.removeEventListener("play", syncState);
+      video.removeEventListener("pause", syncState);
+      video.removeEventListener("ended", syncState);
+      video.removeEventListener("volumechange", syncState);
+    };
+  }, []);
+
+  async function togglePlayPause() {
+    const video = videoRef.current;
+    if (!video) return;
+    if (video.paused || video.ended) {
+      try {
+        await video.play();
+      } catch {
+        // Ignore blocked autoplay/playback exceptions.
+      }
+      return;
+    }
+    video.pause();
+  }
+
+  async function restartVideo() {
+    const video = videoRef.current;
+    if (!video) return;
+    video.currentTime = 0;
+    try {
+      await video.play();
+    } catch {
+      // Ignore blocked autoplay/playback exceptions.
+    }
+  }
+
+  function toggleMute() {
+    const video = videoRef.current;
+    if (!video) return;
+    video.muted = !video.muted;
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      <div
+        className="relative"
+        onClick={() => void togglePlayPause()}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            void togglePlayPause();
+          }
+        }}
+        role="button"
+        tabIndex={0}
+        aria-label={isPlaying ? "Pause video" : "Play video"}
+      >
+        <video
+          ref={videoRef}
+          src={url}
+          aria-label={title}
+          className="w-full block bg-zinc-900 cursor-pointer"
+          preload="metadata"
+          autoPlay
+          muted
+          playsInline
+        />
+        <div
+          aria-hidden="true"
+          className={`pointer-events-none absolute inset-0 bg-black transition-opacity duration-200 ${
+            isPlaying ? "opacity-0" : "opacity-25"
+          }`}
+        />
+      </div>
+      <div className="px-6 py-3 font-sans text-sm text-zinc-500">
+        <p>
+          {formatMediaTime(currentTime)} of {formatMediaTime(duration)}
+        </p>
+        <div className="mt-1 flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => void togglePlayPause()}
+            className="transition-colors hover:text-zinc-300"
+          >
+            {isPlaying ? "Pause" : "Play"}
+          </button>
+          <button
+            type="button"
+            onClick={() => void restartVideo()}
+            className="transition-colors hover:text-zinc-300"
+          >
+            Restart
+          </button>
+          <button
+            type="button"
+            onClick={toggleMute}
+            className="transition-colors hover:text-zinc-300"
+          >
+            {isMuted ? "Unmute" : "Mute"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export default function ItemPanel({ itemId }: { itemId: string }) {
@@ -81,10 +222,13 @@ export default function ItemPanel({ itemId }: { itemId: string }) {
   const tagsDisplay = Array.isArray(item.tags) ? item.tags : [];
   const mediaType = item.media_url ? guessMediaType(item.media_url) : null;
 
-  // Determine top media: video takes priority, then thumbnail, then image
+  // Determine top media: video/PDF take priority, then thumbnail, then image
   const topIsVideo = mediaType === "video" && !!item.media_url;
+  const topIsPdf = mediaType === "pdf" && !!item.media_url;
   const topThumbnail =
-    !topIsVideo && (item.thumbnail_url ?? (mediaType === "image" ? item.media_url : null));
+    !topIsVideo &&
+    !topIsPdf &&
+    (item.thumbnail_url ?? (mediaType === "image" ? item.media_url : null));
 
   return (
     <motion.div
@@ -94,11 +238,10 @@ export default function ItemPanel({ itemId }: { itemId: string }) {
     >
       {/* ─── Top media — full bleed ──────────────────────────── */}
       {topIsVideo && (
-        <video
-          src={item.media_url!}
-          controls
-          className="w-full block bg-zinc-900"
-        />
+        <VideoMediaPlayer url={item.media_url!} title={item.title} />
+      )}
+      {topIsPdf && (
+        <MinimalPdfViewer url={item.media_url!} title={item.title} />
       )}
       {!topIsVideo && topThumbnail && (
         <img
@@ -129,19 +272,6 @@ export default function ItemPanel({ itemId }: { itemId: string }) {
                   className="underline underline-offset-2 hover:text-zinc-300"
                 >
                   Stream song ↗
-                </a>
-              </>
-            )}
-            {mediaType === "pdf" && item.media_url && (
-              <>
-                <span>·</span>
-                <a
-                  href={item.media_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="underline underline-offset-2 hover:text-zinc-300"
-                >
-                  Open PDF ↗
                 </a>
               </>
             )}

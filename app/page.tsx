@@ -14,6 +14,7 @@ import RightPanel from "@/components/RightPanel";
 import ItemPanel from "@/components/ItemPanel";
 import ActivityPanel from "@/components/ActivityPanel";
 import { AddItemPageInnerWithSuspense } from "@/app/add/page";
+import ConnectPanel from "@/components/ConnectPanel";
 
 const NODE_TYPES: NodeTypes = {
   itemThumbnail: ItemThumbnailNode,
@@ -50,6 +51,12 @@ function HomeInner() {
 
   const panelItemId = searchParams.get("item");
   const panelMode   = searchParams.get("panel");
+  const connectPanelOpen = searchParams.get("connectPanel") === "1";
+  const connectIds = (searchParams.get("connectIds") ?? "")
+    .split(",")
+    .map((v) => v.trim())
+    .filter(Boolean);
+  const isConnectSelecting = panelMode === "connect";
 
   useEffect(() => {
     return subscribeToItems((fetched) => {
@@ -100,7 +107,7 @@ function HomeInner() {
           x: slot.col * (NODE_W + GAP_X),
           y: slot.row * (NODE_H + GAP_Y),
         },
-        data: { item, isFirst, index: i },
+        data: { item, isFirst, index: i, isSelected: connectIds.includes(item.id) },
         draggable: false,
         selectable: false,
         focusable: false,
@@ -108,10 +115,32 @@ function HomeInner() {
     });
 
     return result;
-  }, [items, isFirst, shuffleSeed]);
+  }, [items, isFirst, shuffleSeed, connectIds]);
 
   function closePanel() {
+    if (isConnectSelecting) {
+      const params = new URLSearchParams(searchParams.toString());
+      params.delete("connectPanel");
+      router.push(params.toString() ? `/?${params.toString()}` : "/");
+      return;
+    }
     router.push("/");
+  }
+
+  function setConnectIds(nextIds: string[]) {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("panel", "connect");
+    params.delete("item");
+    if (nextIds.length > 0) params.set("connectIds", nextIds.join(","));
+    else params.delete("connectIds");
+    router.push(`/?${params.toString()}`);
+  }
+
+  function toggleConnectSelection(id: string) {
+    const set = new Set(connectIds);
+    if (set.has(id)) set.delete(id);
+    else set.add(id);
+    setConnectIds([...set]);
   }
 
   if (authLoading || shuffleSeed == null) {
@@ -146,6 +175,10 @@ function HomeInner() {
             fitView={true}
             fitViewOptions={{ padding: 0.1 }}
             onNodeClick={(_, node) => {
+              if (isConnectSelecting && !connectPanelOpen) {
+                toggleConnectSelection(node.id);
+                return;
+              }
               router.push(`/?item=${node.id}`);
             }}
             style={{ background: "#000000" }}
@@ -168,6 +201,15 @@ function HomeInner() {
         {panelMode === "activity" && (
           <RightPanel key="activity-panel" onClose={closePanel} fullPageHref="/activity">
             <ActivityPanel />
+          </RightPanel>
+        )}
+        {panelMode === "connect" && connectPanelOpen && (
+          <RightPanel key="connect-panel" title="New connection" onClose={closePanel}>
+            <ConnectPanel
+              selectedIds={connectIds}
+              createdBy={user.email ?? ""}
+              onCreated={(connectionId) => router.push(`/connections/${connectionId}`)}
+            />
           </RightPanel>
         )}
       </AnimatePresence>

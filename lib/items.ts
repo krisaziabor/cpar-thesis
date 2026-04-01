@@ -73,6 +73,48 @@ type ItemFields = Pick<Item, "title" | "type" | "creator" | "tags" | "added_by" 
   source_metadata?: SourceMetadata;
 };
 
+async function requestTranscript(audioUrl: string): Promise<string | null> {
+  if (typeof window === "undefined") return null;
+  try {
+    const res = await fetch("/api/transcribe", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ audioUrl }),
+    });
+    if (!res.ok) return null;
+    const payload = (await res.json()) as { text?: string };
+    return typeof payload.text === "string" && payload.text.trim() ? payload.text.trim() : null;
+  } catch {
+    return null;
+  }
+}
+
+function queueItemTranscript(itemId: string, audioUrl: string): void {
+  if (!db || !audioUrl) return;
+  void (async () => {
+    const transcript = await requestTranscript(audioUrl);
+    if (!transcript) return;
+    try {
+      await updateDoc(doc(db, "items", itemId), { transcript });
+    } catch {
+      // Best-effort background transcription; ignore write failures.
+    }
+  })();
+}
+
+function queueConnectionTranscript(connectionId: string, audioUrl: string): void {
+  if (!db || !audioUrl) return;
+  void (async () => {
+    const transcript = await requestTranscript(audioUrl);
+    if (!transcript) return;
+    try {
+      await updateDoc(doc(db, "connections", connectionId), { transcript });
+    } catch {
+      // Best-effort background transcription; ignore write failures.
+    }
+  })();
+}
+
 // ─── Published items ──────────────────────────────────────────────────────────
 
 /**
@@ -96,6 +138,7 @@ export async function createItemDoc(data: ItemFields): Promise<string> {
 export async function setItemAudioUrl(itemId: string, url: string): Promise<void> {
   if (!db) throw new Error("Firestore not initialised");
   await updateDoc(doc(db, "items", itemId), { voice_recording_url: url });
+  queueItemTranscript(itemId, url);
 }
 
 /** Real-time listener for all *published* items, newest-first. */
@@ -173,6 +216,7 @@ export async function upsertDraft(
       updates.voice_recording_url = audioUrl;
     }
     await updateDoc(doc(db, "items", draftId), updates);
+    if (audioUrl) queueItemTranscript(draftId, audioUrl);
     return { draftId, audioUrl };
   }
 
@@ -191,6 +235,7 @@ export async function upsertDraft(
   if (audioBlob) {
     audioUrl = await uploadItemAudio(audioBlob, docRef.id);
     await updateDoc(doc(db, "items", docRef.id), { voice_recording_url: audioUrl });
+    queueItemTranscript(docRef.id, audioUrl);
   }
 
   return { draftId: docRef.id, audioUrl };
@@ -220,6 +265,7 @@ export async function createAndPublishItem(
     voice_recording_url: audioUrl,
     is_draft: false,
   });
+  queueItemTranscript(draftId, audioUrl);
   console.log("[createAndPublishItem] done", draftId);
 
   return draftId;
@@ -248,6 +294,7 @@ export async function publishDraft(
     voice_recording_url: audioUrl,
     is_draft: false,
   });
+  if (audioUrl) queueItemTranscript(draftId, audioUrl);
 }
 
 /** Real-time listener for the current user's drafts, newest-first. */
@@ -306,6 +353,7 @@ export async function addAudioVersion(
 
   await setDoc(versionRef, { url, created_at: serverTimestamp(), created_by: createdBy });
   await updateDoc(doc(db, "items", itemId), { voice_recording_url: url });
+  queueItemTranscript(itemId, url);
 
   return url;
 }
@@ -449,6 +497,8 @@ export async function createConnection(
       })
     )
   );
+
+  if (audioUrl) queueConnectionTranscript(connectionRef.id, audioUrl);
 
   return connectionRef.id;
 }

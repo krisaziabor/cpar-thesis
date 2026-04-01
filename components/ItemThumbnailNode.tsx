@@ -6,12 +6,12 @@ import type { Item } from "@/lib/types";
 import { NODE_W, NODE_H } from "@/lib/graph-constants";
 
 export type ItemThumbnailNodeType = Node<
-  { item: Item; isFirst: boolean; index: number },
+  { item: Item; isFirst: boolean; index: number; isSelected?: boolean },
   "itemThumbnail"
 >;
 
 export default function ItemThumbnailNode({ data }: NodeProps<ItemThumbnailNodeType>) {
-  const { item, isFirst, index } = data;
+  const { item, isFirst, index, isSelected } = data;
 
   const delay    = isFirst ? 0.6 + index * 0.06 : index * 0.03;
   const duration = isFirst ? 0.5 : 0.28;
@@ -31,11 +31,18 @@ export default function ItemThumbnailNode({ data }: NodeProps<ItemThumbnailNodeT
           <img
             src={item.thumbnail_url}
             alt={item.title}
-            className="w-full block bg-zinc-900"
+            className={`w-full block bg-zinc-900 transition-all duration-150 ${
+              isSelected ? "ring-2 ring-zinc-200 ring-offset-2 ring-offset-black" : ""
+            }`}
             draggable={false}
           />
         ) : (
-          <div className="flex items-center justify-center bg-zinc-900" style={{ height: NODE_H }}>
+          <div
+            className={`flex items-center justify-center bg-zinc-900 ${
+              isSelected ? "ring-2 ring-zinc-200 ring-offset-2 ring-offset-black" : ""
+            }`}
+            style={{ height: NODE_H }}
+          >
             <span className="text-[10px] text-zinc-600 uppercase tracking-widest">
               {item.type}
             </span>

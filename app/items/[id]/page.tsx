@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
@@ -18,6 +18,7 @@ import { saveToKanon, removeFromKanon, subscribeToKanonSaveStatus } from "@/lib/
 import type { Item, AudioVersion, Connection, MusicPlatform } from "@/lib/types";
 import AudioRecorder from "@/components/AudioRecorder";
 import MusicPlayer from "@/components/MusicPlayer";
+import MinimalPdfViewer from "@/components/MinimalPdfViewer";
 import { getUserProfile } from "@/lib/users";
 
 const TYPES = ["book", "film", "article", "song", "podcast", "other"];
@@ -658,32 +659,149 @@ function ItemMedia({ url, title }: { url: string; title: string }) {
     );
   }
   if (type === "pdf") {
-    return (
-      <div className="flex flex-col gap-2">
-        <iframe
-          src={url}
-          title={title}
-          className="w-full border border-zinc-200 dark:border-zinc-800"
-          style={{ height: "600px" }}
-        />
-        <a
-          href={url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="w-fit font-mono text-xs text-zinc-400 underline underline-offset-2 hover:text-zinc-700 dark:hover:text-zinc-200"
-        >
-          open in new tab ↗
-        </a>
-      </div>
-    );
+    return <MinimalPdfViewer url={url} title={title} />;
   }
   // video
+  return <VideoMediaPlayer url={url} title={title} />;
+}
+
+function formatMediaTime(totalSeconds: number): string {
+  if (!Number.isFinite(totalSeconds) || totalSeconds < 0) return "00:00";
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = Math.floor(totalSeconds % 60);
+  return `${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
+}
+
+function VideoMediaPlayer({ url, title }: { url: string; title: string }) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    const syncState = () => {
+      setCurrentTime(video.currentTime || 0);
+      setDuration(Number.isFinite(video.duration) ? video.duration : 0);
+      setIsPlaying(!video.paused && !video.ended);
+      setIsMuted(video.muted);
+    };
+
+    syncState();
+    video.addEventListener("timeupdate", syncState);
+    video.addEventListener("loadedmetadata", syncState);
+    video.addEventListener("durationchange", syncState);
+    video.addEventListener("play", syncState);
+    video.addEventListener("pause", syncState);
+    video.addEventListener("ended", syncState);
+    video.addEventListener("volumechange", syncState);
+
+    return () => {
+      video.removeEventListener("timeupdate", syncState);
+      video.removeEventListener("loadedmetadata", syncState);
+      video.removeEventListener("durationchange", syncState);
+      video.removeEventListener("play", syncState);
+      video.removeEventListener("pause", syncState);
+      video.removeEventListener("ended", syncState);
+      video.removeEventListener("volumechange", syncState);
+    };
+  }, []);
+
+  async function togglePlayPause() {
+    const video = videoRef.current;
+    if (!video) return;
+    if (video.paused || video.ended) {
+      try {
+        await video.play();
+      } catch {
+        // Ignore blocked autoplay/playback exceptions.
+      }
+      return;
+    }
+    video.pause();
+  }
+
+  async function restartVideo() {
+    const video = videoRef.current;
+    if (!video) return;
+    video.currentTime = 0;
+    try {
+      await video.play();
+    } catch {
+      // Ignore blocked autoplay/playback exceptions.
+    }
+  }
+
+  function toggleMute() {
+    const video = videoRef.current;
+    if (!video) return;
+    video.muted = !video.muted;
+  }
+
   return (
-    <video
-      src={url}
-      controls
-      className="w-full border border-zinc-200 dark:border-zinc-800"
-    />
+    <div className="flex flex-col gap-2">
+      <div
+        className="relative"
+        onClick={() => void togglePlayPause()}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            void togglePlayPause();
+          }
+        }}
+        role="button"
+        tabIndex={0}
+        aria-label={isPlaying ? "Pause video" : "Play video"}
+      >
+        <video
+          ref={videoRef}
+          src={url}
+          aria-label={title}
+          className="w-full border border-zinc-200 dark:border-zinc-800 cursor-pointer"
+          preload="metadata"
+          autoPlay
+          muted
+          playsInline
+        />
+        <div
+          aria-hidden="true"
+          className={`pointer-events-none absolute inset-0 bg-black transition-opacity duration-200 ${
+            isPlaying ? "opacity-0" : "opacity-25"
+          }`}
+        />
+      </div>
+      <div className="flex flex-col items-start gap-1 px-4 py-3 font-sans text-sm text-zinc-500 dark:text-zinc-400">
+        <p>
+          {formatMediaTime(currentTime)} of {formatMediaTime(duration)}
+        </p>
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => void togglePlayPause()}
+            className="transition-colors hover:text-zinc-900 dark:hover:text-zinc-200"
+          >
+            {isPlaying ? "Pause" : "Play"}
+          </button>
+          <button
+            type="button"
+            onClick={() => void restartVideo()}
+            className="transition-colors hover:text-zinc-900 dark:hover:text-zinc-200"
+          >
+            Restart
+          </button>
+          <button
+            type="button"
+            onClick={toggleMute}
+            className="transition-colors hover:text-zinc-900 dark:hover:text-zinc-200"
+          >
+            {isMuted ? "Unmute" : "Mute"}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
