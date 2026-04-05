@@ -318,7 +318,7 @@ export default function ItemPanel({ itemId }: { itemId: string }) {
             }`}
           >
             <span>{kanonSaveId ? "✓" : "+"}</span>
-            {kanonSaveId ? "In My Kanon" : "Add to My Kanon"}
+            {kanonSaveId ? "In Holding" : "Add to Holding"}
           </button>
         </div>
 

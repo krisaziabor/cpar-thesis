@@ -13,6 +13,7 @@ import { AnimatePresence } from "framer-motion";
 import RightPanel from "@/components/RightPanel";
 import ItemPanel from "@/components/ItemPanel";
 import ActivityPanel from "@/components/ActivityPanel";
+import SearchPanel from "@/components/SearchPanel";
 import { AddItemPageInnerWithSuspense } from "@/app/add/page";
 import ConnectPanel from "@/components/ConnectPanel";
 import NewUserChecklistCard from "@/components/NewUserChecklistCard";
@@ -155,6 +156,9 @@ function HomeInner() {
 
   return (
     <div className="flex h-screen flex-col bg-black">
+      <div className="fixed left-6 top-6 z-30">
+        <h1 className="font-lector text-2xl tracking-tight text-white/90">Kanon</h1>
+      </div>
       <div className="flex-1" style={{ background: "#000000" }}>
         {dataLoading ? (
           <div className="flex h-full items-center justify-center">
@@ -201,8 +205,13 @@ function HomeInner() {
           </RightPanel>
         )}
         {panelMode === "activity" && (
-          <RightPanel key="activity-panel" onClose={closePanel} fullPageHref="/activity">
+          <RightPanel key="activity-panel" onClose={closePanel}>
             <ActivityPanel />
+          </RightPanel>
+        )}
+        {panelMode === "search" && (
+          <RightPanel key="search-panel" title="Search" onClose={closePanel}>
+            <SearchPanel />
           </RightPanel>
         )}
         {panelMode === "connect" && connectPanelOpen && (
