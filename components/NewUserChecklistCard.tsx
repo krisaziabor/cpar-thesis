@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import {
   backfillChecklistProgress,
   subscribeToUserChecklistProgress,
@@ -32,7 +33,9 @@ function progressCount(count: number, target: number): string {
 }
 
 export default function NewUserChecklistCard({ userEmail }: NewUserChecklistCardProps) {
+  const shouldReduceMotion = useReducedMotion();
   const [progress, setProgress] = useState<UserChecklistProgress>(() => emptyProgress(userEmail));
+  const [collapsed, setCollapsed] = useState(false);
 
   useEffect(() => {
     if (!userEmail) return;
@@ -66,7 +69,7 @@ export default function NewUserChecklistCard({ userEmail }: NewUserChecklistCard
       },
       {
         key: "my_kanon",
-        label: 'Add a text to "My Kanon"',
+        label: 'Add a text to "Holding"',
         done: progress.completed.add_to_my_kanon,
         counterLabel: progress.completed.add_to_my_kanon ? "1/1" : "0/1",
       },
@@ -76,27 +79,56 @@ export default function NewUserChecklistCard({ userEmail }: NewUserChecklistCard
 
   return (
     <aside className="pointer-events-none fixed bottom-6 right-6 z-40 w-[22rem] max-w-[calc(100vw-2rem)]">
-      <div className="pointer-events-auto overflow-hidden rounded-lg border border-zinc-800 bg-zinc-950 shadow-[0_4px_24px_rgba(0,0,0,0.5)]">
-        <div className="border-b border-zinc-800 px-4 py-3">
-          <p className="font-lector text-sm text-zinc-200">New User Checklist</p>
+      <div className="pointer-events-auto overflow-hidden rounded-lg border border-zinc-800 bg-zinc-950 font-sans shadow-[0_4px_24px_rgba(0,0,0,0.5)]">
+        <div
+          className={`flex items-center justify-between px-4 py-3 ${
+            collapsed ? "" : "border-b border-zinc-800"
+          }`}
+        >
+          <p className="text-sm text-zinc-200">New User Checklist</p>
+          <button
+            type="button"
+            onClick={() => setCollapsed((prev) => !prev)}
+            aria-label={collapsed ? "Expand checklist" : "Collapse checklist"}
+            className="text-xs text-zinc-500 transition-colors hover:text-zinc-300"
+          >
+            {collapsed ? "▸" : "▾"}
+          </button>
         </div>
 
-        <div className="flex flex-col divide-y divide-zinc-800">
-          {items.map((item) => (
-            <div key={item.key} className="flex items-start justify-between gap-3 px-4 py-3">
-              <div className="min-w-0">
-                <p className={`text-xs ${item.done ? "text-zinc-200" : "text-zinc-400"}`}>{item.label}</p>
+        <AnimatePresence initial={false}>
+          {!collapsed && (
+            <motion.div
+              key="checklist-items"
+              initial={shouldReduceMotion ? false : { height: 0, opacity: 0 }}
+              animate={{ height: "auto", opacity: 1 }}
+              exit={shouldReduceMotion ? { opacity: 0 } : { height: 0, opacity: 0 }}
+              transition={
+                shouldReduceMotion
+                  ? { duration: 0 }
+                  : { duration: 0.22, ease: [0.215, 0.61, 0.355, 1] }
+              }
+              className="overflow-hidden"
+            >
+              <div className="flex flex-col divide-y divide-zinc-800">
+                {items.map((item) => (
+                  <div key={item.key} className="flex items-start justify-between gap-3 px-4 py-3">
+                    <div className="min-w-0">
+                      <p className={`text-xs ${item.done ? "text-zinc-200" : "text-zinc-400"}`}>{item.label}</p>
+                    </div>
+                    <span
+                      className={`mt-0.5 shrink-0 text-[11px] ${
+                        item.done ? "text-emerald-300" : "text-zinc-600"
+                      }`}
+                    >
+                      {item.counterLabel}
+                    </span>
+                  </div>
+                ))}
               </div>
-              <span
-                className={`mt-0.5 shrink-0 text-[11px] ${
-                  item.done ? "text-emerald-300" : "text-zinc-600"
-                }`}
-              >
-                {item.counterLabel}
-              </span>
-            </div>
-          ))}
-        </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </aside>
   );

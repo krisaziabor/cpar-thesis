@@ -104,3 +104,13 @@ export interface DeletionRequest {
   resolved_at?: Timestamp;
   resolved_by?: string;
 }
+
+/** Feedback: freeform feedback submitted by an authenticated user */
+export interface Feedback {
+  id: string;
+  user_id: string;
+  user_email: string;
+  user_name: string;
+  text: string;
+  created_at: Timestamp;
+}
