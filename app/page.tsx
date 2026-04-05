@@ -15,6 +15,7 @@ import ItemPanel from "@/components/ItemPanel";
 import ActivityPanel from "@/components/ActivityPanel";
 import { AddItemPageInnerWithSuspense } from "@/app/add/page";
 import ConnectPanel from "@/components/ConnectPanel";
+import NewUserChecklistCard from "@/components/NewUserChecklistCard";
 
 const NODE_TYPES: NodeTypes = {
   itemThumbnail: ItemThumbnailNode,
@@ -186,6 +187,7 @@ function HomeInner() {
           />
         )}
       </div>
+      {user.email && <NewUserChecklistCard userEmail={user.email} />}
 
       <AnimatePresence>
         {panelItemId && (

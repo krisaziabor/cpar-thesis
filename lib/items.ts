@@ -19,6 +19,7 @@ import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage
 import { db, storage } from "./firebase";
 import type { Item, AudioVersion, DeletionRequest, Connection, ConnectionItem, Response as ItemResponse } from "./types";
 import type { SourceMetadata } from "./metadata/types";
+import { trackCreatedConnectionForUser, trackPublishedTextForUser } from "./user-checklist";
 
 // ─── Storage ─────────────────────────────────────────────────────────────────
 
@@ -131,6 +132,9 @@ export async function createItemDoc(data: ItemFields): Promise<string> {
     is_hidden: false,
     created_at: serverTimestamp(),
   });
+  if (data.added_by) {
+    await trackPublishedTextForUser(data.added_by);
+  }
   return docRef.id;
 }
 
@@ -265,6 +269,7 @@ export async function createAndPublishItem(
     voice_recording_url: audioUrl,
     is_draft: false,
   });
+  await trackPublishedTextForUser(userEmail);
   queueItemTranscript(draftId, audioUrl);
   console.log("[createAndPublishItem] done", draftId);
 
@@ -294,6 +299,11 @@ export async function publishDraft(
     voice_recording_url: audioUrl,
     is_draft: false,
   });
+  const draftSnap = await getDoc(doc(db, "items", draftId));
+  const addedBy = draftSnap.exists() ? (draftSnap.data().added_by as string | undefined) : undefined;
+  if (addedBy) {
+    await trackPublishedTextForUser(addedBy);
+  }
   if (audioUrl) queueItemTranscript(draftId, audioUrl);
 }
 
@@ -497,6 +507,8 @@ export async function createConnection(
       })
     )
   );
+
+  await trackCreatedConnectionForUser(createdBy, itemIds);
 
   if (audioUrl) queueConnectionTranscript(connectionRef.id, audioUrl);
 
