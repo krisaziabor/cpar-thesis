@@ -168,8 +168,11 @@ export async function trackCreatedConnectionForUser(
   itemIds: string[]
 ): Promise<void> {
   if (!db || !userEmail || itemIds.length < 2) return;
+  const firestore = db;
 
-  const itemSnaps = await Promise.all(itemIds.map((itemId) => getDoc(doc(db, "items", itemId))));
+  const itemSnaps = await Promise.all(
+    itemIds.map((itemId) => getDoc(doc(firestore, "items", itemId)))
+  );
   const owners = itemSnaps
     .map((snap) => (snap.exists() ? (snap.data().added_by as string | undefined) : undefined))
     .filter((owner): owner is string => typeof owner === "string" && owner.length > 0);
@@ -207,24 +210,25 @@ export function subscribeToUserChecklistProgress(
  */
 export async function backfillChecklistProgress(userEmail: string): Promise<void> {
   if (!db || !userEmail) return;
+  const firestore = db;
 
   const [ownItemsSnap, kanonSavesSnap, createdConnectionsSnap] = await Promise.all([
     getDocs(
       query(
-        collection(db, "items"),
+        collection(firestore, "items"),
         where("added_by", "==", userEmail),
         where("is_draft", "==", false)
       )
     ),
-    getDocs(query(collection(db, "kanon_saves"), where("user_email", "==", userEmail))),
-    getDocs(query(collection(db, "connections"), where("created_by", "==", userEmail))),
+    getDocs(query(collection(firestore, "kanon_saves"), where("user_email", "==", userEmail))),
+    getDocs(query(collection(firestore, "connections"), where("created_by", "==", userEmail))),
   ]);
 
   const connectionIds = createdConnectionsSnap.docs.map((d) => d.id);
   const perConnectionItems = await Promise.all(
     connectionIds.map(async (connectionId) => {
       const snap = await getDocs(
-        query(collection(db!, "connection_items"), where("connection_id", "==", connectionId))
+        query(collection(firestore, "connection_items"), where("connection_id", "==", connectionId))
       );
       return {
         connectionId,
@@ -234,7 +238,9 @@ export async function backfillChecklistProgress(userEmail: string): Promise<void
   );
 
   const uniqueItemIds = [...new Set(perConnectionItems.flatMap((entry) => entry.itemIds))];
-  const itemDocs = await Promise.all(uniqueItemIds.map((itemId) => getDoc(doc(db, "items", itemId))));
+  const itemDocs = await Promise.all(
+    uniqueItemIds.map((itemId) => getDoc(doc(firestore, "items", itemId)))
+  );
   const ownerById = new Map<string, string>();
   itemDocs.forEach((snap) => {
     if (!snap.exists()) return;
@@ -268,7 +274,7 @@ export async function backfillChecklistProgress(userEmail: string): Promise<void
   };
 
   const ref = checklistRef(userEmail);
-  await runTransaction(db, async (tx) => {
+  await runTransaction(firestore, async (tx) => {
     const snap = await tx.get(ref);
     const current = normaliseProgress(userEmail, snap.data() as Record<string, unknown> | undefined);
     const next: UserChecklistProgress = {
