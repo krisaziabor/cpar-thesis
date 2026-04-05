@@ -102,22 +102,90 @@ async function getSpotifyToken(): Promise<string | null> {
   }
 }
 
-async function fetchSpotifyPreviewUrl(spotifyUrl: string): Promise<string | null> {
+interface SpotifyTrackDetails {
+  previewUrl: string | null;
+  albumTitle: string | null;
+  year: number | null;
+}
+
+interface ItunesTrackDetails {
+  albumTitle: string | null;
+  year: number | null;
+}
+
+async function fetchSpotifyTrackDetails(spotifyUrl: string): Promise<SpotifyTrackDetails> {
   const token = await getSpotifyToken();
-  if (!token) return null;
+  if (!token) return { previewUrl: null, albumTitle: null, year: null };
 
   const match = spotifyUrl.match(/track\/([A-Za-z0-9]+)/);
-  if (!match) return null;
+  if (!match) return { previewUrl: null, albumTitle: null, year: null };
 
   try {
     const res = await fetch(`https://api.spotify.com/v1/tracks/${match[1]}`, {
       headers: { Authorization: `Bearer ${token}` },
     });
-    if (!res.ok) return null;
-    const data = await res.json() as { preview_url: string | null };
-    return data.preview_url ?? null;
+    if (!res.ok) return { previewUrl: null, albumTitle: null, year: null };
+    const data = await res.json() as {
+      preview_url: string | null;
+      album?: { name?: string; release_date?: string };
+    };
+
+    const albumTitle =
+      typeof data.album?.name === "string" && data.album.name.trim()
+        ? data.album.name.trim()
+        : null;
+
+    const releaseDate = data.album?.release_date ?? "";
+    const parsedYear = Number.parseInt(releaseDate.slice(0, 4), 10);
+    const year = Number.isFinite(parsedYear) ? parsedYear : null;
+
+    return {
+      previewUrl: data.preview_url ?? null,
+      albumTitle,
+      year,
+    };
+  } catch {
+    return { previewUrl: null, albumTitle: null, year: null };
+  }
+}
+
+function extractItunesTrackId(itunesUrl: string): string | null {
+  try {
+    const parsed = new URL(itunesUrl);
+    const fromParam = parsed.searchParams.get("i");
+    if (fromParam && /^\d+$/.test(fromParam)) return fromParam;
+    const fromPath = parsed.pathname.match(/\/id(\d+)/i);
+    if (fromPath?.[1]) return fromPath[1];
+    return null;
   } catch {
     return null;
+  }
+}
+
+async function fetchItunesTrackDetails(trackId: string): Promise<ItunesTrackDetails> {
+  if (!trackId) return { albumTitle: null, year: null };
+  try {
+    const res = await fetch(`https://itunes.apple.com/lookup?id=${encodeURIComponent(trackId)}`, {
+      headers: { "User-Agent": "Kanon/1.0 (https://kanon.app)" },
+    });
+    if (!res.ok) return { albumTitle: null, year: null };
+
+    const data = await res.json() as {
+      results?: Array<{ collectionName?: string; releaseDate?: string }>;
+    };
+    const first = data.results?.[0];
+    if (!first) return { albumTitle: null, year: null };
+
+    const albumTitle =
+      typeof first.collectionName === "string" && first.collectionName.trim()
+        ? first.collectionName.trim()
+        : null;
+    const parsedYear = Number.parseInt((first.releaseDate ?? "").slice(0, 4), 10);
+    const year = Number.isFinite(parsedYear) ? parsedYear : null;
+
+    return { albumTitle, year };
+  } catch {
+    return { albumTitle: null, year: null };
   }
 }
 
@@ -157,16 +225,34 @@ export async function fetchMusicMetadata(url: string): Promise<CanonItemMetadata
     .map((p) => PLATFORM_LABELS[p])
     .filter((label): label is string => Boolean(label));
 
-  // Try to fetch 30s Spotify preview (silent fail)
+  // Try to fetch Spotify details (silent fail): preview, album, release year.
   const spotifyUrl = data.linksByPlatform.spotify?.url;
-  const preview_url = spotifyUrl
-    ? (await fetchSpotifyPreviewUrl(spotifyUrl)) ?? undefined
-    : undefined;
+  const spotifyDetails = spotifyUrl
+    ? await fetchSpotifyTrackDetails(spotifyUrl)
+    : { previewUrl: null, albumTitle: null, year: null };
+  const preview_url = spotifyDetails.previewUrl ?? undefined;
+
+  const itunesUrl = data.linksByPlatform.itunes?.url ?? data.linksByPlatform.appleMusic?.url;
+  const itunesTrackId =
+    (itunesUrl ? extractItunesTrackId(itunesUrl) : null) ??
+    (data.entityUniqueId.startsWith("ITUNES_SONG::")
+      ? data.entityUniqueId.split("ITUNES_SONG::")[1] ?? null
+      : null);
+  const itunesDetails = itunesTrackId
+    ? await fetchItunesTrackDetails(itunesTrackId)
+    : { albumTitle: null, year: null };
+
+  const albumTitle =
+    spotifyDetails.albumTitle ??
+    itunesDetails.albumTitle ??
+    (entity.type === "album" ? entity.title : undefined);
+  const releaseYear = spotifyDetails.year ?? itunesDetails.year ?? undefined;
 
   const sourceMetadata: SourceMetadata = {
     source_type: "music",
     platform,
-    album: entity.type === "album" ? entity.title : undefined,
+    album: albumTitle,
+    year: releaseYear,
     platforms: Object.keys(data.linksByPlatform),
     song_link_url: data.pageUrl,
     preview_url,

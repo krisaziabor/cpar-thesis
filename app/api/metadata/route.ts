@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
     } else {
       // ── URL fetch ──
       const body = await request.json();
-      const { url } = body as { url?: string };
+      const { url, refresh } = body as { url?: string; refresh?: boolean };
 
       if (!url || typeof url !== "string") {
         return NextResponse.json(
@@ -41,7 +41,7 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      const result = await runMetadataPipeline({ url });
+      const result = await runMetadataPipeline({ url, refresh: Boolean(refresh) });
       return NextResponse.json(result);
     }
   } catch (err) {

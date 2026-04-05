@@ -140,7 +140,7 @@ export default function MetadataLab() {
         res = await fetch("/api/metadata", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ url }),
+          body: JSON.stringify({ url, refresh: true }),
         });
       }
 
@@ -443,7 +443,11 @@ export default function MetadataLab() {
                         />
                       )}
                       {result.data.source_metadata.year && (
-                        <Field label="Year" value={String(result.data.source_metadata.year)} ai={wasAI("year")} />
+                        <Field
+                          label={result.data.source_metadata.source_type === "music" ? "Release year" : "Year"}
+                          value={String(result.data.source_metadata.year)}
+                          ai={wasAI("year")}
+                        />
                       )}
                       {result.data.source_metadata.doi && (
                         <Field label="DOI" value={result.data.source_metadata.doi} mono />
@@ -458,7 +462,7 @@ export default function MetadataLab() {
                         <Field label="Pages" value={`${result.data.source_metadata.page_count} pages`} />
                       )}
                       {result.data.source_metadata.album && (
-                        <Field label="Album" value={result.data.source_metadata.album} />
+                        <Field label="Album title" value={result.data.source_metadata.album} />
                       )}
                       {result.data.source_metadata.platform && (
                         <Field label="Platform" value={result.data.source_metadata.platform} />
