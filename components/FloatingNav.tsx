@@ -44,8 +44,6 @@ export default function FloatingNav() {
     }
   })();
 
-  if (!user || pathname === "/login") return null;
-
   function clearFeedbackCloseTimer() {
     if (!feedbackCloseTimerRef.current) return;
     clearTimeout(feedbackCloseTimerRef.current);
@@ -127,6 +125,8 @@ export default function FloatingNav() {
       setFeedbackError("Could not send feedback. Please try again.");
     }
   }
+
+  if (!user || pathname === "/login") return null;
 
   return (
     <div className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2">
