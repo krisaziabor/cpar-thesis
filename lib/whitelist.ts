@@ -7,6 +7,9 @@ export interface WhitelistAccessInfo {
   firstName: string | null;
 }
 
+const DEV_EMAIL = "agent@cursor.com";
+const IS_DEV = process.env.NODE_ENV === "development";
+
 function getFirstNameFromRecord(data: Record<string, unknown>): string | null {
   const firstName =
     data.firstName ??
@@ -27,6 +30,7 @@ function getFirstNameFromRecord(data: Record<string, unknown>): string | null {
 // Document ID is the email address (lowercase). Field: role ("admin" | "member").
 // Manage entries directly in Firebase Console → Firestore → whitelist.
 export async function getWhitelistRole(email: string): Promise<UserRole | null> {
+  if (IS_DEV && email.toLowerCase() === DEV_EMAIL) return "admin";
   if (!db) return null;
   const snap = await getDoc(doc(db, "whitelist", email.toLowerCase()));
   if (!snap.exists()) return null;
@@ -34,6 +38,9 @@ export async function getWhitelistRole(email: string): Promise<UserRole | null> 
 }
 
 export async function getWhitelistAccessInfo(email: string): Promise<WhitelistAccessInfo> {
+  if (IS_DEV && email.toLowerCase() === DEV_EMAIL) {
+    return { role: "admin", firstName: "Dev" };
+  }
   if (!db) return { role: null, firstName: null };
 
   const snap = await getDoc(doc(db, "whitelist", email.toLowerCase()));

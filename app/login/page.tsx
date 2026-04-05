@@ -21,7 +21,7 @@ const ACCESS_NOT_GIVEN_MESSAGE = "Access has not been given to this email yet.";
 type Stage = "gate" | "choice" | "sent" | "verifying";
 
 export default function LoginPage() {
-  const { user, loading, authError } = useAuth();
+  const { user, loading, authError, devSignIn } = useAuth();
   const router = useRouter();
   const shouldReduceMotion = useReducedMotion();
   const [stage, setStage] = useState<Stage>(() => {
@@ -316,6 +316,15 @@ export default function LoginPage() {
 
         {error && (
           <p className="px-1 text-xs text-red-400">{error}</p>
+        )}
+
+        {devSignIn && (
+          <button
+            onClick={devSignIn}
+            className="mt-1 w-full rounded-lg border border-dashed border-zinc-700 bg-zinc-950 px-4 py-2 text-xs text-zinc-400 transition-colors hover:border-zinc-500 hover:text-zinc-200"
+          >
+            Dev Sign In (agent@cursor.com)
+          </button>
         )}
       </div>
     </div>
