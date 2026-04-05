@@ -94,6 +94,20 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // Feedback submitted from floating nav.
+    match /feedback_submissions/{feedbackId} {
+      allow create: if request.auth != null
+        && request.resource.data.user_email == request.auth.token.email
+        && request.resource.data.user_uid == request.auth.uid
+        && request.resource.data.message is string
+        && request.resource.data.message.size() > 0
+        && request.resource.data.message.size() <= 2000
+        && request.resource.data.source == "floating_nav";
+      allow read: if request.auth != null
+        && (resource.data.user_email == request.auth.token.email || isAdmin());
+      allow update, delete: if false;
+    }
+
     // Metadata cache — written by server-side API routes (no user auth context).
     // Contains only public URL metadata; no user PII.
     match /metadataCache/{docId} {
