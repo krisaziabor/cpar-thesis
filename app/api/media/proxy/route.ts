@@ -4,6 +4,7 @@ export const runtime = "nodejs";
 export const maxDuration = 30;
 
 const ALLOWED_MIME_PREFIXES = ["image/", "audio/", "application/pdf"];
+const PDF_LIKE_MIME_TYPES = ["application/octet-stream", "binary/octet-stream"];
 
 /** SSRF prevention: reject localhost, private RFC-1918 ranges, and non-HTTPS. */
 function isSafeUrl(raw: string): boolean {
@@ -20,6 +21,19 @@ function isSafeUrl(raw: string): boolean {
   if (/^172\.(1[6-9]|2\d|3[01])\./.test(h)) return false;
   if (/^192\.168\./.test(h)) return false;
   return true;
+}
+
+function looksLikePdfUrl(raw: string): boolean {
+  try {
+    const parsed = new URL(raw);
+    const pathname = decodeURIComponent(parsed.pathname).toLowerCase();
+    if (pathname.endsWith(".pdf")) return true;
+    // Firebase Storage often encodes the original filename in query params.
+    const tokenized = `${parsed.search}${parsed.hash}`.toLowerCase();
+    return tokenized.includes(".pdf");
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -61,7 +75,11 @@ export async function POST(request: NextRequest) {
     const rawContentType = upstream.headers.get("content-type") ?? "";
     const contentType = rawContentType.split(";")[0].trim() || "application/octet-stream";
 
-    if (!ALLOWED_MIME_PREFIXES.some((p) => contentType.startsWith(p))) {
+    const isKnownAllowedType = ALLOWED_MIME_PREFIXES.some((p) => contentType.startsWith(p));
+    const isPdfLikeFallbackType =
+      PDF_LIKE_MIME_TYPES.includes(contentType) && looksLikePdfUrl(url);
+
+    if (!isKnownAllowedType && !isPdfLikeFallbackType) {
       return NextResponse.json(
         { error: `Content type not proxiable: ${contentType}` },
         { status: 415 }
@@ -70,9 +88,15 @@ export async function POST(request: NextRequest) {
 
     const buffer = await upstream.arrayBuffer();
 
-    const MAX_BYTES = 10 * 1024 * 1024; // 10 MB
+    // PDFs are frequently larger than thumbnails/audio previews.
+    const MAX_BYTES = (isKnownAllowedType && contentType.startsWith("application/pdf")) || isPdfLikeFallbackType
+      ? 50 * 1024 * 1024 // 50 MB
+      : 10 * 1024 * 1024; // 10 MB
     if (buffer.byteLength > MAX_BYTES) {
-      return NextResponse.json({ error: "File exceeds 10 MB limit" }, { status: 413 });
+      return NextResponse.json(
+        { error: `File exceeds ${Math.floor(MAX_BYTES / (1024 * 1024))} MB limit` },
+        { status: 413 }
+      );
     }
 
     return new NextResponse(buffer, {

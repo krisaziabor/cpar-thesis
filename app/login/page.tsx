@@ -9,27 +9,37 @@ import {
   signInWithEmailLink,
 } from "firebase/auth";
 import { useRouter } from "next/navigation";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { auth } from "@/lib/firebase";
-import { getWhitelistRole } from "@/lib/whitelist";
+import { getWhitelistAccessInfo } from "@/lib/whitelist";
 import { useAuth } from "@/lib/auth-context";
 
 const googleProvider = new GoogleAuthProvider();
 const EMAIL_STORAGE_KEY = "kanon_signin_email";
+const ACCESS_NOT_GIVEN_MESSAGE = "Access has not been given to this email yet.";
 
-type PageState = "idle" | "sent" | "verifying";
+type Stage = "gate" | "choice" | "sent" | "verifying";
 
 export default function LoginPage() {
   const { user, loading, authError } = useAuth();
   const router = useRouter();
-  const [pageState, setPageState] = useState<PageState>("idle");
-  const [email, setEmail] = useState("");
+  const shouldReduceMotion = useReducedMotion();
+  const [stage, setStage] = useState<Stage>(() => {
+    if (
+      auth &&
+      typeof window !== "undefined" &&
+      isSignInWithEmailLink(auth, window.location.href)
+    ) {
+      return "verifying";
+    }
+    return "gate";
+  });
+  const [emailInput, setEmailInput] = useState("");
+  const [gatedEmail, setGatedEmail] = useState("");
+  const [gatedFirstName, setGatedFirstName] = useState<string | null>(null);
   const [signingIn, setSigningIn] = useState(false);
-  const [error, setError] = useState("");
-
-  // Surface auth errors from context (e.g. "not approved")
-  useEffect(() => {
-    if (authError) setError(authError);
-  }, [authError]);
+  const [localError, setLocalError] = useState("");
+  const [transientNotice, setTransientNotice] = useState("");
 
   // Redirect to home if already authenticated
   useEffect(() => {
@@ -41,12 +51,13 @@ export default function LoginPage() {
     if (!auth || typeof window === "undefined") return;
     if (!isSignInWithEmailLink(auth, window.location.href)) return;
 
-    setPageState("verifying");
     const storedEmail = localStorage.getItem(EMAIL_STORAGE_KEY);
 
     if (!storedEmail) {
-      setError("Could not find your email. Please request a new sign-in link.");
-      setPageState("idle");
+      Promise.resolve().then(() => {
+        setLocalError("Could not find your email. Please request a new sign-in link.");
+        setStage("gate");
+      });
       return;
     }
 
@@ -55,134 +66,257 @@ export default function LoginPage() {
       .catch((err: unknown) => {
         const message =
           err instanceof Error ? err.message : "Sign-in failed. Please try again.";
-        setError(message);
-        setPageState("idle");
+        setLocalError(message);
+        setStage("gate");
       });
   }, []);
 
-  async function handleGoogleSignIn() {
+  useEffect(() => {
+    if (!transientNotice) return;
+    const timeoutId = window.setTimeout(() => setTransientNotice(""), 5000);
+    return () => window.clearTimeout(timeoutId);
+  }, [transientNotice]);
+
+  const shouldShowYaleNotice =
+    (stage === "choice" || stage === "sent") &&
+    gatedEmail.trim().toLowerCase().endsWith("@yale.edu");
+  const error = localError || authError || "";
+
+  async function handleGoogleSignIn(emailHint?: string) {
     if (!auth) { setError("Firebase is not configured."); return; }
-    setError("");
+    setLocalError("");
     setSigningIn(true);
+
+    const normalizedHint = emailHint?.trim().toLowerCase() ?? "";
+    if (normalizedHint) {
+      googleProvider.setCustomParameters({
+        login_hint: normalizedHint,
+        ...(normalizedHint.endsWith("@yale.edu") ? { hd: "yale.edu" } : {}),
+      });
+    } else {
+      googleProvider.setCustomParameters({});
+    }
+
     try {
       await signInWithPopup(auth, googleProvider);
       // Auth context handles whitelist check, role, and redirect
     } catch (err: unknown) {
       const code = (err as { code?: string }).code;
       if (code !== "auth/popup-closed-by-user" && code !== "auth/cancelled-popup-request") {
-        setError(err instanceof Error ? err.message : "Sign-in failed.");
+        setLocalError(err instanceof Error ? err.message : "Sign-in failed.");
       }
       setSigningIn(false);
     }
   }
 
-  async function handleEmailSubmit(e: React.FormEvent) {
+  async function handleEmailGateSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!auth) { setError("Firebase is not configured."); return; }
-    setError("");
+    setLocalError("");
+    setTransientNotice("");
 
-    const normalizedEmail = email.trim().toLowerCase();
+    const normalizedEmail = emailInput.trim().toLowerCase();
 
-    // Check whitelist before sending the link so the user gets immediate feedback
-    const role = await getWhitelistRole(normalizedEmail).catch(() => null);
-    if (!role) {
-      setError("This email is not on the access list.");
+    // Gate both auth methods behind whitelist check for clear access feedback.
+    const accessInfo = await getWhitelistAccessInfo(normalizedEmail).catch(() => ({
+      role: null,
+      firstName: null,
+    }));
+    if (!accessInfo.role) {
+      setStage("gate");
+      setTransientNotice(ACCESS_NOT_GIVEN_MESSAGE);
+      return;
+    }
+
+    setGatedEmail(normalizedEmail);
+    setGatedFirstName(accessInfo.firstName);
+    setStage("choice");
+  }
+
+  async function handleSendMagicLink() {
+    if (!auth) { setError("Firebase is not configured."); return; }
+    setLocalError("");
+
+    if (!gatedEmail) {
+      setLocalError("Enter your email first.");
+      setStage("gate");
       return;
     }
 
     // actionCodeSettings.url must be an authorized domain in Firebase Console:
     // Authentication > Sign-in method > Email/Password > Email link (passwordless sign-in)
     try {
-      await sendSignInLinkToEmail(auth, normalizedEmail, {
+      await sendSignInLinkToEmail(auth, gatedEmail, {
         url: `${window.location.origin}/login`,
         handleCodeInApp: true,
       });
-      localStorage.setItem(EMAIL_STORAGE_KEY, normalizedEmail);
-      setPageState("sent");
+      localStorage.setItem(EMAIL_STORAGE_KEY, gatedEmail);
+      setStage("sent");
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Failed to send sign-in link.");
+      setLocalError(err instanceof Error ? err.message : "Failed to send sign-in link.");
     }
   }
 
-  if (loading || signingIn || pageState === "verifying") {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-zinc-50 dark:bg-black">
-        <p className="text-sm text-zinc-500 dark:text-zinc-400">
-          {pageState === "verifying" ? "Signing you in…" : "Loading…"}
-        </p>
-      </div>
-    );
+  function setError(message: string) {
+    setLocalError(message);
   }
 
-  if (pageState === "sent") {
+  if (loading || signingIn || stage === "verifying") {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-zinc-50 dark:bg-black">
-        <h1 className="text-xl font-semibold text-zinc-900 dark:text-zinc-50">
-          Check your email
-        </h1>
-        <p className="max-w-sm text-center text-sm text-zinc-600 dark:text-zinc-400">
-          We sent a sign-in link to <strong>{email}</strong>. Click the link to
-          continue.
+      <div className="flex min-h-screen items-center justify-center bg-black">
+        <p className="text-sm text-zinc-400">
+          {stage === "verifying" ? "Signing you in..." : "Loading..."}
         </p>
-        <button
-          onClick={() => { setPageState("idle"); setEmail(""); }}
-          className="text-sm text-zinc-500 underline underline-offset-2 hover:text-zinc-700 dark:hover:text-zinc-300"
-        >
-          Use a different email
-        </button>
       </div>
     );
   }
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center gap-8 bg-zinc-50 dark:bg-black">
-      <div className="flex flex-col items-center gap-1">
-        <h1 className="text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
-          Kanon
-        </h1>
-        <p className="text-sm text-zinc-500 dark:text-zinc-400">
-          Sign in to continue
+    <div className="min-h-screen bg-black">
+      <div className="fixed left-6 top-6 z-20 flex flex-col gap-2">
+        <h1 className="font-lector text-2xl tracking-tight text-white/90">Kanon</h1>
+        <p className="whitespace-pre-line text-xs text-zinc-400">
+          {"A social network, library, installation, book, and practice.\nThesis for Computing and the Arts at Yale University.\nWork of Kristopher Aziabor."}
         </p>
       </div>
 
-      <div className="flex w-full max-w-sm flex-col gap-3">
-        {error && <p className="text-center text-sm text-red-500">{error}</p>}
-
-        <button
-          onClick={handleGoogleSignIn}
-          className="flex items-center justify-center gap-2 rounded-lg border border-zinc-300 bg-white px-4 py-2.5 text-sm font-medium text-zinc-900 transition-colors hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50 dark:hover:bg-zinc-800"
+      <div className="fixed bottom-6 left-6 z-20 flex w-[min(560px,calc(100vw-3rem))] flex-col gap-2">
+        <motion.div
+          layout
+          transition={
+            shouldReduceMotion
+              ? { duration: 0 }
+              : { duration: 0.22, ease: [0.215, 0.61, 0.355, 1] }
+          }
+          className="overflow-hidden rounded-lg border border-zinc-800 bg-zinc-950 shadow-[0_4px_24px_rgba(0,0,0,0.5)]"
         >
-          <GoogleIcon />
-          Continue with Google
-        </button>
+          <AnimatePresence initial={false} mode="wait">
+            {stage === "gate" && (
+              <motion.form
+                key="gate"
+                onSubmit={handleEmailGateSubmit}
+                initial={shouldReduceMotion ? false : { opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={shouldReduceMotion ? { opacity: 1 } : { opacity: 0, y: -6 }}
+                transition={
+                  shouldReduceMotion
+                    ? { duration: 0 }
+                    : { duration: 0.18, ease: [0.215, 0.61, 0.355, 1] }
+                }
+                className="flex items-stretch divide-x divide-zinc-800"
+              >
+                <input
+                  type="email"
+                  value={emailInput}
+                  onChange={(e) => {
+                    setEmailInput(e.target.value);
+                    if (transientNotice === ACCESS_NOT_GIVEN_MESSAGE) {
+                      setTransientNotice("");
+                    }
+                  }}
+                  placeholder="Enter your email"
+                  required
+                  className="min-w-0 flex-1 bg-transparent px-4 py-2.5 text-xs text-zinc-300 placeholder:text-zinc-500 focus:outline-none"
+                />
+                <button
+                  type="submit"
+                  className="font-lector px-4 py-2.5 text-xs text-zinc-300 transition-colors hover:bg-zinc-900 hover:text-zinc-50"
+                >
+                  Continue
+                </button>
+              </motion.form>
+            )}
 
-        <div className="flex items-center gap-3">
-          <hr className="flex-1 border-zinc-200 dark:border-zinc-800" />
-          <span className="text-xs text-zinc-400 dark:text-zinc-600">or</span>
-          <hr className="flex-1 border-zinc-200 dark:border-zinc-800" />
-        </div>
+            {stage === "choice" && (
+              <motion.div
+                key="choice"
+                initial={shouldReduceMotion ? false : { opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={shouldReduceMotion ? { opacity: 1 } : { opacity: 0, y: -6 }}
+                transition={
+                  shouldReduceMotion
+                    ? { duration: 0 }
+                    : { duration: 0.2, ease: [0.215, 0.61, 0.355, 1] }
+                }
+                className="flex flex-col font-lector"
+              >
+                <div className="border-b border-zinc-800 px-4 py-2 text-[11px] text-zinc-500 font-sans">
+                  {gatedFirstName ? `Hey ${gatedFirstName}!` : gatedEmail}
+                </div>
+                <div className="flex items-stretch divide-x divide-zinc-800">
+                  <button
+                    onClick={() => void handleGoogleSignIn(gatedEmail)}
+                    className="flex flex-1 items-center justify-center gap-2 px-4 py-2.5 text-xs text-zinc-300 transition-colors hover:bg-zinc-900 hover:text-zinc-50"
+                  >
+                    <GoogleIcon />
+                    Continue with Google
+                  </button>
+                  <button
+                    onClick={() => void handleSendMagicLink()}
+                    className="px-4 py-2.5 text-xs text-zinc-300 transition-colors hover:bg-zinc-900 hover:text-zinc-50"
+                  >
+                    Send magic link
+                  </button>
+                </div>
+              </motion.div>
+            )}
 
-        <form onSubmit={handleEmailSubmit} className="flex flex-col gap-2">
-          <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="your@email.com"
-            required
-            className="rounded-lg border border-zinc-300 bg-white px-4 py-2.5 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-zinc-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50 dark:placeholder:text-zinc-500 dark:focus:border-zinc-400"
-          />
-          {email.toLowerCase().includes("@yale.edu") && (
-            <p className="text-xs text-amber-600 dark:text-amber-400">
-              Yale addresses may experience email delays — Google Sign-In is recommended.
-            </p>
-          )}
-          <button
-            type="submit"
-            className="rounded-lg bg-zinc-900 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-zinc-700 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-zinc-200"
-          >
-            Send sign-in link
-          </button>
-        </form>
+            {stage === "sent" && (
+              <motion.div
+                key="sent"
+                initial={shouldReduceMotion ? false : { opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={shouldReduceMotion ? { opacity: 1 } : { opacity: 0, y: -6 }}
+                transition={
+                  shouldReduceMotion
+                    ? { duration: 0 }
+                    : { duration: 0.2, ease: [0.215, 0.61, 0.355, 1] }
+                }
+                className="flex flex-col"
+              >
+                <div className="border-b border-zinc-800 px-4 py-2 text-[11px] text-zinc-500 font-sans">
+                  Check your email (spam included)
+                </div>
+                <div className="px-4 py-2.5 text-xs text-zinc-300 font-sans">
+                  Magic link sent to {gatedEmail}.
+                </div>
+                <div className="flex items-stretch divide-x divide-zinc-800 border-t border-zinc-800">
+                  <button
+                    onClick={() => void handleGoogleSignIn(gatedEmail)}
+                    className="flex-1 px-4 py-2.5 text-left text-xs text-zinc-400 font-lector transition-colors hover:bg-zinc-900 hover:text-zinc-50"
+                  >
+                    Switch to Google Sign-In
+                  </button>
+                  <button
+                    onClick={() => {
+                      setStage("gate");
+                      setEmailInput("");
+                      setGatedEmail("");
+                      setGatedFirstName(null);
+                    }}
+                    className="flex-1 px-4 py-2.5 text-left text-xs text-zinc-400 font-lector transition-colors hover:bg-zinc-900 hover:text-zinc-50"
+                  >
+                    Use a different email
+                  </button>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </motion.div>
+
+        {shouldShowYaleNotice && (
+          <p className="px-1 text-xs text-zinc-400">
+            Google Sign-In is recommended for yale.edu email addresses.
+          </p>
+        )}
+
+        {transientNotice && (
+          <p className="px-1 text-xs text-red-400">{transientNotice}</p>
+        )}
+
+        {error && (
+          <p className="px-1 text-xs text-red-400">{error}</p>
+        )}
       </div>
     </div>
   );

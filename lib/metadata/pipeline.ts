@@ -15,6 +15,7 @@ import type { CanonItemMetadata, MetadataResult, SourceType } from "./types";
 interface PipelineInput {
   url?: string;
   file?: { buffer: Buffer; name: string; type: string };
+  refresh?: boolean;
 }
 
 export async function runMetadataPipeline(
@@ -42,9 +43,11 @@ export async function runMetadataPipeline(
       sourceType = classifyUrl(input.url);
 
       // ── Cache check (all URL-based handlers) ─────────────────────────────
-      const cached = await getCachedMetadata(input.url);
-      if (cached) {
-        return { success: true, data: cached, source_type: sourceType };
+      if (!input.refresh) {
+        const cached = await getCachedMetadata(input.url);
+        if (cached) {
+          return { success: true, data: cached, source_type: sourceType };
+        }
       }
 
       // ── Handler dispatch ──────────────────────────────────────────────────

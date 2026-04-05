@@ -12,6 +12,7 @@ import {
 } from "firebase/firestore";
 import { db } from "./firebase";
 import type { KanonSave } from "./types";
+import { trackKanonSaveForUser } from "./user-checklist";
 
 const KANON_SAVES = "kanon_saves";
 
@@ -28,6 +29,7 @@ export async function saveToKanon(
     reference_id: referenceId,
     created_at: serverTimestamp(),
   });
+  await trackKanonSaveForUser(userEmail);
   return ref.id;
 }
 

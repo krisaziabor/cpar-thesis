@@ -82,6 +82,18 @@ service cloud.firestore {
       allow update: if false;
     }
 
+    // Per-user onboarding checklist progress
+    match /user_checklist_progress/{docId} {
+      allow read: if request.auth != null
+        && resource.data.user_email == request.auth.token.email;
+      allow create: if request.auth != null
+        && request.resource.data.user_email == request.auth.token.email;
+      allow update: if request.auth != null
+        && resource.data.user_email == request.auth.token.email
+        && request.resource.data.user_email == request.auth.token.email;
+      allow delete: if false;
+    }
+
     // Metadata cache — written by server-side API routes (no user auth context).
     // Contains only public URL metadata; no user PII.
     match /metadataCache/{docId} {
