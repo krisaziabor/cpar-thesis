@@ -84,8 +84,9 @@ service cloud.firestore {
 
     // Per-user onboarding checklist progress
     match /user_checklist_progress/{docId} {
-      allow read: if request.auth != null
-        && resource.data.user_email == request.auth.token.email;
+      // Allow authenticated reads so first-time users can initialize/subscribe
+      // before their progress document exists.
+      allow read: if request.auth != null;
       allow create: if request.auth != null
         && request.resource.data.user_email == request.auth.token.email;
       allow update: if request.auth != null
@@ -118,6 +119,37 @@ service cloud.firestore {
       // Only admins may resolve (update) requests.
       allow update: if isAdmin();
       allow delete: if false;
+    }
+
+    // Product feedback submissions
+    match /feedback/{feedbackId} {
+      // Authenticated users can create feedback tied to their own identity.
+      allow create: if request.auth != null
+        && request.resource.data.keys().hasOnly([
+             'user_id',
+             'user_email',
+             'user_name',
+             'text',
+             'created_at',
+           ])
+        && request.resource.data.keys().hasAll([
+             'user_id',
+             'user_email',
+             'user_name',
+             'text',
+             'created_at',
+           ])
+        && request.resource.data.user_id == request.auth.uid
+        && request.resource.data.user_email == request.auth.token.email
+        && request.resource.data.user_name is string
+        && request.resource.data.text is string
+        && request.resource.data.text.size() > 0
+        && request.resource.data.text.size() <= 1200
+        && request.resource.data.created_at == request.time;
+
+      // Feedback is internal; admin-only reads.
+      allow read: if request.auth != null && isAdmin();
+      allow update, delete: if false;
     }
   }
 }
