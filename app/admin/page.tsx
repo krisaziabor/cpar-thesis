@@ -145,7 +145,7 @@ export default function AdminPage() {
                   <div className="flex flex-col gap-1 min-w-0">
                     <p className="text-sm font-medium text-zinc-900 dark:text-zinc-50">
                       <Link
-                        href={`/items/${req.item_id}`}
+                        href={`/?item=${req.item_id}`}
                         className="hover:underline underline-offset-2"
                       >
                         {req.item_title}

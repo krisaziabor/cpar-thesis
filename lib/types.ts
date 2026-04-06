@@ -32,6 +32,9 @@ export interface User {
 export interface Item {
   id: string;
   title: string;
+  description?: string;
+  /** Original date of the media/record (free-text: year, month/year, or full date). */
+  media_date?: string;
   type: string;
   creator: string;
   link?: string;
@@ -69,6 +72,16 @@ export interface ConnectionItem {
 export interface Response {
   id: string;
   connection_id: string;
+  audio_url: string;
+  transcript: string;
+  created_by: string;
+  created_at: Timestamp;
+}
+
+/** ItemResponse: voice reply to an item record */
+export interface ItemResponse {
+  id: string;
+  item_id: string;
   audio_url: string;
   transcript: string;
   created_by: string;

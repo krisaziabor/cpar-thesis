@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { subscribeToUserKanon } from "@/lib/kanon";
-import { subscribeToItems, subscribeToAllConnections } from "@/lib/items";
+import { subscribeToAllConnections, subscribeToDrafts, subscribeToItems } from "@/lib/items";
 import type { KanonSave, Item, Connection } from "@/lib/types";
 
 function formatDate(ts: unknown): string {
@@ -47,6 +47,7 @@ export default function KanonPage() {
 
   const [saves, setSaves] = useState<KanonSave[] | undefined>(undefined);
   const [allItems, setAllItems] = useState<Item[]>([]);
+  const [ownDraftItems, setOwnDraftItems] = useState<Item[]>([]);
   const [allConnections, setAllConnections] = useState<Connection[]>([]);
 
   useEffect(() => {
@@ -64,6 +65,16 @@ export default function KanonPage() {
     return unsub;
   }, []);
 
+  const isOwn = user?.email === decodedEmail;
+
+  useEffect(() => {
+    if (!isOwn) {
+      setOwnDraftItems([]);
+      return;
+    }
+    return subscribeToDrafts(decodedEmail, setOwnDraftItems);
+  }, [decodedEmail, isOwn]);
+
   if (authLoading || saves === undefined) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-white dark:bg-black">
@@ -73,11 +84,13 @@ export default function KanonPage() {
   }
   if (!user) return null;
 
-  const isOwn = user.email === decodedEmail;
-
   function resolveTitle(save: KanonSave): string {
     if (save.reference_type === "item") {
-      return allItems.find((i) => i.id === save.reference_id)?.title ?? save.reference_id;
+      return (
+        allItems.find((i) => i.id === save.reference_id)?.title ??
+        ownDraftItems.find((i) => i.id === save.reference_id)?.title ??
+        save.reference_id
+      );
     }
     // connection: show connected item titles
     const conn = allConnections.find((c) => c.id === save.reference_id);
@@ -88,7 +101,9 @@ export default function KanonPage() {
 
   function resolveCreator(save: KanonSave): string {
     if (save.reference_type === "item") {
-      const item = allItems.find((i) => i.id === save.reference_id);
+      const item =
+        allItems.find((i) => i.id === save.reference_id) ??
+        ownDraftItems.find((i) => i.id === save.reference_id);
       return item?.added_by ?? "";
     }
     const conn = allConnections.find((c) => c.id === save.reference_id);
@@ -96,7 +111,7 @@ export default function KanonPage() {
   }
 
   function resolveHref(save: KanonSave): string {
-    if (save.reference_type === "item") return `/items/${save.reference_id}`;
+    if (save.reference_type === "item") return `/?item=${save.reference_id}`;
     return `/connections/${save.reference_id}`;
   }
 

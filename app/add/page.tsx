@@ -1,21 +1,137 @@
 "use client";
 
-import { useState, useEffect, useRef, Suspense } from "react";
-import Link from "next/link";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { motion, useReducedMotion } from "framer-motion";
 import { useAuth } from "@/lib/auth-context";
 import AudioRecorder from "@/components/AudioRecorder";
 import {
+  createItemDoc,
   createAndPublishItem,
+  discardDraft,
+  findPublishedItemByLink,
   getItem,
+  subscribeToDrafts,
   upsertDraft,
-  publishDraft,
-  uploadItemFile,
   updateItem,
+  uploadItemFile,
 } from "@/lib/items";
-import { mirrorThumbnail, mirrorPreviewAudio, mirrorVideo, uploadBase64Thumbnail } from "@/lib/media-upload";
+import { DEFAULT_ITEM_TYPES, ensureItemTypeExists, subscribeToItemTypes } from "@/lib/item-types";
+import { saveToKanon } from "@/lib/kanon";
 import { isDownloadableVideoPageUrl } from "@/lib/metadata/classify";
 import type { MetadataResult, SourceMetadata } from "@/lib/metadata/types";
+import { mirrorPreviewAudio, mirrorThumbnail, mirrorVideo, uploadBase64Thumbnail } from "@/lib/media-upload";
+import type { Item } from "@/lib/types";
+
+type Step = "source" | "details" | "record";
+type Destination = "holding" | "library";
+
+interface ItemDraft {
+  url: string;
+  title: string;
+  description: string;
+  mediaDate: string;
+  type: string;
+  creator: string;
+  link: string;
+  tags: string;
+  audioBlob: Blob | null;
+  existingAudioUrl: string | null;
+  fileFile: File | null;
+  existingFileUrl: string | null;
+  thumbnailUrl: string | null;
+  sourceMetadata: SourceMetadata | null;
+  sourceLabel?: string;
+}
+
+interface QueueItem {
+  sourceUrl: string;
+  sourceLabel: string;
+  title: string;
+  description: string;
+  mediaDate: string;
+  type: string;
+  creator: string;
+  link: string;
+  tags: string;
+  thumbnailUrl: string | null;
+  sourceMetadata: SourceMetadata | null;
+  fileFile: File | null;
+}
+
+const EMPTY: ItemDraft = {
+  url: "",
+  title: "",
+  description: "",
+  mediaDate: "",
+  type: DEFAULT_ITEM_TYPES[0],
+  creator: "",
+  link: "",
+  tags: "",
+  audioBlob: null,
+  existingAudioUrl: null,
+  fileFile: null,
+  existingFileUrl: null,
+  thumbnailUrl: null,
+  sourceMetadata: null,
+  sourceLabel: undefined,
+};
+
+function parseTags(raw: string): string[] {
+  return raw
+    .split(",")
+    .map((tag) => tag.trim())
+    .filter(Boolean);
+}
+
+function formatDateForDisplay(raw: string): string {
+  const value = raw.trim();
+  if (!value) return "";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return parsed.toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+}
+
+function toDateInputValue(raw: string): string {
+  const value = raw.trim();
+  if (!value) return "";
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "";
+  return parsed.toISOString().slice(0, 10);
+}
+
+function fromDateInputValue(value: string): string {
+  if (!value) return "";
+  const parsed = new Date(`${value}T00:00:00Z`);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return parsed.toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+}
+
+function toQueueItem(draft: ItemDraft): QueueItem {
+  return {
+    sourceUrl: draft.url.trim(),
+    sourceLabel: draft.url.trim() || (draft.fileFile?.name ?? "Uploaded file"),
+    title: draft.title,
+    description: draft.description.trim(),
+    mediaDate: draft.mediaDate.trim(),
+    type: draft.type,
+    creator: draft.creator,
+    link: draft.link,
+    tags: draft.tags,
+    thumbnailUrl: draft.thumbnailUrl,
+    sourceMetadata: draft.sourceMetadata,
+    fileFile: draft.fileFile,
+  };
+}
 
 export default function AddItemPage() {
   return (
@@ -25,374 +141,539 @@ export default function AddItemPage() {
   );
 }
 
-export function AddItemPageInnerWithSuspense({ hideHeader }: { hideHeader?: boolean }) {
+export function AddItemPageInnerWithSuspense({
+  hideHeader,
+  onProgressChange,
+  backSignal,
+  closeSignal,
+  onRequestPanelClose,
+  onCanGoBackChange,
+}: {
+  hideHeader?: boolean;
+  onProgressChange?: (progressPercent: number) => void;
+  backSignal?: number;
+  closeSignal?: number;
+  onRequestPanelClose?: () => void;
+  onCanGoBackChange?: (canGoBack: boolean) => void;
+}) {
   return (
     <Suspense>
-      <AddItemPageInner hideHeader={hideHeader} />
+      <AddItemPageInner
+        hideHeader={hideHeader}
+        onProgressChange={onProgressChange}
+        backSignal={backSignal}
+        closeSignal={closeSignal}
+        onRequestPanelClose={onRequestPanelClose}
+        onCanGoBackChange={onCanGoBackChange}
+      />
     </Suspense>
   );
 }
 
-type Step = "url" | "metadata" | "record";
-
-const TYPES = ["book", "film", "article", "song", "podcast", "other"];
-
-interface ItemDraft {
-  url: string;
-  title: string;
-  type: string;
-  creator: string;
-  link: string;
-  tags: string;
-  audioBlob: Blob | null;
-  audioUrl: string | null;
-  /** Audio URL already stored in Firestore (from a saved draft). */
-  existingAudioUrl: string | null;
-  /** Newly selected file (image or PDF), not yet uploaded. */
-  fileFile: File | null;
-  /** File URL already stored in Firestore (from a saved draft). */
-  existingFileUrl: string | null;
-  /** Thumbnail URL returned by the metadata pipeline. */
-  thumbnailUrl: string | null;
-  /** Full source_metadata blob returned by the metadata pipeline. */
-  sourceMetadata: SourceMetadata | null;
-}
-
-const EMPTY: ItemDraft = {
-  url: "",
-  title: "",
-  type: "book",
-  creator: "",
-  link: "",
-  tags: "",
-  audioBlob: null,
-  audioUrl: null,
-  existingAudioUrl: null,
-  fileFile: null,
-  existingFileUrl: null,
-  thumbnailUrl: null,
-  sourceMetadata: null,
-};
-
-function parseTags(raw: string): string[] {
-  return raw.split(",").map((t) => t.trim()).filter(Boolean);
-}
-
-function AddItemPageInner({ hideHeader = false }: { hideHeader?: boolean }) {
+function AddItemPageInner({
+  hideHeader = false,
+  onProgressChange,
+  backSignal = 0,
+  closeSignal = 0,
+  onRequestPanelClose,
+  onCanGoBackChange,
+}: {
+  hideHeader?: boolean;
+  onProgressChange?: (progressPercent: number) => void;
+  backSignal?: number;
+  closeSignal?: number;
+  onRequestPanelClose?: () => void;
+  onCanGoBackChange?: (canGoBack: boolean) => void;
+}) {
   const { loading: authLoading, user } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const shouldReduceMotion = useReducedMotion();
   const urlDraftId = searchParams.get("draft");
 
-  const [step, setStep] = useState<Step>("url");
+  const [step, setStep] = useState<Step>("source");
   const [draft, setDraft] = useState<ItemDraft>(EMPTY);
+  const [destination, setDestination] = useState<Destination>("library");
+  const [queuedItems, setQueuedItems] = useState<QueueItem[]>([]);
+  const [recordings, setRecordings] = useState<Array<{ blob: Blob | null; existingUrl: string | null }>>([]);
+  const [detailsIndex, setDetailsIndex] = useState(0);
+  const [recordIndex, setRecordIndex] = useState(0);
   const [currentDraftId, setCurrentDraftId] = useState<string | null>(null);
-  const [prefilled, setPrefilled] = useState(false);
+  const [drafts, setDrafts] = useState<Item[]>([]);
   const [fetching, setFetching] = useState(false);
   const [draftLoading, setDraftLoading] = useState(!!urlDraftId);
-  const [saving, setSaving] = useState(false);
-  const [saveStage, setSaveStage] = useState("");
+  const [sourceError, setSourceError] = useState("");
   const [saveError, setSaveError] = useState("");
-  const [draftSaveStatus, setDraftSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
-  const draftSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [saveStage, setSaveStage] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [itemTypes, setItemTypes] = useState<string[]>([...DEFAULT_ITEM_TYPES]);
+  const [isTypeMenuOpen, setIsTypeMenuOpen] = useState(false);
   const [filePreviewUrl, setFilePreviewUrl] = useState<string | null>(null);
+  const [isDragActive, setIsDragActive] = useState(false);
+  const [showClosePrompt, setShowClosePrompt] = useState(false);
+  const [draftPromptSaving, setDraftPromptSaving] = useState(false);
+  const [draftPromptError, setDraftPromptError] = useState("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const typeBlurTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const prevBackSignalRef = useRef(backSignal);
+  const prevCloseSignalRef = useRef(closeSignal);
 
-  // Show a timeout error if the upload hangs for more than 45 seconds
   useEffect(() => {
-    if (!saving) return;
-    const t = setTimeout(() => {
-      setSaveError("Upload timed out — check the browser Console (DevTools) for details.");
-    }, 45000);
-    return () => clearTimeout(t);
-  }, [saving]);
+    if (!user?.email) return;
+    return subscribeToDrafts(user.email, setDrafts);
+  }, [user?.email]);
 
-  // Load existing draft when resuming
   useEffect(() => {
-    if (!urlDraftId) return;
+    if (!user?.email) return;
+    return subscribeToItemTypes(setItemTypes);
+  }, [user?.email]);
+
+  useEffect(() => {
+    if (!urlDraftId) {
+      setDraftLoading(false);
+      return;
+    }
     setDraftLoading(true);
-    getItem(urlDraftId).then((item) => {
-      if (item?.is_draft) {
+    getItem(urlDraftId)
+      .then((item) => {
+        if (!item?.is_draft) return;
         setDraft({
           url: item.link ?? "",
           title: item.title,
+          description: item.description ?? "",
+          mediaDate: item.media_date ?? "",
           type: item.type,
           creator: item.creator,
           link: item.link ?? "",
-          tags: item.tags.join(", "),
+          tags: Array.isArray(item.tags) ? item.tags.join(", ") : "",
           audioBlob: null,
-          audioUrl: null,
           existingAudioUrl: item.voice_recording_url || null,
           fileFile: null,
           existingFileUrl: item.media_url || null,
           thumbnailUrl: item.thumbnail_url ?? null,
           sourceMetadata: item.source_metadata ?? null,
+          sourceLabel: item.link ?? item.title,
         });
-        setCurrentDraftId(urlDraftId);
-        setStep("metadata");
-      }
-      setDraftLoading(false);
-    });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // intentionally only on mount
+        setQueuedItems([
+          toQueueItem({
+            url: item.link ?? "",
+            title: item.title,
+            description: item.description ?? "",
+            mediaDate: item.media_date ?? "",
+            type: item.type,
+            creator: item.creator,
+            link: item.link ?? "",
+            tags: Array.isArray(item.tags) ? item.tags.join(", ") : "",
+            audioBlob: null,
+            existingAudioUrl: item.voice_recording_url || null,
+            fileFile: null,
+            existingFileUrl: item.media_url || null,
+            thumbnailUrl: item.thumbnail_url ?? null,
+            sourceMetadata: item.source_metadata ?? null,
+            sourceLabel: item.link ?? item.title,
+          }),
+        ]);
+        setDetailsIndex(0);
+        setCurrentDraftId(item.id);
+        setStep("details");
+      })
+      .finally(() => setDraftLoading(false));
+  }, [urlDraftId]);
+
+  function patch(fields: Partial<ItemDraft>) {
+    setDraft((prev) => ({ ...prev, ...fields }));
+  }
+
+  function patchSourceMetadata(fields: Partial<SourceMetadata>) {
+    setDraft((prev) => ({
+      ...prev,
+      sourceMetadata: {
+        ...(prev.sourceMetadata ?? { source_type: "unknown" }),
+        ...fields,
+      },
+    }));
+  }
+
+  const canContinueDetails = !!draft.title.trim() && !!draft.creator.trim() && !!draft.mediaDate.trim();
+  const recordingQueue = useMemo<QueueItem[]>(() => queuedItems, [queuedItems]);
+  const activeQueueItem = recordingQueue[recordIndex];
+  const activeRecording = recordings[recordIndex] ?? { blob: null, existingUrl: null };
+  const canAdvanceRecording = !!activeRecording.blob || !!activeRecording.existingUrl;
+  const canContinueFromSource = queuedItems.length > 0;
+  const showDraftsSection = step === "source" && drafts.length > 0;
+  const stepOrder: Step[] = ["source", "details", "record"];
+  const currentStepIndex = stepOrder.indexOf(step);
+  const headerProgressPercent = ((currentStepIndex + 1) / stepOrder.length) * 100;
+  const normalizedDraftType = draft.type.trim().toLowerCase();
+  const filteredItemTypes = useMemo(() => {
+    if (!normalizedDraftType) return itemTypes.slice(0, 8);
+    return itemTypes
+      .filter((itemType) => itemType.includes(normalizedDraftType))
+      .slice(0, 8);
+  }, [itemTypes, normalizedDraftType]);
+  const shouldShowCreateType =
+    normalizedDraftType.length > 0 && !itemTypes.includes(normalizedDraftType);
+  const isMusicSource = draft.sourceMetadata?.source_type === "music";
+  const fetchedMediaDate = inferMediaDate(draft.sourceMetadata);
+  const canResetMediaDate = !!fetchedMediaDate && draft.mediaDate.trim() !== fetchedMediaDate;
+  const hasCurrentInput =
+    !!draft.url.trim() ||
+    !!draft.fileFile ||
+    !!draft.title.trim() ||
+    !!draft.description.trim() ||
+    !!draft.creator.trim() ||
+    !!draft.mediaDate.trim() ||
+    !!draft.tags.trim();
+  const hasUnsavedProgress = queuedItems.length > 0 || hasCurrentInput;
+
+  useEffect(() => {
+    onProgressChange?.(headerProgressPercent);
+  }, [headerProgressPercent, onProgressChange]);
+
+  useEffect(() => {
+    onCanGoBackChange?.(step !== "source");
+  }, [onCanGoBackChange, step]);
+
+  useEffect(() => {
+    setRecordings((prev) =>
+      recordingQueue.map((_, idx) => prev[idx] ?? { blob: null, existingUrl: null })
+    );
+    if (recordIndex >= recordingQueue.length) setRecordIndex(Math.max(0, recordingQueue.length - 1));
+  }, [recordingQueue, recordIndex]);
 
   useEffect(() => {
     return () => {
-      if (draftSaveTimer.current) clearTimeout(draftSaveTimer.current);
+      if (typeBlurTimerRef.current) clearTimeout(typeBlurTimerRef.current);
     };
   }, []);
 
-  if (authLoading || draftLoading) return <Loading />;
-  if (!user) return null;
+  useEffect(() => {
+    if (backSignal === prevBackSignalRef.current) return;
+    prevBackSignalRef.current = backSignal;
 
-  function patch(fields: Partial<ItemDraft>) {
-    setDraft((d) => ({ ...d, ...fields }));
-  }
-
-  const hasAudio = !!(draft.audioBlob || draft.existingAudioUrl);
-  const canSaveDraft = !!(draft.title && draft.creator && user?.email);
-
-  async function handleSaveDraft() {
-    if (!canSaveDraft || !user?.email) return;
-    setDraftSaveStatus("saving");
-    try {
-      const { draftId, audioUrl: storedAudioUrl } = await upsertDraft(
-        user.email,
-        currentDraftId,
-        {
-          title: draft.title,
-          type: draft.type,
-          creator: draft.creator,
-          ...(draft.link ? { link: draft.link } : {}),
-          tags: parseTags(draft.tags),
-          added_by: user.email,
-          // Never write base64 data URIs to Firestore — they exceed the 1 MB field limit.
-          // The full-save flow uploads them to Storage; drafts just omit the thumbnail.
-          ...(draft.thumbnailUrl && !draft.thumbnailUrl.startsWith("data:")
-            ? { thumbnail_url: draft.thumbnailUrl }
-            : {}),
-          ...(draft.sourceMetadata ? { source_metadata: draft.sourceMetadata } : {}),
-        },
-        draft.audioBlob ?? undefined
-      );
-      setCurrentDraftId(draftId);
-      // If we just uploaded a new blob, replace it with the Storage URL so
-      // that publishDraft receives the correct Firestore-stored URL.
-      if (draft.audioBlob) {
-        patch({ audioBlob: null, audioUrl: null, existingAudioUrl: storedAudioUrl });
-      }
-      // Upload any newly selected file and persist its URL on the draft.
-      if (draft.fileFile) {
-        const fileUrl = await uploadItemFile(draft.fileFile, draftId);
-        await updateItem(draftId, { media_url: fileUrl });
-        patch({ fileFile: null, existingFileUrl: fileUrl });
-        setFilePreviewUrl(null);
-      }
-      setDraftSaveStatus("saved");
-      draftSaveTimer.current = setTimeout(() => setDraftSaveStatus("idle"), 3000);
-    } catch (err) {
-      setSaveError(err instanceof Error ? err.message : "Draft save failed.");
-      setDraftSaveStatus("idle");
-    }
-  }
-
-  async function handleUrlNext() {
-    const hasUrl = !!draft.url.trim();
-    const hasFile = !!draft.fileFile;
-
-    if (!hasUrl && !hasFile) {
-      setStep("metadata");
+    if (step === "record") {
+      const safeIndex = Math.min(recordIndex, Math.max(0, queuedItems.length - 1));
+      setDetailsIndex(safeIndex);
+      if (queuedItems[safeIndex]) loadQueuedItemIntoDraft(queuedItems[safeIndex]);
+      setStep("details");
       return;
     }
 
-    setFetching(true);
+    if (step === "details") {
+      if (detailsIndex > 0) {
+        const nextIndex = detailsIndex - 1;
+        setDetailsIndex(nextIndex);
+        if (queuedItems[nextIndex]) loadQueuedItemIntoDraft(queuedItems[nextIndex]);
+      } else {
+        setStep("source");
+      }
+    }
+  }, [backSignal, detailsIndex, queuedItems, recordIndex, step]);
+
+  useEffect(() => {
+    if (closeSignal === prevCloseSignalRef.current) return;
+    prevCloseSignalRef.current = closeSignal;
+    if (!hasUnsavedProgress) {
+      onRequestPanelClose?.();
+      return;
+    }
+    setShowClosePrompt(true);
+  }, [closeSignal, hasUnsavedProgress, onRequestPanelClose]);
+
+  if (authLoading || draftLoading) return <Loading compact={hideHeader} />;
+  if (!user) return null;
+
+  function inferMediaDate(sourceMetadata: SourceMetadata | null | undefined): string {
+    if (!sourceMetadata) return "";
+    const releaseDate = sourceMetadata.release_date?.trim();
+    if (releaseDate) return formatDateForDisplay(releaseDate);
+    const publishedDate = sourceMetadata.published_date?.trim();
+    if (publishedDate) return formatDateForDisplay(publishedDate);
+    if (typeof sourceMetadata.year === "number" && Number.isFinite(sourceMetadata.year)) {
+      return String(sourceMetadata.year);
+    }
+    return "";
+  }
+
+  async function buildQueuedItemFromSource(sourceDraft: ItemDraft): Promise<QueueItem> {
+    const hasUrl = !!sourceDraft.url.trim();
+    const hasFile = !!sourceDraft.fileFile;
+    let nextDraft: ItemDraft = { ...sourceDraft };
+
     try {
       let res: Response;
-
-      if (hasFile && draft.fileFile) {
+      if (hasFile && sourceDraft.fileFile) {
         const fd = new FormData();
-        fd.append("file", draft.fileFile);
+        fd.append("file", sourceDraft.fileFile);
         res = await fetch("/api/metadata", { method: "POST", body: fd });
       } else {
         res = await fetch("/api/metadata", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ url: draft.url.trim() }),
+          body: JSON.stringify({ url: sourceDraft.url.trim() }),
         });
       }
-
       const result: MetadataResult = await res.json();
-
       if (result.success && result.data) {
-        const d = result.data;
-        // Map "essay" → "article" since the add form doesn't have that type
-        const mappedType = d.type === "essay" ? "article" : d.type;
-        patch({
-          title: d.title || draft.title,
-          type: TYPES.includes(mappedType) ? mappedType : draft.type,
-          creator: d.creator || draft.creator,
-          link: d.link || draft.link,
-          tags: d.tags.length > 0 ? d.tags.join(", ") : draft.tags,
-          thumbnailUrl: d.thumbnail_url ?? d.thumbnail_base64 ?? null,
-          sourceMetadata: d.source_metadata,
-        });
-        setPrefilled(true);
-      } else {
-        setPrefilled(false);
+        const metadataType = result.data.type === "essay" ? "article" : result.data.type;
+        const normalizedMetadataType = metadataType?.trim().toLowerCase();
+        nextDraft = {
+          ...nextDraft,
+          title: result.data.title || nextDraft.title || "Untitled record",
+          type: normalizedMetadataType || nextDraft.type,
+          creator: result.data.creator || nextDraft.creator || "Unknown creator",
+          link: result.data.link || nextDraft.link,
+          mediaDate: inferMediaDate(result.data.source_metadata) || nextDraft.mediaDate,
+          thumbnailUrl: result.data.thumbnail_url ?? result.data.thumbnail_base64 ?? null,
+          sourceMetadata: result.data.source_metadata,
+        };
       }
     } catch {
-      // Non-fatal: let the user fill in details manually
-      setPrefilled(false);
+      // Non-fatal: keep user-provided source and fallback metadata fields.
+    }
+
+    if (!nextDraft.title.trim()) nextDraft.title = "Untitled record";
+    if (!nextDraft.creator.trim()) nextDraft.creator = "Unknown creator";
+    if (!nextDraft.mediaDate.trim()) nextDraft.mediaDate = inferMediaDate(nextDraft.sourceMetadata) || "Unknown";
+    if (!nextDraft.link.trim() && nextDraft.url.trim()) nextDraft.link = nextDraft.url.trim();
+
+    return toQueueItem(nextDraft);
+  }
+
+  async function addSourceToQueue() {
+    const hasUrl = !!draft.url.trim();
+    const hasFile = !!draft.fileFile;
+    if (!hasUrl && !hasFile) {
+      setSourceError("Add a URL or file, then press Enter.");
+      return;
+    }
+    setSourceError("");
+    setFetching(true);
+    try {
+      const queuedItem = await buildQueuedItemFromSource(draft);
+      setQueuedItems((prev) => [...prev, queuedItem]);
+      patch({
+        url: "",
+        title: "",
+        description: "",
+        mediaDate: "",
+        type: DEFAULT_ITEM_TYPES[0],
+        creator: "",
+        link: "",
+        tags: "",
+        fileFile: null,
+        existingFileUrl: null,
+        thumbnailUrl: null,
+        sourceMetadata: null,
+      });
+      setFilePreviewUrl(null);
+      if (fileInputRef.current) fileInputRef.current.value = "";
     } finally {
       setFetching(false);
-      setStep("metadata");
     }
   }
 
-  async function saveItem() {
-    if (!user?.email || !hasAudio) return;
-    setSaving(true);
-    setSaveStage("");
+  function loadQueuedItemIntoDraft(item: QueueItem) {
+    patch({
+      url: item.sourceUrl,
+      sourceLabel: item.sourceLabel,
+      title: item.title,
+      description: item.description,
+      mediaDate: item.mediaDate,
+      type: item.type,
+      creator: item.creator,
+      link: item.link,
+      tags: item.tags,
+      thumbnailUrl: item.thumbnailUrl,
+      sourceMetadata: item.sourceMetadata,
+      fileFile: item.fileFile,
+      existingFileUrl: null,
+      existingAudioUrl: null,
+      audioBlob: null,
+    });
+    if (item.fileFile?.type.startsWith("image/")) {
+      setFilePreviewUrl(URL.createObjectURL(item.fileFile));
+    } else {
+      setFilePreviewUrl(null);
+    }
+  }
+
+  async function saveSessionAsDrafts() {
+    const userEmail = user?.email;
+    if (!userEmail) return;
+
+    const itemsToDraft: QueueItem[] = [...queuedItems];
+    if (itemsToDraft.length === 0 && hasCurrentInput) {
+      itemsToDraft.push(toQueueItem(draft));
+    }
+
+    for (const queuedItem of itemsToDraft) {
+      try {
+        await ensureItemTypeExists(queuedItem.type, userEmail);
+      } catch {
+        // Best-effort vocabulary update; do not block draft save.
+      }
+      const { draftId } = await upsertDraft(
+        userEmail,
+        null,
+        {
+          title: queuedItem.title || "Untitled record",
+          description: queuedItem.description.trim(),
+          media_date: queuedItem.mediaDate.trim() || "Unknown",
+          type: queuedItem.type,
+          creator: queuedItem.creator || "Unknown creator",
+          ...(queuedItem.link ? { link: queuedItem.link } : {}),
+          tags: parseTags(queuedItem.tags),
+          added_by: userEmail,
+          ...(queuedItem.thumbnailUrl && !queuedItem.thumbnailUrl.startsWith("data:")
+            ? { thumbnail_url: queuedItem.thumbnailUrl }
+            : {}),
+          ...(queuedItem.sourceMetadata ? { source_metadata: queuedItem.sourceMetadata } : {}),
+        }
+      );
+
+      if (queuedItem.fileFile) {
+        try {
+          const fileUrl = await uploadItemFile(queuedItem.fileFile, draftId);
+          await updateItem(draftId, { media_url: fileUrl });
+        } catch {
+          // Keep draft metadata even if file upload fails due to permissions.
+        }
+      }
+      setCurrentDraftId(draftId);
+    }
+  }
+
+  async function handleSubmitBatch() {
+    const currentUser = user;
+    const userEmail = currentUser?.email;
+    if (!userEmail || !currentUser) return;
     setSaveError("");
+    setSaving(true);
     try {
-      let itemId: string;
-
-      if (currentDraftId) {
-        setSaveStage("uploading audio…");
-        await publishDraft(currentDraftId, draft.audioBlob, draft.existingAudioUrl);
-        itemId = currentDraftId;
-      } else {
-        setSaveStage("creating draft…");
-        itemId = await createAndPublishItem(
-          user.email,
-          {
-            title: draft.title,
-            type: draft.type,
-            creator: draft.creator,
-            ...(draft.link ? { link: draft.link } : {}),
-            tags: parseTags(draft.tags),
-            added_by: user.email,
-            // Never write base64 data URIs to Firestore — uploaded to Storage below.
-            ...(draft.thumbnailUrl && !draft.thumbnailUrl.startsWith("data:")
-              ? { thumbnail_url: draft.thumbnailUrl }
-              : {}),
-            ...(draft.sourceMetadata ? { source_metadata: draft.sourceMetadata } : {}),
-          },
-          draft.audioBlob!
-        );
-      }
-
-      if (draft.fileFile) {
-        setSaveStage("uploading file…");
-        const fileUrl = await uploadItemFile(draft.fileFile, itemId);
-        await updateItem(itemId, { media_url: fileUrl });
-      }
-
-      const thumbUrl = draft.thumbnailUrl;
-      if (thumbUrl) {
-        setSaveStage("saving thumbnail…");
-        try {
-          const storedThumbUrl = thumbUrl.startsWith("data:")
-            ? await uploadBase64Thumbnail(thumbUrl, itemId)   // base64 from image/PDF upload
-            : await mirrorThumbnail(thumbUrl, itemId);        // external URL from metadata
-          await updateItem(itemId, { thumbnail_url: storedThumbUrl });
-        } catch (err) {
-          console.warn("[saveItem] thumbnail upload failed:", err);
+      for (let idx = 0; idx < recordingQueue.length; idx++) {
+        const itemData = recordingQueue[idx];
+        const recording = recordings[idx];
+        if (destination === "library" && !recording?.blob && !recording?.existingUrl) {
+          throw new Error(`Recording missing for item ${idx + 1}.`);
         }
-      }
 
-      // Mirror Spotify/preview audio to Firebase Storage (music source type only)
-      const previewUrl = draft.sourceMetadata?.preview_url;
-      if (previewUrl) {
-        setSaveStage("saving audio preview…");
+        setSaveStage(`Saving ${idx + 1} of ${recordingQueue.length}…`);
+        const fields = {
+          title: itemData.title,
+          description: itemData.description,
+          media_date: itemData.mediaDate,
+          type: itemData.type,
+          creator: itemData.creator,
+          ...(itemData.link ? { link: itemData.link } : {}),
+          tags: parseTags(itemData.tags),
+          added_by: userEmail,
+          ...(itemData.thumbnailUrl && !itemData.thumbnailUrl.startsWith("data:")
+            ? { thumbnail_url: itemData.thumbnailUrl }
+            : {}),
+          ...(itemData.sourceMetadata ? { source_metadata: itemData.sourceMetadata } : {}),
+        };
+
+        let itemId = "";
+
         try {
-          const storedPreviewUrl = await mirrorPreviewAudio(previewUrl, itemId);
-          await updateItem(itemId, {
-            source_metadata: { ...draft.sourceMetadata!, preview_url: storedPreviewUrl },
-          });
-        } catch (err) {
-          console.warn("[saveItem] preview audio mirror failed:", err);
+          await ensureItemTypeExists(itemData.type, userEmail);
+        } catch {
+          // Non-fatal: item type sync should not block save flow.
         }
-      }
 
-      // Download and store the actual video for social / YouTube sources
-      const videoSourceTypes = ["instagram", "tiktok", "twitter", "youtube"];
-      const sourceType = draft.sourceMetadata?.source_type;
-      const pageUrl = (draft.link || draft.url).trim();
-      const shouldMirrorVideo =
-        !!pageUrl &&
-        ((sourceType != null && (videoSourceTypes as readonly string[]).includes(sourceType)) ||
-          isDownloadableVideoPageUrl(pageUrl));
-
-      if (shouldMirrorVideo) {
-        setSaveStage("downloading video…");
-        try {
-          const idToken = await user.getIdToken();
-          const { downloadUrl: videoUrl, totalMediaCount } = await mirrorVideo(pageUrl, itemId, idToken);
-          await updateItem(itemId, { media_url: videoUrl });
-          if (totalMediaCount && totalMediaCount > 1) {
-            setSaveStage(`video saved — note: this post had ${totalMediaCount} media items, only the first was saved`);
-            await new Promise((r) => setTimeout(r, 2500));
+        if (destination === "holding") {
+          const existingPublished =
+            itemData.link?.trim() ? await findPublishedItemByLink(itemData.link.trim()) : null;
+          if (existingPublished) {
+            itemId = existingPublished.id;
+          } else if (recording.blob) {
+            itemId = await createAndPublishItem(userEmail, fields, recording.blob);
+          } else {
+            itemId = await createItemDoc(fields);
           }
-        } catch (err) {
-          // Non-fatal: item is still saved; video can be added manually
-          console.warn("[saveItem] video mirror failed:", err);
+          await saveToKanon(userEmail, "item", itemId);
+        } else {
+          if (!recording.blob) throw new Error("A new recording is required to publish items.");
+          itemId = await createAndPublishItem(userEmail, fields, recording.blob);
+        }
+
+        if (itemData.fileFile) {
+          setSaveStage(`Uploading file for ${idx + 1} of ${recordingQueue.length}…`);
+          const fileUrl = await uploadItemFile(itemData.fileFile, itemId);
+          await updateItem(itemId, { media_url: fileUrl });
+        }
+
+        if (itemData.thumbnailUrl) {
+          setSaveStage(`Saving thumbnail for ${idx + 1} of ${recordingQueue.length}…`);
+          try {
+            const savedThumbnail = itemData.thumbnailUrl.startsWith("data:")
+              ? await uploadBase64Thumbnail(itemData.thumbnailUrl, itemId)
+              : await mirrorThumbnail(itemData.thumbnailUrl, itemId);
+            await updateItem(itemId, { thumbnail_url: savedThumbnail });
+          } catch {
+            // Non-fatal.
+          }
+        }
+
+        if (itemData.sourceMetadata?.preview_url) {
+          try {
+            const previewUrl = await mirrorPreviewAudio(itemData.sourceMetadata.preview_url, itemId);
+            await updateItem(itemId, {
+              source_metadata: { ...itemData.sourceMetadata, preview_url: previewUrl },
+            });
+          } catch {
+            // Non-fatal.
+          }
+        }
+
+        const sourceType = itemData.sourceMetadata?.source_type;
+        const pageUrl = (itemData.link || "").trim();
+        const shouldMirrorVideo =
+          !!pageUrl &&
+          (["instagram", "tiktok", "twitter", "youtube"].includes(sourceType ?? "") ||
+            isDownloadableVideoPageUrl(pageUrl));
+        if (shouldMirrorVideo) {
+          try {
+            const token = await currentUser.getIdToken();
+            const { downloadUrl } = await mirrorVideo(pageUrl, itemId, token);
+            await updateItem(itemId, { media_url: downloadUrl });
+          } catch {
+            // Non-fatal.
+          }
         }
       }
 
-      router.push(`/items/${itemId}`);
+      router.push(destination === "holding" ? `/kanon/${encodeURIComponent(userEmail)}` : "/");
     } catch (err) {
-      // Surface the Firebase error code if available (e.g. storage/unauthorized)
-      const msg =
-        err != null && typeof err === "object" && "code" in err
-          ? `${(err as { code: string }).code}: ${err instanceof Error ? err.message : "Upload failed"}`
-          : err instanceof Error
-          ? err.message
-          : "Save failed. Please try again.";
-      setSaveError(msg);
+      setSaveError(err instanceof Error ? err.message : "Save failed. Please try again.");
       setSaving(false);
     }
   }
 
-  if (saving) {
-    return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-white dark:bg-black">
-        <span className="text-xs text-zinc-400">saving…</span>
-        {saveStage && (
-          <p className="text-xs text-zinc-400">{saveStage}</p>
-        )}
-        {saveError ? (
-          <>
-            <p className="mt-2 max-w-sm text-center text-xs text-red-500">{saveError}</p>
-            <button
-              onClick={() => { setSaving(false); setSaveError(""); setSaveStage(""); }}
-              className="mt-1 text-xs text-zinc-400 underline underline-offset-2 hover:text-zinc-700"
-            >
-              go back
-            </button>
-          </>
-        ) : (
-          <button
-            onClick={() => { setSaving(false); setSaveStage(""); }}
-            className="mt-4 text-xs text-zinc-300 underline underline-offset-2 hover:text-zinc-500 dark:text-zinc-700 dark:hover:text-zinc-500"
-          >
-            cancel
-          </button>
-        )}
-      </div>
-    );
+  async function handleDiscardDraft(item: Item) {
+    await discardDraft(item);
+    if (item.id === currentDraftId) {
+      setCurrentDraftId(null);
+      setDraft(EMPTY);
+      setQueuedItems([]);
+      setRecordings([]);
+      setDetailsIndex(0);
+      setRecordIndex(0);
+      router.push("/?panel=add");
+    }
   }
 
-  // Shared file input — rendered once at top level so both step 1 and step 2 can trigger it
   const fileInput = (
     <input
       ref={fileInputRef}
       type="file"
       accept="image/*,application/pdf"
       className="hidden"
-      onChange={(e) => {
-        const file = e.target.files?.[0] ?? null;
+      onChange={(event) => {
+        const file = event.target.files?.[0] ?? null;
         patch({ fileFile: file });
+        if (sourceError) setSourceError("");
         if (file?.type.startsWith("image/")) {
           setFilePreviewUrl(URL.createObjectURL(file));
         } else {
@@ -402,123 +683,290 @@ function AddItemPageInner({ hideHeader = false }: { hideHeader?: boolean }) {
     />
   );
 
-  return (
-    <div className="min-h-screen bg-white dark:bg-black">
-      {fileInput}
-      {!hideHeader && (
-        <header className="border-b border-zinc-200 px-6 py-3 dark:border-zinc-800">
-          <div className="mx-auto flex max-w-xl items-center justify-between">
-            <Link
-              href="/"
-              className="text-sm text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200"
-            >
-              ← cancel
-            </Link>
-            <span className="text-xs text-zinc-400">
-              {step === "url" && "step 1 of 3 — source"}
-              {step === "metadata" && (currentDraftId ? "draft — details" : "step 2 of 3 — details")}
-              {step === "record" && (currentDraftId ? "draft — testimony" : "step 3 of 3 — testimony")}
-            </span>
-            <div className="flex gap-1">
-              {(["url", "metadata", "record"] as Step[]).map((s) => (
-                <div
-                  key={s}
-                  className={`h-1 w-6 ${s === step ? "bg-zinc-900 dark:bg-zinc-100" : "bg-zinc-200 dark:bg-zinc-800"}`}
-                />
-              ))}
-            </div>
-          </div>
-        </header>
-      )}
+  function handleDroppedFiles(fileList: FileList | null) {
+    const file = fileList?.[0] ?? null;
+    patch({ fileFile: file });
+    if (sourceError) setSourceError("");
+    if (file?.type.startsWith("image/")) {
+      setFilePreviewUrl(URL.createObjectURL(file));
+    } else {
+      setFilePreviewUrl(null);
+    }
+  }
 
-      <main className="mx-auto max-w-xl px-6 py-10">
-        {/* Step 1: URL */}
-        {step === "url" && (
-          <div className="flex flex-col gap-6">
-            <div>
-              <h1 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">
-                Add an item
-              </h1>
-              <p className="mt-1 text-sm text-zinc-500">
-                Paste a URL, upload a file, or leave blank to enter details manually.
-              </p>
-            </div>
-            <input
-              type="url"
-              value={draft.url}
-              onChange={(e) => patch({ url: e.target.value })}
-              placeholder="https://…"
-              className={inputCx}
-            />
-            <div className="flex items-center gap-3">
-              <div className="h-px flex-1 bg-zinc-200 dark:bg-zinc-800" />
-              <span className="text-xs text-zinc-400">or</span>
-              <div className="h-px flex-1 bg-zinc-200 dark:bg-zinc-800" />
-            </div>
-            {!draft.fileFile && !draft.existingFileUrl && (
+  function setTypeValue(nextType: string) {
+    const normalized = nextType.trim().toLowerCase();
+    if (!normalized) return;
+    patch({ type: normalized });
+    setItemTypes((prev) => {
+      if (prev.includes(normalized)) return prev;
+      return [...prev, normalized].sort((a, b) => a.localeCompare(b));
+    });
+    setIsTypeMenuOpen(false);
+  }
+
+  if (saving) {
+    return (
+      <div className={hideHeader ? "p-6" : "flex min-h-screen items-center justify-center bg-black"}>
+        <motion.div
+          initial={shouldReduceMotion ? false : { opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: shouldReduceMotion ? 0 : 0.18, ease: [0.215, 0.61, 0.355, 1] }}
+          className="space-y-2"
+        >
+          <p className="text-sm text-zinc-300">Submitting…</p>
+          <p className="text-xs text-zinc-500">{saveStage || "Preparing files and audio…"}</p>
+          {saveError && <p className="pt-2 text-xs text-red-500">{saveError}</p>}
+        </motion.div>
+      </div>
+    );
+  }
+
+  return (
+    <div className={hideHeader ? "" : "min-h-screen bg-black"}>
+      {fileInput}
+
+      <main className="mx-auto max-w-xl px-6 py-8">
+        {showClosePrompt && (
+          <motion.div
+            initial={shouldReduceMotion ? false : { opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={shouldReduceMotion ? undefined : { opacity: 0, y: -4 }}
+            transition={{ duration: shouldReduceMotion ? 0 : 0.18, ease: [0.215, 0.61, 0.355, 1] }}
+            className="mb-4 rounded-md border border-zinc-800 bg-zinc-950/95 p-3"
+          >
+            <p className="font-sans text-sm text-zinc-100">Save this as a draft before closing?</p>
+            <div className="mt-2 flex items-center gap-4">
               <button
                 type="button"
-                onClick={() => fileInputRef.current?.click()}
-                className="w-fit border border-zinc-300 px-3 py-2 text-sm text-zinc-500 hover:border-zinc-500 hover:text-zinc-700 dark:border-zinc-700 dark:text-zinc-400 dark:hover:border-zinc-500 dark:hover:text-zinc-200"
+                onClick={() => setShowClosePrompt(false)}
+                className="font-lector text-xs text-zinc-500 transition-colors hover:text-zinc-300"
               >
-                upload image or PDF
+                Keep editing
               </button>
-            )}
-            {draft.fileFile && (
-              <div className="flex flex-col gap-2">
-                {filePreviewUrl && (
-                  <img
-                    src={filePreviewUrl}
-                    alt="preview"
-                    className="max-h-40 max-w-full object-contain border border-zinc-200 dark:border-zinc-800"
-                  />
-                )}
-                <div className="flex items-center gap-3">
-                  <span className="text-xs text-zinc-500 truncate max-w-xs">
-                    {draft.fileFile.name}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      patch({ fileFile: null });
-                      setFilePreviewUrl(null);
-                      if (fileInputRef.current) fileInputRef.current.value = "";
-                    }}
-                    className="text-xs text-zinc-400 underline underline-offset-2 hover:text-zinc-700 dark:hover:text-zinc-200"
-                  >
-                    remove
-                  </button>
+              <button
+                type="button"
+                onClick={() => onRequestPanelClose?.()}
+                className="font-lector text-xs text-zinc-400 transition-colors hover:text-zinc-200"
+              >
+                Close without saving
+              </button>
+              <button
+                type="button"
+                disabled={draftPromptSaving}
+                onClick={async () => {
+                  setDraftPromptError("");
+                  setDraftPromptSaving(true);
+                  try {
+                    await saveSessionAsDrafts();
+                    onRequestPanelClose?.();
+                  } catch (error) {
+                    setDraftPromptError(
+                      error instanceof Error ? error.message : "Could not save draft."
+                    );
+                  } finally {
+                    setDraftPromptSaving(false);
+                  }
+                }}
+                className="font-lector text-xs text-zinc-100 transition-colors hover:text-white disabled:opacity-40"
+              >
+                {draftPromptSaving ? "Saving..." : "Save draft and close"}
+              </button>
+            </div>
+            {draftPromptError && <p className="mt-2 text-xs text-red-400">{draftPromptError}</p>}
+          </motion.div>
+        )}
+
+        {step === "source" && (
+          <div className="space-y-5">
+            <div>
+              <h1 className="font-lector text-lg text-zinc-100">Add record(s)</h1>
+              <p className="mt-1 text-xs text-zinc-500">
+                Paste a URL or upload a file to continue.
+              </p>
+            </div>
+
+            <div className="space-y-3">
+              <div className="relative">
+                <input
+                  type="url"
+                  value={draft.url}
+                  onChange={(e) => {
+                    patch({ url: e.target.value });
+                    if (sourceError) setSourceError("");
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      void addSourceToQueue();
+                    }
+                  }}
+                  placeholder="Paste URL and press Enter"
+                  className={`${inputCx} pr-10`}
+                />
+                <span
+                  aria-hidden
+                  className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm text-zinc-500"
+                >
+                  ↵
+                </span>
+              </div>
+              <div
+                role="button"
+                tabIndex={0}
+                onClick={() => fileInputRef.current?.click()}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    if (draft.fileFile) {
+                      void addSourceToQueue();
+                      return;
+                    }
+                    fileInputRef.current?.click();
+                  }
+                }}
+                onDragOver={(event) => {
+                  event.preventDefault();
+                  setIsDragActive(true);
+                }}
+                onDragEnter={(event) => {
+                  event.preventDefault();
+                  setIsDragActive(true);
+                }}
+                onDragLeave={(event) => {
+                  event.preventDefault();
+                  setIsDragActive(false);
+                }}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  setIsDragActive(false);
+                  handleDroppedFiles(event.dataTransfer.files);
+                }}
+                className={`flex min-h-24 w-full cursor-pointer items-center justify-center rounded-md border px-4 py-4 text-center transition-colors duration-150 ease-[ease] ${
+                  isDragActive
+                    ? "border-zinc-500 bg-zinc-900 text-zinc-200"
+                    : "border-zinc-800 bg-zinc-950 text-zinc-500 hover:border-zinc-600 hover:text-zinc-300"
+                }`}
+              >
+                <div className="space-y-1">
+                  <p className="font-lector text-sm">Upload file</p>
+                  <p className="text-xs text-zinc-600">Drag and drop image/PDF here, or click to browse.</p>
                 </div>
               </div>
+              {draft.fileFile && (
+                <div className="space-y-2">
+                  {filePreviewUrl && (
+                    <img
+                      src={filePreviewUrl}
+                      alt="Preview"
+                      className="max-h-40 max-w-full border border-zinc-800 object-contain"
+                    />
+                  )}
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="truncate text-xs text-zinc-500">{draft.fileFile.name}</p>
+                    <button
+                      type="button"
+                      onClick={() => void addSourceToQueue()}
+                      disabled={fetching}
+                      className="font-lector text-xs text-zinc-300 transition-colors duration-150 ease-[ease] hover:text-zinc-100 disabled:opacity-40"
+                    >
+                      Add file ↵
+                    </button>
+                  </div>
+                </div>
+              )}
+              {sourceError && <p className="text-xs text-red-500">{sourceError}</p>}
+            </div>
+
+            {queuedItems.length > 0 && (
+              <motion.div
+                initial={shouldReduceMotion ? false : { opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: shouldReduceMotion ? 0 : 0.2, ease: [0.215, 0.61, 0.355, 1] }}
+                className="space-y-2 border-t border-zinc-800 pt-3"
+              >
+                {queuedItems.map((item, idx) => (
+                  <div
+                    key={`${item.sourceLabel}-${idx}`}
+                    className="rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2"
+                  >
+                    <p className="truncate font-lector text-sm text-zinc-100">{item.title}</p>
+                    <div className="mt-1 flex items-center justify-between">
+                      <p className="truncate text-[11px] text-zinc-600">{item.creator}</p>
+                      <div className="flex items-center gap-3">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const canRestoreSource = !!item.sourceUrl || !!item.fileFile;
+                            setQueuedItems((prev) => prev.filter((_, queuedIdx) => queuedIdx !== idx));
+                            if (!canRestoreSource) return;
+                            patch({
+                              url: item.sourceUrl,
+                              fileFile: item.fileFile,
+                            });
+                            if (item.fileFile?.type.startsWith("image/")) {
+                              setFilePreviewUrl(URL.createObjectURL(item.fileFile));
+                            } else {
+                              setFilePreviewUrl(null);
+                            }
+                          }}
+                          className="font-lector text-[11px] text-zinc-400 transition-colors duration-150 ease-[ease] hover:text-zinc-200"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setQueuedItems((prev) => prev.filter((_, queuedIdx) => queuedIdx !== idx))}
+                          className="font-lector text-[11px] text-zinc-500 transition-colors duration-150 ease-[ease] hover:text-red-400"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </motion.div>
             )}
-            <p className="text-xs text-zinc-400">
-              If a URL is provided, title and creator will be pre-filled where possible.
-            </p>
-            <button onClick={handleUrlNext} disabled={fetching} className={primaryBtn}>
-              {fetching ? "fetching…" : "next"}
-            </button>
+
+            <div className="pt-3">
+              <button
+                type="button"
+                disabled={!canContinueFromSource || fetching}
+                onClick={() => {
+                  const firstQueued = queuedItems[0];
+                  if (!firstQueued) return;
+                  setDetailsIndex(0);
+                  loadQueuedItemIntoDraft(firstQueued);
+                  setStep("details");
+                }}
+                className={sourceActionPrimaryBtn}
+              >
+                {fetching ? "Fetching…" : "Next"}
+              </button>
+            </div>
           </div>
         )}
 
-        {/* Step 2: Metadata */}
-        {step === "metadata" && (
-          <div className="flex flex-col gap-5">
+        {step === "details" && (
+          <div className="space-y-5">
             <div>
-              <h1 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">
-                Item details
-              </h1>
-              {prefilled && (
-                <p className="mt-1 text-xs text-zinc-400">
-                  ✓ fields pre-filled from URL
+              <h1 className="font-lector text-base text-zinc-100">Edit record details</h1>
+              {queuedItems.length > 1 && (
+                <p className="mt-1 text-xs text-zinc-500">
+                  Record {detailsIndex + 1} of {queuedItems.length}
                 </p>
               )}
-              {currentDraftId && (
-                <p className="mt-1 text-xs text-zinc-400">
-                  resuming draft
-                </p>
+              {draft.thumbnailUrl && (
+                <div className="mt-2 w-full rounded-md border border-zinc-800 bg-zinc-950 p-2">
+                  <img
+                    src={draft.thumbnailUrl}
+                    alt="Source thumbnail"
+                    className="h-auto w-full rounded border border-zinc-800 object-contain"
+                  />
+                </div>
               )}
             </div>
-            <Field label="Title">
+            <Field label="Title" required>
               <input
                 type="text"
                 value={draft.title}
@@ -527,16 +975,116 @@ function AddItemPageInner({ hideHeader = false }: { hideHeader?: boolean }) {
                 className={inputCx}
               />
             </Field>
-            <Field label="Type">
-              <select
-                value={draft.type}
-                onChange={(e) => patch({ type: e.target.value })}
+            <Field label="Description">
+              <textarea
+                rows={3}
+                value={draft.description}
+                onChange={(e) => patch({ description: e.target.value })}
+                placeholder="A few words of context"
                 className={inputCx}
-              >
-                {TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
-              </select>
+              />
             </Field>
-            <Field label="Author / Creator">
+            <Field label="Original media date" required>
+              <div className="grid grid-cols-[1fr_auto] gap-2">
+                <input
+                  type="text"
+                  value={draft.mediaDate}
+                  onChange={(e) => patch({ mediaDate: e.target.value })}
+                  placeholder="e.g. 1998, Mar 2020, Mar 12 2020"
+                  className={inputCx}
+                />
+                <input
+                  type="date"
+                  value={toDateInputValue(draft.mediaDate)}
+                  onChange={(e) => patch({ mediaDate: fromDateInputValue(e.target.value) })}
+                  className="rounded-md border border-zinc-800 bg-zinc-950 px-2 py-2 text-xs text-zinc-300 outline-none transition-colors duration-150 ease-[ease] focus:border-zinc-600"
+                />
+              </div>
+              <p className="text-[11px] text-zinc-600">
+                All levels of detail are accepted.
+              </p>
+              {canResetMediaDate && (
+                <button
+                  type="button"
+                  onClick={() => patch({ mediaDate: fetchedMediaDate })}
+                  className="font-lector text-xs text-zinc-400 transition-colors duration-150 ease-[ease] hover:text-zinc-100"
+                >
+                  Reset to fetched date
+                </button>
+              )}
+            </Field>
+            {isMusicSource && (
+              <Field label="Album">
+                <input
+                  type="text"
+                  value={draft.sourceMetadata?.album ?? ""}
+                  onChange={(e) => patchSourceMetadata({ album: e.target.value })}
+                  placeholder="Album title"
+                  className={inputCx}
+                />
+              </Field>
+            )}
+            <Field label="Type" required>
+              <div className="space-y-1.5">
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={draft.type}
+                    onFocus={() => setIsTypeMenuOpen(true)}
+                    onChange={(e) => {
+                      patch({ type: e.target.value.toLowerCase() });
+                      setIsTypeMenuOpen(true);
+                    }}
+                    onBlur={() => {
+                      if (typeBlurTimerRef.current) clearTimeout(typeBlurTimerRef.current);
+                      typeBlurTimerRef.current = setTimeout(() => setIsTypeMenuOpen(false), 120);
+                      if (!user?.email || !draft.type.trim()) return;
+                      void ensureItemTypeExists(draft.type, user.email).catch(() => {
+                        // Best-effort type creation.
+                      });
+                    }}
+                    placeholder="Type to choose or create"
+                    className={inputCx}
+                  />
+                  {isTypeMenuOpen && (
+                    <div className="absolute left-0 right-0 top-[calc(100%+6px)] z-20 overflow-hidden rounded-md border border-zinc-800 bg-zinc-950 shadow-[0_10px_28px_rgba(0,0,0,0.45)]">
+                      {filteredItemTypes.map((itemType) => (
+                        <button
+                          key={itemType}
+                          type="button"
+                          onMouseDown={() => {
+                            if (typeBlurTimerRef.current) clearTimeout(typeBlurTimerRef.current);
+                            setTypeValue(itemType);
+                          }}
+                          className="block w-full px-3 py-2 text-left font-lector text-sm text-zinc-300 transition-colors hover:bg-zinc-900 hover:text-zinc-100"
+                        >
+                          {itemType}
+                        </button>
+                      ))}
+                      {shouldShowCreateType && (
+                        <button
+                          type="button"
+                          onMouseDown={() => {
+                            if (typeBlurTimerRef.current) clearTimeout(typeBlurTimerRef.current);
+                            setTypeValue(normalizedDraftType);
+                          }}
+                          className="block w-full border-t border-zinc-800 px-3 py-2 text-left font-lector text-sm text-zinc-100 transition-colors hover:bg-zinc-900"
+                        >
+                          Create "{normalizedDraftType}"
+                        </button>
+                      )}
+                      {!shouldShowCreateType && filteredItemTypes.length === 0 && (
+                        <p className="px-3 py-2 text-xs text-zinc-600">No matching types</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+                <p className="text-[11px] text-zinc-600">
+                  Start typing to choose an existing type or create a new one.
+                </p>
+              </div>
+            </Field>
+            <Field label="Author / Creator" required>
               <input
                 type="text"
                 value={draft.creator}
@@ -545,196 +1093,229 @@ function AddItemPageInner({ hideHeader = false }: { hideHeader?: boolean }) {
                 className={inputCx}
               />
             </Field>
-            <Field label="External link (optional)">
-              <input
-                type="url"
-                value={draft.link}
-                onChange={(e) => patch({ link: e.target.value })}
-                placeholder="https://…"
-                className={inputCx}
-              />
-            </Field>
-            <Field label="File attachment (optional)">
-              {!draft.fileFile && !draft.existingFileUrl && (
+            {!isMusicSource && (
+              <Field label="External link">
+                <input
+                  type="url"
+                  value={draft.link}
+                  onChange={(e) => patch({ link: e.target.value })}
+                  placeholder="https://…"
+                  className={inputCx}
+                />
+              </Field>
+            )}
+            <Field label="Destination" required>
+              <div className="grid grid-cols-2 overflow-hidden rounded-md border border-zinc-800 bg-zinc-950">
                 <button
                   type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  className="w-fit border border-zinc-300 px-3 py-2 text-sm text-zinc-500 hover:border-zinc-500 hover:text-zinc-700 dark:border-zinc-700 dark:text-zinc-400 dark:hover:border-zinc-500 dark:hover:text-zinc-200"
+                  onClick={() => setDestination("library")}
+                  className={`px-3 py-2 text-sm transition-colors ${
+                    destination === "library"
+                      ? "bg-zinc-800 font-sans text-zinc-100"
+                      : "font-sans text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200"
+                  }`}
                 >
-                  attach image or PDF
+                  Publish to library
                 </button>
-              )}
-              {draft.fileFile && (
-                <div className="flex flex-col gap-2">
-                  {filePreviewUrl && (
-                    <img
-                      src={filePreviewUrl}
-                      alt="preview"
-                      className="max-h-40 max-w-full object-contain border border-zinc-200 dark:border-zinc-800"
-                    />
-                  )}
-                  <div className="flex items-center gap-3">
-                    <span className="text-xs text-zinc-500 truncate max-w-xs">
-                      {draft.fileFile.name}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        patch({ fileFile: null });
-                        setFilePreviewUrl(null);
-                        if (fileInputRef.current) fileInputRef.current.value = "";
-                      }}
-                      className="text-xs text-zinc-400 underline underline-offset-2 hover:text-zinc-700 dark:hover:text-zinc-200"
-                    >
-                      remove
-                    </button>
-                  </div>
-                </div>
-              )}
-              {!draft.fileFile && draft.existingFileUrl && (
-                <div className="flex items-center gap-3">
-                  <a
-                    href={draft.existingFileUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-xs text-zinc-500 underline underline-offset-2 hover:text-zinc-700 dark:hover:text-zinc-300"
-                  >
-                    file attached ↗
-                  </a>
-                  <button
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    className="text-xs text-zinc-400 underline underline-offset-2 hover:text-zinc-700 dark:hover:text-zinc-200"
-                  >
-                    replace
-                  </button>
-                </div>
-              )}
+                <button
+                  type="button"
+                  onClick={() => setDestination("holding")}
+                  className={`border-l border-zinc-800 px-3 py-2 text-sm transition-colors ${
+                    destination === "holding"
+                      ? "bg-zinc-800 font-sans text-zinc-100"
+                      : "font-sans text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200"
+                  }`}
+                >
+                  Hold only
+                </button>
+              </div>
             </Field>
-            <Field label="Tags (comma-separated)">
-              <input
-                type="text"
-                value={draft.tags}
-                onChange={(e) => patch({ tags: e.target.value })}
-                placeholder="e.g. memory, community, history"
-                className={inputCx}
-              />
-            </Field>
-            {saveError && <p className="text-sm text-red-500">{saveError}</p>}
+
+            {saveError && <p className="text-xs text-red-500">{saveError}</p>}
             <div className="flex items-center gap-3">
-              {!currentDraftId && (
-                <button onClick={() => setStep("url")} className={ghostBtn}>
-                  back
-                </button>
-              )}
               <button
-                onClick={() => setStep("record")}
-                disabled={!draft.title || !draft.creator}
-                className={primaryBtn}
+                onClick={() => {
+                  if (!canContinueDetails) return;
+                  setQueuedItems((prev) =>
+                    prev.map((item, idx) =>
+                      idx === detailsIndex
+                        ? {
+                            ...item,
+                            ...toQueueItem(draft),
+                          }
+                        : item
+                    )
+                  );
+                  if (detailsIndex < queuedItems.length - 1) {
+                    const nextIndex = detailsIndex + 1;
+                    setDetailsIndex(nextIndex);
+                    loadQueuedItemIntoDraft(queuedItems[nextIndex]);
+                    return;
+                  }
+                  setRecordIndex(0);
+                  setStep("record");
+                }}
+                disabled={!canContinueDetails}
+                className="font-lector text-sm text-zinc-100 transition-colors duration-150 ease-[ease] hover:text-white disabled:opacity-40"
               >
-                next
+                {detailsIndex < queuedItems.length - 1 ? "Next record" : "Add narrative"}
               </button>
-              <SaveDraftButton
-                status={draftSaveStatus}
-                disabled={!canSaveDraft}
-                onSave={handleSaveDraft}
-              />
             </div>
           </div>
         )}
 
-        {/* Step 3: Testimony */}
         {step === "record" && (
-          <div className="flex flex-col gap-6">
-            <h1 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">
-              Add your testimony
-            </h1>
-            <div className="border border-zinc-200 px-4 py-3 dark:border-zinc-800">
-              <p className="font-medium text-zinc-900 dark:text-zinc-50">{draft.title}</p>
-              <p className="text-xs text-zinc-500">
-                {draft.type} · {draft.creator}
+          <div className="space-y-5">
+            <div>
+              <h1 className="text-base font-medium text-zinc-100">Record narratives</h1>
+              <p className="mt-1 text-xs text-zinc-500">
+                {destination === "holding"
+                  ? "Record in sequence, or skip recordings and save directly to Hold."
+                  : "Record in sequence. Each queued item needs its own audio before submit."}
               </p>
-              {draft.tags && (
-                <p className="mt-1 text-xs text-zinc-400">{draft.tags}</p>
+            </div>
+
+            {activeQueueItem && (
+              <div className="space-y-2 rounded-lg border border-zinc-800 px-4 py-3">
+                {activeQueueItem.thumbnailUrl && (
+                  <img
+                    src={activeQueueItem.thumbnailUrl}
+                    alt={`${activeQueueItem.title} thumbnail`}
+                    className="h-auto w-full rounded border border-zinc-800 object-cover"
+                  />
+                )}
+                <p className="text-xs text-zinc-500">
+                  Item {recordIndex + 1} of {recordingQueue.length}
+                </p>
+                <p className="text-sm text-zinc-100">{activeQueueItem.title}</p>
+                <p className="text-xs text-zinc-500">
+                  {[activeQueueItem.creator, activeQueueItem.mediaDate].filter(Boolean).join(" · ")}
+                </p>
+              </div>
+            )}
+
+            <AudioRecorder
+              onRecorded={(blob) => {
+                setRecordings((prev) =>
+                  prev.map((entry, idx) =>
+                    idx === recordIndex ? { blob, existingUrl: null } : entry
+                  )
+                );
+              }}
+              onClearedInitial={() =>
+                setRecordings((prev) =>
+                  prev.map((entry, idx) => (idx === recordIndex ? { blob: null, existingUrl: null } : entry))
+                )
+              }
+              initialUrl={undefined}
+              prompt="Why does this matter?"
+            />
+
+            {saveError && <p className="text-xs text-red-500">{saveError}</p>}
+            <div className="flex items-center gap-3">
+              {destination === "holding" && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (recordIndex < recordingQueue.length - 1) {
+                      setRecordIndex((idx) => idx + 1);
+                    } else {
+                      void handleSubmitBatch();
+                    }
+                  }}
+                  className="font-lector text-sm text-zinc-500 transition-colors duration-150 ease-[ease] hover:text-zinc-200"
+                >
+                  Skip
+                </button>
+              )}
+              {recordIndex < recordingQueue.length - 1 ? (
+                <button
+                  onClick={() => setRecordIndex((idx) => idx + 1)}
+                  disabled={destination === "library" ? !canAdvanceRecording : false}
+                  className="font-lector text-sm text-zinc-100 transition-colors duration-150 ease-[ease] hover:text-white disabled:opacity-40"
+                >
+                  Next recording
+                </button>
+              ) : (
+                <button
+                  onClick={handleSubmitBatch}
+                  disabled={destination === "library" ? !canAdvanceRecording : false}
+                  className="font-lector text-sm text-zinc-100 transition-colors duration-150 ease-[ease] hover:text-white disabled:opacity-40"
+                >
+                  Submit all
+                </button>
               )}
             </div>
-            <AudioRecorder
-              onRecorded={(blob, url) => patch({ audioBlob: blob, audioUrl: url, existingAudioUrl: null })}
-              onClearedInitial={() => patch({ existingAudioUrl: null })}
-              prompt="Why does this matter?"
-              initialUrl={draft.existingAudioUrl ?? undefined}
-            />
-            {saveError && <p className="text-sm text-red-500">{saveError}</p>}
-            <div className="flex items-center gap-3">
-              <button onClick={() => setStep("metadata")} className={ghostBtn}>
-                back
-              </button>
-              <button
-                onClick={() => { if (hasAudio) void saveItem(); }}
-                disabled={!hasAudio}
-                className={primaryBtn}
-              >
-                save item
-              </button>
-              <SaveDraftButton
-                status={draftSaveStatus}
-                disabled={!canSaveDraft}
-                onSave={handleSaveDraft}
-              />
-            </div>
           </div>
+        )}
+
+        {showDraftsSection && (
+          <section className="mt-8 border-t border-zinc-800 pt-4">
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-xs uppercase tracking-wide text-zinc-500">Drafts</h2>
+              <span className="text-xs text-zinc-600">{drafts.length}</span>
+            </div>
+            <div className="space-y-2">
+              {drafts.map((draftItem) => (
+                <div key={draftItem.id} className="flex items-center justify-between rounded-md border border-zinc-800 px-3 py-2">
+                  <button
+                    type="button"
+                    onClick={() => router.push(`/?panel=add&draft=${draftItem.id}`)}
+                    className="truncate text-left text-xs text-zinc-300 hover:text-zinc-100"
+                  >
+                    {draftItem.title}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleDiscardDraft(draftItem)}
+                    className="text-xs text-zinc-500 hover:text-red-400"
+                  >
+                    Delete
+                  </button>
+                </div>
+              ))}
+            </div>
+          </section>
         )}
       </main>
     </div>
   );
 }
 
-// ─── Sub-components ───────────────────────────────────────────────────────────
-
-function SaveDraftButton({
-  status,
-  disabled,
-  onSave,
+function Field({
+  label,
+  required = false,
+  children,
 }: {
-  status: "idle" | "saving" | "saved";
-  disabled: boolean;
-  onSave: () => void;
+  label: string;
+  required?: boolean;
+  children: React.ReactNode;
 }) {
   return (
-    <button
-      onClick={onSave}
-      disabled={disabled || status === "saving"}
-      className="text-xs text-zinc-400 underline underline-offset-2 hover:text-zinc-700 disabled:opacity-40 dark:hover:text-zinc-200"
-    >
-      {status === "saving" && "saving…"}
-      {status === "saved" && "draft saved ✓"}
-      {status === "idle" && "save draft"}
-    </button>
-  );
-}
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="flex flex-col gap-1.5">
-      <label className="text-xs text-zinc-500">{label}</label>
+    <div className="space-y-1.5">
+      <label className="font-sans text-xs text-zinc-500">
+        {label}
+        {required ? <span className="ml-0.5 text-zinc-400">*</span> : null}
+      </label>
       {children}
     </div>
   );
 }
 
-const inputCx =
-  "border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 focus:border-zinc-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50";
-
-const primaryBtn =
-  "border border-zinc-900 px-4 py-2 text-sm font-medium text-zinc-900 hover:bg-zinc-900 hover:text-white disabled:opacity-40 dark:border-zinc-100 dark:text-zinc-100 dark:hover:bg-zinc-100 dark:hover:text-zinc-900";
-
-const ghostBtn =
-  "px-4 py-2 text-sm text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200";
-
-function Loading() {
+function Loading({ compact = false }: { compact?: boolean }) {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-white dark:bg-black">
-      <span className="text-xs text-zinc-400">loading…</span>
+    <div className={compact ? "p-6" : "flex min-h-screen items-center justify-center bg-black"}>
+      <span className="text-xs text-zinc-500">loading…</span>
     </div>
   );
 }
+
+const inputCx =
+  "w-full rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-200 outline-none transition-colors duration-150 ease-[ease] placeholder:text-zinc-600 focus:border-zinc-600";
+
+const primaryBtn =
+  "rounded-md border border-zinc-700 px-4 py-2 text-sm text-zinc-200 transition-colors duration-150 ease-[ease] hover:border-zinc-500 hover:text-zinc-50 disabled:opacity-40";
+
+const ghostBtn = "text-xs text-zinc-500 transition-colors duration-150 ease-[ease] hover:text-zinc-200 disabled:opacity-40";
+const sourceActionPrimaryBtn =
+  "font-lector text-sm tracking-tight text-zinc-100 transition-colors duration-150 ease-[ease] hover:text-white disabled:opacity-40";

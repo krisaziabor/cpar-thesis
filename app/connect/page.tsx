@@ -111,7 +111,7 @@ function ConnectPageInner() {
       <header className="border-b border-zinc-200 px-6 py-3 dark:border-zinc-800">
         <div className="mx-auto flex max-w-xl items-center justify-between">
           <Link
-            href={anchorId ? `/items/${anchorId}` : "/"}
+            href={anchorId ? `/?item=${anchorId}` : "/"}
             className="text-sm text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200"
           >
             ← cancel
@@ -237,7 +237,7 @@ function ConnectPageInner() {
               <div className="mt-1 flex flex-col gap-1">
                 {selectedItems.map((item, i) => (
                   <p key={item!.id} className="text-sm text-zinc-700 dark:text-zinc-300">
-                    {i > 0 && <span className="mr-2 text-zinc-400">↔</span>}
+                    {i > 0 && <span className="mr-2 text-zinc-400">·</span>}
                     {item!.title}
                   </p>
                 ))}

@@ -1,19 +1,22 @@
 "use client";
 
 import { useEffect } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import Link from "next/link";
+import { AnimatePresence, motion } from "framer-motion";
 
 interface RightPanelProps {
   title?: string;
-  fullPageHref?: string;
+  progressPercent?: number;
+  headerActions?: React.ReactNode;
+  onBack?: () => void;
   onClose: () => void;
   children: React.ReactNode;
 }
 
 export default function RightPanel({
   title,
-  fullPageHref,
+  progressPercent,
+  headerActions,
+  onBack,
   onClose,
   children,
 }: RightPanelProps) {
@@ -35,8 +38,30 @@ export default function RightPanel({
       transition={{ duration: 0.25, ease: [0.215, 0.61, 0.355, 1] }}
     >
       {/* Header */}
-      <div className="flex shrink-0 items-center justify-between border-b border-zinc-800 px-5 py-3">
+      <div className="relative flex shrink-0 items-center justify-between border-b border-zinc-800 px-5 py-3">
+        {typeof progressPercent === "number" && (
+          <div
+            className="pointer-events-none absolute bottom-[-1px] left-0 h-px bg-zinc-100 transition-[width] duration-250 ease-[ease]"
+            style={{ width: `${Math.max(0, Math.min(100, progressPercent))}%` }}
+          />
+        )}
         <div className="flex min-w-0 items-center gap-3">
+          <AnimatePresence initial={false}>
+            {onBack && (
+              <motion.button
+                key="panel-back-arrow"
+                onClick={onBack}
+                aria-label="Go back"
+                initial={{ opacity: 0, x: -6 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -6 }}
+                transition={{ duration: 0.16, ease: [0.215, 0.61, 0.355, 1] }}
+                className="shrink-0 text-base leading-none text-zinc-500 transition-colors hover:text-zinc-200"
+              >
+                ←
+              </motion.button>
+            )}
+          </AnimatePresence>
           <button
             onClick={onClose}
             className="shrink-0 text-base leading-none text-zinc-500 hover:text-zinc-200"
@@ -49,14 +74,7 @@ export default function RightPanel({
             </span>
           )}
         </div>
-        {fullPageHref && (
-          <Link
-            href={fullPageHref}
-            className="shrink-0 text-xs text-zinc-500 hover:text-zinc-200"
-          >
-            full page ↗
-          </Link>
-        )}
+        {headerActions && <div className="ml-4 shrink-0">{headerActions}</div>}
       </div>
 
       {/* Scrollable body */}
