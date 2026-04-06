@@ -295,7 +295,7 @@ export default function ActivityPanel() {
                             <>
                               {a.connectedItems.map((item, idx) => (
                                 <span key={item.id}>
-                                  {idx > 0 && <span className="text-zinc-600"> ↔ </span>}
+                                  {idx > 0 && <span className="text-zinc-600"> · </span>}
                                   <Link
                                     href={`/?item=${item.id}`}
                                     className="font-lector text-zinc-200 underline-offset-2 transition-colors hover:text-zinc-100 hover:underline"

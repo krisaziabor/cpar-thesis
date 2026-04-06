@@ -2,11 +2,13 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import { usePathname } from "next/navigation";
 import {
   backfillChecklistProgress,
   subscribeToUserChecklistProgress,
   type UserChecklistProgress,
 } from "@/lib/user-checklist";
+import { useSequenceReplayNonce, useSequenceTimings } from "@/lib/sequence-dialkit";
 
 interface NewUserChecklistCardProps {
   userEmail: string;
@@ -33,7 +35,10 @@ function progressCount(count: number, target: number): string {
 }
 
 export default function NewUserChecklistCard({ userEmail }: NewUserChecklistCardProps) {
+  const pathname = usePathname();
   const shouldReduceMotion = useReducedMotion();
+  const timings = useSequenceTimings();
+  const replayNonce = useSequenceReplayNonce();
   const [progress, setProgress] = useState<UserChecklistProgress>(() => emptyProgress(userEmail));
   const [collapsed, setCollapsed] = useState(false);
 
@@ -51,25 +56,25 @@ export default function NewUserChecklistCard({ userEmail }: NewUserChecklistCard
     () => [
       {
         key: "add_texts",
-        label: "Add texts to the library",
+        label: "Add 3 records that matter to you",
         done: progress.completed.add_texts_to_library,
         counterLabel: progressCount(progress.texts_added_count, 3),
       },
       {
         key: "connect_own_to_other",
-        label: "Connect your texts to other users' texts",
+        label: "Connect your records to someone else's",
         done: progress.completed.connect_own_to_other,
         counterLabel: progressCount(progress.own_to_other_connections_count, 2),
       },
       {
         key: "connect_foreign",
-        label: "Connect texts that aren't yours with each other",
+        label: "Connect 2 records you didn't add",
         done: progress.completed.connect_foreign_to_foreign,
         counterLabel: progressCount(progress.foreign_connections_count, 2),
       },
       {
         key: "my_kanon",
-        label: 'Add a text to "Holding"',
+        label: "Save a record to your Hold",
         done: progress.completed.add_to_my_kanon,
         counterLabel: progress.completed.add_to_my_kanon ? "1/1" : "0/1",
       },
@@ -77,24 +82,37 @@ export default function NewUserChecklistCard({ userEmail }: NewUserChecklistCard
     [progress]
   );
 
+  const enterDelay = pathname === "/" && !shouldReduceMotion
+    ? Math.max(0, timings.bottomStartMs + timings.checklistDelayMs) / 1000
+    : 0;
+
   return (
-    <aside className="pointer-events-none fixed bottom-6 right-6 z-40 w-[22rem] max-w-[calc(100vw-2rem)]">
+    <motion.aside
+      key={pathname === "/" ? `checklist-${replayNonce}` : "checklist"}
+      initial={shouldReduceMotion ? false : { opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{
+        duration: shouldReduceMotion ? 0 : timings.bottomEnterMs / 1000,
+        ease: [0.215, 0.61, 0.355, 1],
+        delay: enterDelay,
+      }}
+      className="pointer-events-none fixed bottom-6 right-6 z-40 w-[22rem] max-w-[calc(100vw-2rem)]"
+    >
       <div className="pointer-events-auto overflow-hidden rounded-lg border border-zinc-800 bg-zinc-950 font-sans shadow-[0_4px_24px_rgba(0,0,0,0.5)]">
-        <div
+        <button
+          type="button"
+          onClick={() => setCollapsed((prev) => !prev)}
+          aria-expanded={!collapsed}
+          aria-label={collapsed ? "Expand checklist" : "Collapse checklist"}
           className={`flex items-center justify-between px-4 py-3 ${
             collapsed ? "" : "border-b border-zinc-800"
-          }`}
+          } w-full text-left`}
         >
-          <p className="text-sm text-zinc-200">New User Checklist</p>
-          <button
-            type="button"
-            onClick={() => setCollapsed((prev) => !prev)}
-            aria-label={collapsed ? "Expand checklist" : "Collapse checklist"}
-            className="text-xs text-zinc-500 transition-colors hover:text-zinc-300"
-          >
+          <p className="font-lector text-sm text-zinc-200">Getting Started</p>
+          <span className="text-xs text-zinc-500 transition-colors hover:text-zinc-300">
             {collapsed ? "▸" : "▾"}
-          </button>
-        </div>
+          </span>
+        </button>
 
         <AnimatePresence initial={false}>
           {!collapsed && (
@@ -118,7 +136,7 @@ export default function NewUserChecklistCard({ userEmail }: NewUserChecklistCard
                     </div>
                     <span
                       className={`mt-0.5 shrink-0 text-[11px] ${
-                        item.done ? "text-emerald-300" : "text-zinc-600"
+                        item.done ? "text-zinc-300" : "text-zinc-600"
                       }`}
                     >
                       {item.counterLabel}
@@ -130,6 +148,6 @@ export default function NewUserChecklistCard({ userEmail }: NewUserChecklistCard
           )}
         </AnimatePresence>
       </div>
-    </aside>
+    </motion.aside>
   );
 }

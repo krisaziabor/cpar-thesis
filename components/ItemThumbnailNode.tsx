@@ -6,16 +6,24 @@ import type { Item } from "@/lib/types";
 import { NODE_W, NODE_H } from "@/lib/graph-constants";
 
 export type ItemThumbnailNodeType = Node<
-  { item: Item; isFirst: boolean; index: number; isSelected?: boolean },
+  {
+    item: Item;
+    isFirst: boolean;
+    index: number;
+    isSelected?: boolean;
+    isConnectSelecting?: boolean;
+  },
   "itemThumbnail"
 >;
 
 export default function ItemThumbnailNode({ data }: NodeProps<ItemThumbnailNodeType>) {
-  const { item, isFirst, index, isSelected } = data;
+  const { item, isFirst, index, isSelected, isConnectSelecting } = data;
 
   const delay    = isFirst ? 0.6 + index * 0.06 : index * 0.03;
   const duration = isFirst ? 0.5 : 0.28;
   const yOffset  = isFirst ? 14 : 6;
+  const targetOpacity = isConnectSelecting ? (isSelected ? 1 : 0.5) : 1;
+  const createdAtLabel = formatCreatedAt(item.created_at);
 
   return (
     <motion.div
@@ -26,7 +34,12 @@ export default function ItemThumbnailNode({ data }: NodeProps<ItemThumbnailNodeT
       transition={{ duration, ease: [0.215, 0.61, 0.355, 1], delay }}
     >
       {/* Thumbnail — natural aspect ratio, capped at NODE_H so row gaps are preserved */}
-      <div className="w-full overflow-hidden" style={{ maxHeight: NODE_H }}>
+      <motion.div
+        animate={{ opacity: targetOpacity }}
+        transition={{ duration: 0.24, ease: [0.215, 0.61, 0.355, 1] }}
+        className="w-full overflow-hidden"
+        style={{ maxHeight: NODE_H }}
+      >
         {item.thumbnail_url ? (
           <img
             src={item.thumbnail_url}
@@ -48,14 +61,27 @@ export default function ItemThumbnailNode({ data }: NodeProps<ItemThumbnailNodeT
             </span>
           </div>
         )}
-      </div>
+      </motion.div>
 
-      {/* Title — always reserves space below, text fades in on hover */}
-      <div className="h-8 flex items-start pt-1.5 px-0.5">
-        <p className="font-lector text-[11px] text-zinc-300 leading-tight line-clamp-2 break-words opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+      {/* Meta/title — always reserves space below, text fades in on hover */}
+      <div className="flex flex-col items-start gap-0.5 pt-2.5 px-0.5">
+        <p className="font-sans text-[10px] text-zinc-500 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+          {createdAtLabel}
+        </p>
+        <p className="font-lector text-[10px] text-zinc-300 leading-tight break-words opacity-0 group-hover:opacity-100 transition-opacity duration-150">
           {item.title}
         </p>
       </div>
     </motion.div>
   );
+}
+
+function formatCreatedAt(createdAt: unknown): string {
+  if (createdAt && typeof createdAt === "object" && "toDate" in createdAt) {
+    return (createdAt as { toDate: () => Date }).toDate().toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+    });
+  }
+  return "";
 }

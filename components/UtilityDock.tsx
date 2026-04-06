@@ -3,14 +3,18 @@
 import Link from "next/link";
 import { useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { useAuth } from "@/lib/auth-context";
+import { useSequenceReplayNonce, useSequenceTimings } from "@/lib/sequence-dialkit";
 
 export default function UtilityDock() {
   const { user, role, signOut } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const shouldReduceMotion = useReducedMotion();
+  const timings = useSequenceTimings();
+  const replayNonce = useSequenceReplayNonce();
   const [expanded, setExpanded] = useState(false);
   const displayName =
     user?.displayName?.trim() ||
@@ -20,6 +24,10 @@ export default function UtilityDock() {
 
   if (!user || pathname === "/login") return null;
 
+  const enterDelay = pathname === "/" && !shouldReduceMotion
+    ? Math.max(0, timings.bottomStartMs + timings.utilityDelayMs) / 1000
+    : 0;
+
   function openFeedback() {
     setExpanded(false);
     const params = new URLSearchParams(searchParams.toString());
@@ -28,7 +36,17 @@ export default function UtilityDock() {
   }
 
   return (
-    <div className="fixed bottom-6 left-6 z-50">
+    <motion.div
+      key={pathname === "/" ? `utility-dock-${replayNonce}` : "utility-dock"}
+      initial={shouldReduceMotion ? false : { opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{
+        duration: shouldReduceMotion ? 0 : timings.bottomEnterMs / 1000,
+        ease: [0.215, 0.61, 0.355, 1],
+        delay: enterDelay,
+      }}
+      className="fixed bottom-6 left-6 z-50"
+    >
       <AnimatePresence initial={false}>
         {expanded && (
           <motion.div
@@ -88,6 +106,6 @@ export default function UtilityDock() {
       >
         {expanded ? "×" : userInitial}
       </button>
-    </div>
+    </motion.div>
   );
 }

@@ -29,7 +29,12 @@ export async function saveToKanon(
     reference_id: referenceId,
     created_at: serverTimestamp(),
   });
-  await trackKanonSaveForUser(userEmail);
+  try {
+    await trackKanonSaveForUser(userEmail);
+  } catch (error) {
+    // Checklist tracking is best-effort and should never block saves.
+    console.warn("[saveToKanon] checklist tracking failed", error);
+  }
   return ref.id;
 }
 
@@ -88,5 +93,39 @@ export function subscribeToUserKanon(
     cb(
       snap.docs.map((d) => ({ id: d.id, ...d.data() } as KanonSave))
     );
+  });
+}
+
+/** Subscribe to all hold saves, newest-first. */
+export function subscribeToAllKanonSaves(
+  cb: (saves: KanonSave[]) => void
+): Unsubscribe {
+  if (!db) {
+    cb([]);
+    return () => {};
+  }
+  const q = query(collection(db, KANON_SAVES), orderBy("created_at", "desc"));
+  return onSnapshot(q, (snap) => {
+    cb(snap.docs.map((d) => ({ id: d.id, ...d.data() } as KanonSave)));
+  });
+}
+
+/** Subscribe to user emails that have saved a given item to Hold. */
+export function subscribeToItemHolders(
+  itemId: string,
+  cb: (userEmails: string[]) => void
+): Unsubscribe {
+  if (!db) {
+    cb([]);
+    return () => {};
+  }
+  const q = query(collection(db, KANON_SAVES), where("reference_id", "==", itemId));
+  return onSnapshot(q, (snap) => {
+    const emails = snap.docs
+      .map((d) => d.data() as Partial<KanonSave>)
+      .filter((data) => data.reference_type === "item")
+      .map((data) => data.user_email)
+      .filter((email): email is string => typeof email === "string" && email.length > 0);
+    cb([...new Set(emails)]);
   });
 }

@@ -3,16 +3,26 @@
 import { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import {
+  addItemResponse,
   subscribeToItem,
+  subscribeToItemResponses,
   subscribeToItems,
   subscribeToItemConnections,
+  updateItem,
 } from "@/lib/items";
-import { saveToKanon, removeFromKanon, subscribeToKanonSaveStatus } from "@/lib/kanon";
-import type { Item, Connection, MusicPlatform } from "@/lib/types";
+import {
+  saveToKanon,
+  removeFromKanon,
+  subscribeToKanonSaveStatus,
+  subscribeToItemHolders,
+} from "@/lib/kanon";
+import type { Item, Connection, ItemResponse, MusicPlatform } from "@/lib/types";
 import MusicPlayer from "@/components/MusicPlayer";
 import AudioPlayer from "@/components/AudioPlayer";
+import AudioRecorder from "@/components/AudioRecorder";
 import MinimalPdfViewer from "@/components/MinimalPdfViewer";
 import { getUserProfile } from "@/lib/users";
 
@@ -181,21 +191,45 @@ function VideoMediaPlayer({ url, title }: { url: string; title: string }) {
 
 export default function ItemPanel({ itemId }: { itemId: string }) {
   const { user } = useAuth();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [item, setItem] = useState<Item | null | undefined>(undefined);
   const [allItems, setAllItems] = useState<Item[]>([]);
   const [connections, setConnections] = useState<Array<Connection & { itemIds: string[] }>>([]);
+  const [itemResponses, setItemResponses] = useState<ItemResponse[]>([]);
   const [kanonSaveId, setKanonSaveId] = useState<string | null>(null);
   const [savingKanon, setSavingKanon] = useState(false);
   const [preferredPlatform, setPreferredPlatform] = useState<MusicPlatform | undefined>(undefined);
+  const [addedByName, setAddedByName] = useState<string | null>(null);
+  const [holdUsers, setHoldUsers] = useState<string[]>([]);
+  const [activeHoldUserName, setActiveHoldUserName] = useState<string | null>(null);
+  const [isResponding, setIsResponding] = useState(false);
+  const [responseBlob, setResponseBlob] = useState<Blob | null>(null);
+  const [savingResponse, setSavingResponse] = useState(false);
+  const [responseError, setResponseError] = useState("");
+  const [isEditing, setIsEditing] = useState(false);
+  const [editDraft, setEditDraft] = useState({
+    title: "",
+    description: "",
+    mediaDate: "",
+    type: "",
+    creator: "",
+    link: "",
+    tags: "",
+  });
+  const [saveEditError, setSaveEditError] = useState("");
+  const [savingEdit, setSavingEdit] = useState(false);
 
   useEffect(() => subscribeToItem(itemId, setItem), [itemId]);
   useEffect(() => subscribeToItems(setAllItems), []);
   useEffect(() => subscribeToItemConnections(itemId, setConnections), [itemId]);
+  useEffect(() => subscribeToItemResponses(itemId, setItemResponses), [itemId]);
 
   useEffect(() => {
     if (!user?.email) return;
     return subscribeToKanonSaveStatus(user.email, "item", itemId, setKanonSaveId);
   }, [user?.email, itemId]);
+  useEffect(() => subscribeToItemHolders(itemId, setHoldUsers), [itemId]);
 
   useEffect(() => {
     if (!user?.email) return;
@@ -203,6 +237,49 @@ export default function ItemPanel({ itemId }: { itemId: string }) {
       if (p?.preferred_music_platform) setPreferredPlatform(p.preferred_music_platform);
     });
   }, [user?.email]);
+
+  useEffect(() => {
+    if (!item?.added_by) {
+      setAddedByName(null);
+      return;
+    }
+    getUserProfile(item.added_by).then((profile) => {
+      setAddedByName(profile?.name ?? null);
+    });
+  }, [item?.added_by]);
+
+  const isEditRequested = searchParams.get("itemEdit") === "1";
+  const itemEditAction = searchParams.get("itemEditAction");
+  const holdUserParam = searchParams.get("holdUser");
+  const isOwner = !!user?.email && !!item && user.email === item.added_by;
+  const activeHoldUser = holdUserParam || holdUsers[0] || null;
+  const showHoldContextNarrative = !item?.voice_recording_url && !!activeHoldUser;
+
+  useEffect(() => {
+    if (!activeHoldUser) {
+      setActiveHoldUserName(null);
+      return;
+    }
+    getUserProfile(activeHoldUser).then((profile) => {
+      setActiveHoldUserName(profile?.name ?? null);
+    });
+  }, [activeHoldUser]);
+
+  useEffect(() => {
+    if (isEditRequested && isOwner && !isEditing) {
+      startEditing();
+    }
+    if (!isEditRequested && isEditing) {
+      setIsEditing(false);
+      setSaveEditError("");
+    }
+  }, [isEditRequested, isOwner, isEditing]);
+
+  useEffect(() => {
+    if (itemEditAction !== "save") return;
+    if (!isEditing) return;
+    void handleSaveEdit();
+  }, [itemEditAction, isEditing]);
 
   if (item === undefined) {
     return (
@@ -229,6 +306,80 @@ export default function ItemPanel({ itemId }: { itemId: string }) {
     !topIsVideo &&
     !topIsPdf &&
     (item.thumbnail_url ?? (mediaType === "image" ? item.media_url : null));
+
+  function clearEditParam() {
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("itemEdit");
+    params.delete("itemEditAction");
+    router.push(params.toString() ? `/?${params.toString()}` : "/");
+  }
+
+  function clearEditActionParam() {
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("itemEditAction");
+    router.push(params.toString() ? `/?${params.toString()}` : "/");
+  }
+
+  async function handleSubmitItemResponse() {
+    if (!user?.email || !responseBlob) return;
+    setSavingResponse(true);
+    setResponseError("");
+    try {
+      await addItemResponse(itemId, responseBlob, user.email);
+      setResponseBlob(null);
+      setIsResponding(false);
+    } catch (err) {
+      setResponseError(err instanceof Error ? err.message : "Failed to submit response.");
+    } finally {
+      setSavingResponse(false);
+    }
+  }
+
+  function startEditing() {
+    if (!item) return;
+    setEditDraft({
+      title: item.title ?? "",
+      description: item.description ?? "",
+      mediaDate: item.media_date ?? "",
+      type: item.type ?? "",
+      creator: item.creator ?? "",
+      link: item.link ?? "",
+      tags: Array.isArray(item.tags) ? item.tags.join(", ") : "",
+    });
+    setSaveEditError("");
+    setIsEditing(true);
+  }
+
+  async function handleSaveEdit() {
+    if (!isOwner) return;
+    if (!editDraft.title.trim() || !editDraft.creator.trim() || !editDraft.mediaDate.trim()) {
+      setSaveEditError("Title, creator, and original media date are required.");
+      return;
+    }
+    setSavingEdit(true);
+    setSaveEditError("");
+    try {
+      await updateItem(itemId, {
+        title: editDraft.title.trim(),
+        description: editDraft.description.trim(),
+        media_date: editDraft.mediaDate.trim(),
+        type: editDraft.type.trim().toLowerCase(),
+        creator: editDraft.creator.trim(),
+        ...(editDraft.link.trim() ? { link: editDraft.link.trim() } : {}),
+        tags: editDraft.tags
+          .split(",")
+          .map((tag) => tag.trim())
+          .filter(Boolean),
+      });
+      setIsEditing(false);
+      clearEditParam();
+    } catch (err) {
+      setSaveEditError(err instanceof Error ? err.message : "Failed to save.");
+      clearEditActionParam();
+    } finally {
+      setSavingEdit(false);
+    }
+  }
 
   return (
     <motion.div
@@ -257,72 +408,185 @@ export default function ItemPanel({ itemId }: { itemId: string }) {
 
         {/* Title + meta */}
         <div>
-          <h2 className="font-lector text-xl leading-tight text-zinc-50">
-            {item.title}
-          </h2>
-          <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-zinc-500">
-            <span>{item.creator}</span>
-            {item.source_metadata?.song_link_url && (
-              <>
-                <span>·</span>
-                <a
-                  href={item.source_metadata.song_link_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="underline underline-offset-2 hover:text-zinc-300"
-                >
-                  Stream song ↗
-                </a>
-              </>
-            )}
-          </div>
-          {tagsDisplay.length > 0 && (
-            <div className="mt-3 flex flex-wrap gap-1.5">
-              {tagsDisplay.map((tag) => (
-                <span
-                  key={tag}
-                  className="border border-zinc-800 px-2 py-0.5 text-xs text-zinc-500"
-                >
-                  {tag}
-                </span>
-              ))}
+          {!isEditing ? (
+            <>
+              <h2 className="font-lector text-xl leading-tight text-zinc-50">
+                {item.title}
+              </h2>
+              {item.description && (
+                <p className="mt-2 text-sm leading-relaxed text-zinc-400">{item.description}</p>
+              )}
+              <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-zinc-500">
+                <span>{item.creator}</span>
+                {item.media_date && (
+                  <>
+                    <span>·</span>
+                    <span>{item.media_date}</span>
+                  </>
+                )}
+                {item.source_metadata?.song_link_url && (
+                  <>
+                    <span>·</span>
+                    <a
+                      href={item.source_metadata.song_link_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="underline underline-offset-2 hover:text-zinc-300"
+                    >
+                      Stream song ↗
+                    </a>
+                  </>
+                )}
+              </div>
+              {tagsDisplay.length > 0 && (
+                <div className="mt-3 flex flex-wrap gap-1.5">
+                  {tagsDisplay.map((tag) => (
+                    <span
+                      key={tag}
+                      className="border border-zinc-800 px-2 py-0.5 text-xs text-zinc-500"
+                    >
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="space-y-2">
+              <input
+                type="text"
+                value={editDraft.title}
+                onChange={(e) => setEditDraft((prev) => ({ ...prev, title: e.target.value }))}
+                className="w-full rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 outline-none"
+                placeholder="Title"
+              />
+              <textarea
+                rows={3}
+                value={editDraft.description}
+                onChange={(e) => setEditDraft((prev) => ({ ...prev, description: e.target.value }))}
+                className="w-full rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-200 outline-none"
+                placeholder="Description"
+              />
+              <div className="grid grid-cols-2 gap-2">
+                <input
+                  type="text"
+                  value={editDraft.type}
+                  onChange={(e) => setEditDraft((prev) => ({ ...prev, type: e.target.value }))}
+                  className="w-full rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-200 outline-none"
+                  placeholder="Type"
+                />
+                <input
+                  type="text"
+                  value={editDraft.creator}
+                  onChange={(e) => setEditDraft((prev) => ({ ...prev, creator: e.target.value }))}
+                  className="w-full rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-200 outline-none"
+                  placeholder="Creator"
+                />
+              </div>
+              <input
+                type="text"
+                value={editDraft.mediaDate}
+                onChange={(e) => setEditDraft((prev) => ({ ...prev, mediaDate: e.target.value }))}
+                className="w-full rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-200 outline-none"
+                placeholder="Original media date (required)"
+              />
+              <input
+                type="url"
+                value={editDraft.link}
+                onChange={(e) => setEditDraft((prev) => ({ ...prev, link: e.target.value }))}
+                className="w-full rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-200 outline-none"
+                placeholder="External link"
+              />
+              <input
+                type="text"
+                value={editDraft.tags}
+                onChange={(e) => setEditDraft((prev) => ({ ...prev, tags: e.target.value }))}
+                className="w-full rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-200 outline-none"
+                placeholder="Tags (comma separated)"
+              />
+              {saveEditError && <p className="text-xs text-red-400">{saveEditError}</p>}
             </div>
           )}
         </div>
 
-        {/* Actions */}
-        <div className="flex items-center gap-2">
-          <Link
-            href={`/connect?itemId=${itemId}`}
-            className="flex items-center gap-1.5 rounded-full bg-zinc-100 px-4 py-1.5 text-xs text-zinc-900 transition-colors hover:bg-white"
-          >
-            <span className="text-zinc-500">↔</span>
-            Connect
-          </Link>
-          <button
-            disabled={savingKanon}
-            onClick={async () => {
-              if (!user?.email) return;
-              setSavingKanon(true);
-              try {
-                if (kanonSaveId) await removeFromKanon(kanonSaveId);
-                else await saveToKanon(user.email, "item", itemId);
-              } finally {
-                setSavingKanon(false);
-              }
-            }}
-            className={`flex items-center gap-1.5 rounded-full border px-4 py-1.5 text-xs transition-colors disabled:opacity-40 ${
-              kanonSaveId
-                ? "border-zinc-700 text-zinc-400 hover:border-zinc-600 hover:text-zinc-300"
-                : "border-zinc-800 text-zinc-600 hover:border-zinc-700 hover:text-zinc-400"
-            }`}
-          >
-            <span>{kanonSaveId ? "✓" : "+"}</span>
-            {kanonSaveId ? "In Holding" : "Add to Holding"}
-          </button>
-        </div>
+        {!isEditing && (
+          <>
+            {/* Actions */}
+            <div className="flex items-center gap-2">
+              <Link
+                href={`/connect?itemId=${itemId}`}
+            className="flex items-center rounded-full bg-zinc-100 px-4 py-1.5 font-lector text-xs text-zinc-900 transition-colors hover:bg-white"
+              >
+                Connect
+              </Link>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsResponding((prev) => !prev);
+                  setResponseError("");
+                }}
+            className="flex items-center gap-1.5 rounded-full border border-zinc-600 bg-zinc-900 px-4 py-1.5 font-lector text-xs text-zinc-100 transition-colors hover:border-zinc-500 hover:bg-zinc-800"
+              >
+                Respond
+              </button>
+              <button
+                disabled={savingKanon}
+                onClick={async () => {
+                  if (!user?.email) return;
+                  setSavingKanon(true);
+                  try {
+                    if (kanonSaveId) await removeFromKanon(kanonSaveId);
+                    else await saveToKanon(user.email, "item", itemId);
+                  } finally {
+                    setSavingKanon(false);
+                  }
+                }}
+            className={`flex items-center gap-1.5 rounded-full border bg-zinc-950 px-4 py-1.5 font-lector text-xs transition-colors disabled:opacity-60 ${
+                  kanonSaveId
+                    ? "border-zinc-500 text-zinc-200 hover:border-zinc-400 hover:text-zinc-100"
+                    : "border-zinc-700 text-zinc-300 hover:border-zinc-600 hover:text-zinc-100"
+                }`}
+              >
+                <span>{kanonSaveId ? "✓" : "+"}</span>
+                {kanonSaveId ? "In Hold" : "Add to Hold"}
+              </button>
+            </div>
 
-        <div className="border-t border-zinc-800" />
+            {isResponding && (
+              <div className="space-y-3 rounded-md border border-zinc-800 px-3 py-3">
+                <p className="font-lector text-sm text-zinc-300">Respond to this record</p>
+                <AudioRecorder
+                  onRecorded={(blob) => setResponseBlob(blob)}
+                  prompt="What does this record bring up for you?"
+                />
+                {responseError && <p className="text-xs text-red-500">{responseError}</p>}
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsResponding(false);
+                      setResponseBlob(null);
+                      setResponseError("");
+                    }}
+                    className="text-xs text-zinc-500 hover:text-zinc-300"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!responseBlob || savingResponse}
+                    onClick={() => void handleSubmitItemResponse()}
+                    className="rounded-full border border-zinc-600 px-3 py-1.5 text-xs text-zinc-100 transition-colors hover:border-zinc-500 hover:bg-zinc-800 disabled:opacity-50"
+                  >
+                    {savingResponse ? "Submitting…" : "Submit response"}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            <div className="border-t border-zinc-800" />
+          </>
+        )}
 
         {/* Music player — songs only */}
         {item.type === "song" && item.source_metadata && (
@@ -337,61 +601,83 @@ export default function ItemPanel({ itemId }: { itemId: string }) {
           </>
         )}
 
-        {/* Narrative */}
-        <div className="space-y-3">
-          <p className="font-lector text-sm text-zinc-400">Narrative</p>
-          {item.voice_recording_url ? (
-            <AudioPlayer src={item.voice_recording_url} />
-          ) : (
-            <p className="text-xs text-zinc-600">No audio recorded.</p>
-          )}
-          <p className="text-xs text-zinc-600">
-            {item.added_by} · {formatDate(item.created_at)}
-          </p>
-        </div>
-
-        <div className="border-t border-zinc-800" />
-
-        {/* Connections */}
-        <div className="space-y-3">
-          <p className="font-lector text-sm text-zinc-400">Connections</p>
-          {connections.length === 0 ? (
-            <p className="text-xs text-zinc-600">
-              No connections yet.{" "}
-              <Link href={`/connect?itemId=${itemId}`} className="underline underline-offset-2 hover:text-zinc-300">
-                Add one
-              </Link>
-            </p>
-          ) : (
-            <div className="flex flex-col gap-2">
-              {connections.map((conn) => {
-                const otherIds = conn.itemIds.filter((id) => id !== itemId);
-                const otherTitles = otherIds.map(
-                  (id) => allItems.find((i) => i.id === id)?.title ?? id
-                );
-                return (
-                  <Link
-                    key={conn.id}
-                    href={`/connections/${conn.id}`}
-                    className="flex items-center justify-between border border-zinc-800 px-4 py-3 hover:border-zinc-700 hover:bg-zinc-900"
-                  >
-                    <div className="min-w-0 flex flex-col gap-0.5">
-                      <p className="truncate text-sm text-zinc-200">
-                        {otherTitles.length > 0 ? otherTitles.join(" ↔ ") : "connection"}
+        {!isEditing && (
+          <>
+            {/* Narrative */}
+            <div className="space-y-3">
+              <p className="font-lector text-sm text-zinc-400">Narrative</p>
+              {!showHoldContextNarrative && item.voice_recording_url ? (
+                <AudioPlayer src={item.voice_recording_url} />
+              ) : (
+                <>
+                  {showHoldContextNarrative ? (
+                    <div className="space-y-2">
+                      <p className="text-xs text-zinc-500">
+                        {(activeHoldUserName ?? activeHoldUser)?.trim()} added this record to their Hold.
                       </p>
-                      <p className="text-xs text-zinc-600">
-                        {conn.created_by} · {formatDate(conn.created_at)}
-                      </p>
+                      {activeHoldUser && (
+                        <Link
+                          href={`/?panel=holds&holdUser=${encodeURIComponent(activeHoldUser)}`}
+                          className="inline-flex font-lector text-xs text-zinc-200 transition-colors hover:text-white"
+                        >
+                          View this person&apos;s hold
+                        </Link>
+                      )}
                     </div>
-                    {conn.audio_url && (
-                      <span className="ml-2 shrink-0 text-xs text-zinc-600">♪</span>
-                    )}
-                  </Link>
-                );
-              })}
+                  ) : (
+                    <p className="text-xs text-zinc-600">No audio recorded.</p>
+                  )}
+                </>
+              )}
+              <p className="text-xs text-zinc-600">
+                {addedByName ?? item.added_by} · {formatDate(item.created_at)}
+              </p>
             </div>
-          )}
-        </div>
+
+            <div className="border-t border-zinc-800" />
+
+            {/* Connections */}
+            <div className="space-y-3">
+              <p className="font-lector text-sm text-zinc-400">Connections</p>
+              {connections.length === 0 ? (
+                <div className="space-y-1">
+                  <p className="text-xs text-zinc-600">No connections yet.</p>
+                  <Link href={`/connect?itemId=${itemId}`} className="font-lector text-[12px] text-zinc-100 hover:text-white">
+                    Add one
+                  </Link>
+                </div>
+              ) : (
+                <div className="flex flex-col gap-2">
+                  {connections.map((conn) => {
+                    const otherIds = conn.itemIds.filter((id) => id !== itemId);
+                    const otherTitles = otherIds.map(
+                      (id) => allItems.find((i) => i.id === id)?.title ?? id
+                    );
+                    return (
+                      <Link
+                        key={conn.id}
+                        href={`/connections/${conn.id}`}
+                        className="flex items-center justify-between border border-zinc-800 px-4 py-3 hover:border-zinc-700 hover:bg-zinc-900"
+                      >
+                        <div className="min-w-0 flex flex-col gap-0.5">
+                          <p className="truncate text-sm text-zinc-200">
+                            {otherTitles.length > 0 ? otherTitles.join(" · ") : "connection"}
+                          </p>
+                          <p className="text-xs text-zinc-600">
+                            {conn.created_by} · {formatDate(conn.created_at)}
+                          </p>
+                        </div>
+                        {conn.audio_url && (
+                          <span className="ml-2 shrink-0 text-xs text-zinc-600">♪</span>
+                        )}
+                      </Link>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </>
+        )}
 
         {/* Bottom padding for floating nav clearance */}
         <div className="h-16" />

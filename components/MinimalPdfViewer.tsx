@@ -245,7 +245,7 @@ export default function MinimalPdfViewer({ url, title }: { url: string; title: s
           </>
         )}
       </div>
-      <div className="flex items-start justify-between gap-4 px-4 py-3 font-sans text-sm text-zinc-500 dark:text-zinc-400">
+      <div className="flex items-start justify-between gap-4 px-6 py-3 font-sans text-sm text-zinc-500 dark:text-zinc-400">
         <div className="flex flex-col items-start gap-1">
           <span>{showFallback ? renderError : pageLabel}</span>
           <a
@@ -254,7 +254,7 @@ export default function MinimalPdfViewer({ url, title }: { url: string; title: s
             rel="noopener noreferrer"
             className="underline underline-offset-2 transition-colors hover:text-zinc-900 dark:hover:text-zinc-200"
           >
-            Open PDF ↗
+            Open in new tab
           </a>
         </div>
         <div className="flex items-center gap-3">

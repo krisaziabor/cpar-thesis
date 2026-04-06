@@ -154,9 +154,9 @@ export default function ConnectionDetailPage() {
           <div className="flex flex-wrap items-center gap-2">
             {connectedItems.map((item, i) => (
               <span key={item.id} className="flex items-center gap-2">
-                {i > 0 && <span className="text-zinc-300 dark:text-zinc-700">↔</span>}
+                {i > 0 && <span className="text-zinc-300 dark:text-zinc-700">·</span>}
                 <Link
-                  href={`/items/${item.id}`}
+                  href={`/?item=${item.id}`}
                   className="text-xl font-semibold text-zinc-900 hover:underline dark:text-zinc-50"
                 >
                   {item.title}

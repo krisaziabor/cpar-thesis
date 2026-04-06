@@ -3,14 +3,18 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { useAuth } from "@/lib/auth-context";
+import { useSequenceReplayNonce, useSequenceTimings } from "@/lib/sequence-dialkit";
 
 export default function FloatingNav() {
   const { user } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const shouldReduceMotion = useReducedMotion();
+  const timings = useSequenceTimings();
+  const replayNonce = useSequenceReplayNonce();
   const [expanded, setExpanded] = useState(false);
 
   const panel = searchParams.get("panel");
@@ -25,9 +29,14 @@ export default function FloatingNav() {
   const isConnectActive = isConnectSelecting || pathname === "/connect";
   const isSearchActive = pathname === "/" && panel === "search";
   const isActivityActive = pathname === "/" && panel === "activity";
-  const holdingHref = user?.email ? `/kanon/${encodeURIComponent(user.email)}` : "/kanon";
+  const isHoldingActive = (pathname === "/" && panel === "holds") || pathname.startsWith("/kanon");
+  const holdingHref = "/?panel=holds";
 
-  if (!user || pathname === "/login") return null;
+  if (!user || pathname === "/login" || pathname === "/colophon") return null;
+
+  const enterDelay = pathname === "/" && !shouldReduceMotion
+    ? Math.max(0, timings.bottomStartMs + timings.navDelayMs) / 1000
+    : 0;
 
   function handleTabPress(isActive: boolean, href: string) {
     router.push(isActive ? "/" : href);
@@ -42,12 +51,31 @@ export default function FloatingNav() {
     const params = new URLSearchParams(searchParams.toString());
     params.set("panel", "connect");
     params.set("connectPanel", "1");
+    params.delete("connectSelect");
+    router.push(`/?${params.toString()}`);
+  }
+
+  function handleConnectSearchOpen() {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("panel", "connect");
+    params.set("connectPanel", "1");
+    params.set("connectSelect", "1");
     router.push(`/?${params.toString()}`);
   }
 
   return (
-    <div className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2">
-      <div className="overflow-hidden rounded-lg border border-zinc-800 bg-zinc-950 shadow-[0_4px_24px_rgba(0,0,0,0.5)]">
+    <motion.div
+      key={pathname === "/" ? `floating-nav-${replayNonce}` : "floating-nav"}
+      initial={shouldReduceMotion ? false : { opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{
+        duration: shouldReduceMotion ? 0 : timings.bottomEnterMs / 1000,
+        ease: [0.215, 0.61, 0.355, 1],
+        delay: enterDelay,
+      }}
+      className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2"
+    >
+      <div className="overflow-hidden rounded-md border border-zinc-800 bg-zinc-950 shadow-[0_4px_24px_rgba(0,0,0,0.5)]">
 
         <AnimatePresence initial={false}>
           {isConnectSelecting && !connectPanelOpen && (
@@ -63,16 +91,22 @@ export default function FloatingNav() {
                 <p className="text-xs text-zinc-400">
                   Select thumbnails in the graph to connect them.
                 </p>
-                <div className="flex items-center justify-between gap-3">
-                  <span className="text-xs text-zinc-500">
-                    {selectedConnectIds.length} selected
-                  </span>
+                <span className="text-xs text-zinc-500">
+                  {selectedConnectIds.length} selected
+                </span>
+                <div className="flex items-center justify-between gap-2">
+                  <button
+                    onClick={handleConnectCancel}
+                    className="text-xs text-zinc-500 transition-colors hover:text-zinc-200"
+                  >
+                    Cancel
+                  </button>
                   <div className="flex items-center gap-2">
                     <button
-                      onClick={handleConnectCancel}
+                      onClick={handleConnectSearchOpen}
                       className="px-2 py-1 text-xs text-zinc-500 transition-colors hover:text-zinc-200"
                     >
-                      Cancel
+                      Search & select
                     </button>
                     <button
                       onClick={handleConnectConfirm}
@@ -88,76 +122,81 @@ export default function FloatingNav() {
           )}
         </AnimatePresence>
 
-        {/* Base row — always visible */}
-        <div className="flex items-stretch divide-x divide-zinc-800 font-sans">
-          <button
-            onClick={() => handleTabPress(isAddActive, "/?panel=add")}
-            className={`px-4 py-2.5 text-xs transition-colors hover:bg-zinc-900 hover:text-zinc-50 ${
-              isAddActive ? "font-medium text-zinc-300" : "text-zinc-400"
-            }`}
-          >
-            Add
-          </button>
-          <button
-            onClick={() => handleTabPress(isConnectActive, "/?panel=connect")}
-            className={`px-4 py-2.5 text-xs transition-colors hover:bg-zinc-900 hover:text-zinc-50 ${
-              isConnectActive ? "font-medium text-zinc-300" : "text-zinc-400"
-            }`}
-          >
-            Connect
-          </button>
-          <button
-            onClick={() => handleTabPress(isSearchActive, "/?panel=search")}
-            className={`px-4 py-2.5 text-xs transition-colors hover:bg-zinc-900 hover:text-zinc-50 ${
-              isSearchActive ? "font-medium text-zinc-300" : "text-zinc-400"
-            }`}
-          >
-            Search
-          </button>
-          <AnimatePresence initial={false}>
-            {expanded && (
-              <motion.div
-                key="secondary-actions"
-                initial={{ width: 0, opacity: 0 }}
-                animate={{ width: "auto", opacity: 1 }}
-                exit={{ width: 0, opacity: 0 }}
-                transition={{ duration: 0.22, ease: [0.215, 0.61, 0.355, 1] }}
-                className="flex overflow-hidden"
-              >
-                <Link
-                  href={holdingHref}
-                  className="border-l border-zinc-800 px-4 py-2.5 text-xs text-zinc-400 whitespace-nowrap transition-colors hover:bg-zinc-900 hover:text-zinc-50"
-                >
-                  Holding
-                </Link>
-                <button
-                  onClick={() => {
-                    handleTabPress(isActivityActive, "/?panel=activity");
-                  }}
-                  className={`border-l border-zinc-800 px-4 py-2.5 text-xs whitespace-nowrap transition-colors hover:bg-zinc-900 hover:text-zinc-50 ${
-                    isActivityActive ? "font-medium text-zinc-300" : "text-zinc-400"
-                  }`}
-                >
-                  Activity
-                </button>
-              </motion.div>
-            )}
-          </AnimatePresence>
-          <button
-            onClick={() => setExpanded((e) => !e)}
-            aria-label={expanded ? "Collapse navigation" : "Expand navigation"}
-            className="px-3 py-2.5 text-xs leading-none text-zinc-500 transition-colors hover:bg-zinc-900 hover:text-zinc-200"
-          >
-            <motion.span
-              animate={{ rotate: expanded ? 45 : 0 }}
-              transition={{ duration: 0.18, ease: [0.215, 0.61, 0.355, 1] }}
-              style={{ display: "inline-block" }}
+        {/* Base row — Kanon collapsed, full rail expanded */}
+        <AnimatePresence initial={false} mode="wait">
+          {expanded ? (
+            <motion.div
+              key="expanded-rail"
+              initial={{ opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 4 }}
+              transition={{ duration: 0.2, ease: [0.215, 0.61, 0.355, 1] }}
+              className="flex items-stretch divide-x divide-zinc-800 font-lector"
             >
-              {expanded ? "×" : "···"}
-            </motion.span>
-          </button>
-        </div>
+              <button
+                onClick={() => handleTabPress(isAddActive, "/?panel=add")}
+                className={`px-4 py-2.5 text-sm transition-colors hover:bg-zinc-900 hover:text-zinc-50 ${
+                  isAddActive ? "font-medium text-zinc-300" : "text-zinc-400"
+                }`}
+              >
+                Add
+              </button>
+              <button
+                onClick={() => handleTabPress(isConnectActive, "/?panel=connect")}
+                className={`px-4 py-2.5 text-sm transition-colors hover:bg-zinc-900 hover:text-zinc-50 ${
+                  isConnectActive ? "font-medium text-zinc-300" : "text-zinc-400"
+                }`}
+              >
+                Connect
+              </button>
+              <button
+                onClick={() => handleTabPress(isSearchActive, "/?panel=search")}
+                className={`px-4 py-2.5 text-sm transition-colors hover:bg-zinc-900 hover:text-zinc-50 ${
+                  isSearchActive ? "font-medium text-zinc-300" : "text-zinc-400"
+                }`}
+              >
+                Search
+              </button>
+              <Link
+                href={holdingHref}
+                className={`px-4 py-2.5 text-sm whitespace-nowrap transition-colors hover:bg-zinc-900 hover:text-zinc-50 ${
+                  isHoldingActive ? "font-medium text-zinc-300" : "text-zinc-400"
+                }`}
+              >
+                Hold
+              </Link>
+              <button
+                onClick={() => handleTabPress(isActivityActive, "/?panel=activity")}
+                className={`px-4 py-2.5 text-sm whitespace-nowrap transition-colors hover:bg-zinc-900 hover:text-zinc-50 ${
+                  isActivityActive ? "font-medium text-zinc-300" : "text-zinc-400"
+                }`}
+              >
+                Activity
+              </button>
+              <button
+                onClick={() => setExpanded(false)}
+                aria-label="Collapse navigation"
+                className="px-3 py-2.5 text-xs leading-none text-zinc-500 transition-colors hover:bg-zinc-900 hover:text-zinc-200"
+              >
+                ×
+              </button>
+            </motion.div>
+          ) : (
+            <motion.button
+              key="collapsed-kanon"
+              type="button"
+              onClick={() => setExpanded(true)}
+              initial={{ opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 4 }}
+              transition={{ duration: 0.2, ease: [0.215, 0.61, 0.355, 1] }}
+              className="w-full px-5 py-2.5 text-center font-lector text-sm tracking-tight text-zinc-300 transition-colors hover:bg-zinc-900 hover:text-zinc-50"
+            >
+              Kanon
+            </motion.button>
+          )}
+        </AnimatePresence>
       </div>
-    </div>
+    </motion.div>
   );
 }
