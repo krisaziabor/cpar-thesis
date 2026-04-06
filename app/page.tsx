@@ -37,8 +37,18 @@ function HomeInner() {
   const shouldReduceMotion = useReducedMotion();
   const timings = useSequenceTimings();
   const replayNonce = useSequenceReplayNonce();
-  const [items, setItems] = useState<Item[]>([]);
-  const [dataLoading, setDataLoading] = useState(true);
+  const [items, setItems] = useState<Item[]>(() => {
+    if (typeof window === "undefined") return [];
+    try {
+      const raw = sessionStorage.getItem("kanon-cached-items");
+      if (!raw) return [];
+      const parsed = JSON.parse(raw) as Item[];
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  });
+  const [dataLoading, setDataLoading] = useState(() => items.length === 0);
   const [addProgressPercent, setAddProgressPercent] = useState(100 / 3);
   const [panelItem, setPanelItem] = useState<Item | null>(null);
   const [panelItemHasConnections, setPanelItemHasConnections] = useState(false);
@@ -76,10 +86,21 @@ function HomeInner() {
   const isConnectSelecting = panelMode === "connect";
 
   useEffect(() => {
-    return subscribeToItems((fetched) => {
-      setItems(fetched);
-      setDataLoading(false);
-    });
+    return subscribeToItems(
+      (fetched) => {
+        setItems(fetched);
+        setDataLoading(false);
+        try {
+          sessionStorage.setItem("kanon-cached-items", JSON.stringify(fetched));
+        } catch {
+          // Ignore storage failures.
+        }
+      },
+      () => {
+        // Never keep the graph stuck in a loading-black state.
+        setDataLoading(false);
+      }
+    );
   }, []);
 
   useEffect(() => {
