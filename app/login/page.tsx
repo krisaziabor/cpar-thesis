@@ -161,15 +161,7 @@ export default function LoginPage() {
     setLocalError(message);
   }
 
-  if (loading || signingIn || stage === "verifying") {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-black">
-        <p className="text-sm text-zinc-400">
-          {stage === "verifying" ? "Signing you in..." : "Loading..."}
-        </p>
-      </div>
-    );
-  }
+  const isAuthTransitioning = loading || signingIn || stage === "verifying";
 
   return (
     <div className="min-h-screen bg-black">
@@ -190,118 +182,124 @@ export default function LoginPage() {
           }
           className="overflow-hidden rounded-lg border border-zinc-800 bg-zinc-950 shadow-[0_4px_24px_rgba(0,0,0,0.5)]"
         >
-          <AnimatePresence initial={false} mode="wait">
-            {stage === "gate" && (
-              <motion.form
-                key="gate"
-                onSubmit={handleEmailGateSubmit}
-                initial={shouldReduceMotion ? false : { opacity: 0, y: 6 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={shouldReduceMotion ? { opacity: 1 } : { opacity: 0, y: -6 }}
-                transition={
-                  shouldReduceMotion
-                    ? { duration: 0 }
-                    : { duration: 0.18, ease: [0.215, 0.61, 0.355, 1] }
-                }
-                className="flex items-stretch divide-x divide-zinc-800"
-              >
-                <input
-                  type="email"
-                  value={emailInput}
-                  onChange={(e) => {
-                    setEmailInput(e.target.value);
-                    if (transientNotice === ACCESS_NOT_GIVEN_MESSAGE) {
-                      setTransientNotice("");
-                    }
-                  }}
-                  placeholder="Enter your email"
-                  required
-                  className="min-w-0 flex-1 bg-transparent px-4 py-2.5 text-xs text-zinc-300 placeholder:text-zinc-500 focus:outline-none"
-                />
-                <button
-                  type="submit"
-                  className="font-lector px-4 py-2.5 text-xs text-zinc-300 transition-colors hover:bg-zinc-900 hover:text-zinc-50"
+          {isAuthTransitioning ? (
+            <div className="px-4 py-2.5 text-xs text-zinc-400 font-sans">
+              {stage === "verifying" ? "Signing you in..." : "Loading..."}
+            </div>
+          ) : (
+            <AnimatePresence initial={false} mode="wait">
+              {stage === "gate" && (
+                <motion.form
+                  key="gate"
+                  onSubmit={handleEmailGateSubmit}
+                  initial={shouldReduceMotion ? false : { opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={shouldReduceMotion ? { opacity: 1 } : { opacity: 0, y: -6 }}
+                  transition={
+                    shouldReduceMotion
+                      ? { duration: 0 }
+                      : { duration: 0.18, ease: [0.215, 0.61, 0.355, 1] }
+                  }
+                  className="flex items-stretch divide-x divide-zinc-800"
                 >
-                  Continue
-                </button>
-              </motion.form>
-            )}
-
-            {stage === "choice" && (
-              <motion.div
-                key="choice"
-                initial={shouldReduceMotion ? false : { opacity: 0, y: 6 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={shouldReduceMotion ? { opacity: 1 } : { opacity: 0, y: -6 }}
-                transition={
-                  shouldReduceMotion
-                    ? { duration: 0 }
-                    : { duration: 0.2, ease: [0.215, 0.61, 0.355, 1] }
-                }
-                className="flex flex-col font-lector"
-              >
-                <div className="border-b border-zinc-800 px-4 py-2 text-[11px] text-zinc-500 font-sans">
-                  {gatedFirstName ? `Hey ${gatedFirstName}!` : gatedEmail}
-                </div>
-                <div className="flex items-stretch divide-x divide-zinc-800">
-                  <button
-                    onClick={() => void handleGoogleSignIn(gatedEmail)}
-                    className="flex flex-1 items-center justify-center gap-2 px-4 py-2.5 text-xs text-zinc-300 transition-colors hover:bg-zinc-900 hover:text-zinc-50"
-                  >
-                    <GoogleIcon />
-                    Continue with Google
-                  </button>
-                  <button
-                    onClick={() => void handleSendMagicLink()}
-                    className="px-4 py-2.5 text-xs text-zinc-300 transition-colors hover:bg-zinc-900 hover:text-zinc-50"
-                  >
-                    Send magic link
-                  </button>
-                </div>
-              </motion.div>
-            )}
-
-            {stage === "sent" && (
-              <motion.div
-                key="sent"
-                initial={shouldReduceMotion ? false : { opacity: 0, y: 6 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={shouldReduceMotion ? { opacity: 1 } : { opacity: 0, y: -6 }}
-                transition={
-                  shouldReduceMotion
-                    ? { duration: 0 }
-                    : { duration: 0.2, ease: [0.215, 0.61, 0.355, 1] }
-                }
-                className="flex flex-col"
-              >
-                <div className="border-b border-zinc-800 px-4 py-2 text-[11px] text-zinc-500 font-sans">
-                  Check your email (spam included)
-                </div>
-                <div className="px-4 py-2.5 text-xs text-zinc-300 font-sans">
-                  Magic link sent to {gatedEmail}.
-                </div>
-                <div className="flex items-stretch divide-x divide-zinc-800 border-t border-zinc-800">
-                  <button
-                    onClick={() => void handleGoogleSignIn(gatedEmail)}
-                    className="flex-1 px-4 py-2.5 text-left text-xs text-zinc-400 font-lector transition-colors hover:bg-zinc-900 hover:text-zinc-50"
-                  >
-                    Switch to Google Sign-In
-                  </button>
-                  <button
-                    onClick={() => {
-                      setStage("gate");
-                      setEmailInput("");
-                      setGatedEmail("");
-                      setGatedFirstName(null);
+                  <input
+                    type="email"
+                    value={emailInput}
+                    onChange={(e) => {
+                      setEmailInput(e.target.value);
+                      if (transientNotice === ACCESS_NOT_GIVEN_MESSAGE) {
+                        setTransientNotice("");
+                      }
                     }}
-                    className="flex-1 px-4 py-2.5 text-left text-xs text-zinc-400 font-lector transition-colors hover:bg-zinc-900 hover:text-zinc-50"
+                    placeholder="Enter your email"
+                    required
+                    className="min-w-0 flex-1 bg-transparent px-4 py-2.5 text-xs text-zinc-300 placeholder:text-zinc-500 focus:outline-none"
+                  />
+                  <button
+                    type="submit"
+                    className="font-lector px-4 py-2.5 text-xs text-zinc-300 transition-colors hover:bg-zinc-900 hover:text-zinc-50"
                   >
-                    Use a different email
+                    Continue
                   </button>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
+                </motion.form>
+              )}
+
+              {stage === "choice" && (
+                <motion.div
+                  key="choice"
+                  initial={shouldReduceMotion ? false : { opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={shouldReduceMotion ? { opacity: 1 } : { opacity: 0, y: -6 }}
+                  transition={
+                    shouldReduceMotion
+                      ? { duration: 0 }
+                      : { duration: 0.2, ease: [0.215, 0.61, 0.355, 1] }
+                  }
+                  className="flex flex-col font-lector"
+                >
+                  <div className="border-b border-zinc-800 px-4 py-2 text-[11px] text-zinc-500 font-sans">
+                    {gatedFirstName ? `Hey ${gatedFirstName}!` : gatedEmail}
+                  </div>
+                  <div className="flex items-stretch divide-x divide-zinc-800">
+                    <button
+                      onClick={() => void handleGoogleSignIn(gatedEmail)}
+                      className="flex flex-1 items-center justify-center gap-2 px-4 py-2.5 text-xs text-zinc-300 transition-colors hover:bg-zinc-900 hover:text-zinc-50"
+                    >
+                      <GoogleIcon />
+                      Continue with Google
+                    </button>
+                    <button
+                      onClick={() => void handleSendMagicLink()}
+                      className="px-4 py-2.5 text-xs text-zinc-300 transition-colors hover:bg-zinc-900 hover:text-zinc-50"
+                    >
+                      Send magic link
+                    </button>
+                  </div>
+                </motion.div>
+              )}
+
+              {stage === "sent" && (
+                <motion.div
+                  key="sent"
+                  initial={shouldReduceMotion ? false : { opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={shouldReduceMotion ? { opacity: 1 } : { opacity: 0, y: -6 }}
+                  transition={
+                    shouldReduceMotion
+                      ? { duration: 0 }
+                      : { duration: 0.2, ease: [0.215, 0.61, 0.355, 1] }
+                  }
+                  className="flex flex-col"
+                >
+                  <div className="border-b border-zinc-800 px-4 py-2 text-[11px] text-zinc-500 font-sans">
+                    Check your email (spam included)
+                  </div>
+                  <div className="px-4 py-2.5 text-xs text-zinc-300 font-sans">
+                    Magic link sent to {gatedEmail}.
+                  </div>
+                  <div className="flex items-stretch divide-x divide-zinc-800 border-t border-zinc-800">
+                    <button
+                      onClick={() => void handleGoogleSignIn(gatedEmail)}
+                      className="flex-1 px-4 py-2.5 text-left text-xs text-zinc-400 font-lector transition-colors hover:bg-zinc-900 hover:text-zinc-50"
+                    >
+                      Switch to Google Sign-In
+                    </button>
+                    <button
+                      onClick={() => {
+                        setStage("gate");
+                        setEmailInput("");
+                        setGatedEmail("");
+                        setGatedFirstName(null);
+                      }}
+                      className="flex-1 px-4 py-2.5 text-left text-xs text-zinc-400 font-lector transition-colors hover:bg-zinc-900 hover:text-zinc-50"
+                    >
+                      Use a different email
+                    </button>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          )}
         </motion.div>
 
         {shouldShowYaleNotice && (

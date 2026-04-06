@@ -197,7 +197,7 @@ export default function ActivityPage() {
                     </span>{" "}
                     added{" "}
                     <Link
-                      href={`/items/${a.itemId}`}
+                      href={`/?item=${a.itemId}`}
                       className="font-medium text-zinc-900 hover:underline dark:text-zinc-50"
                     >
                       {a.itemTitle}
@@ -215,7 +215,7 @@ export default function ActivityPage() {
                       className="font-medium text-zinc-900 hover:underline dark:text-zinc-50"
                     >
                       {a.connectedItems.length > 0
-                        ? a.connectedItems.map((i) => i.title).join(" ↔ ")
+                        ? a.connectedItems.map((i) => i.title).join(" · ")
                         : "items"}
                     </Link>
                   </p>

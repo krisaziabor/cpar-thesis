@@ -74,7 +74,7 @@ export default function RespondPage() {
               {items.map((item, i) => (
                 <span key={item?.id ?? i} className="flex items-center gap-2">
                   {i > 0 && (
-                    <span className="text-zinc-300 dark:text-zinc-700">↔</span>
+                    <span className="text-zinc-300 dark:text-zinc-700">·</span>
                   )}
                   <span className="font-medium text-zinc-900 dark:text-zinc-50">
                     {item?.title ?? "Unknown"}

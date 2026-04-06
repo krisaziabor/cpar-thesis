@@ -49,6 +49,7 @@ export interface SourceMetadata {
   // Music (Odesli/song.link)
   platform?: string;              // originating platform slug (e.g. "spotify")
   album?: string;
+  release_date?: string;
   platforms?: string[];           // all platforms the track is available on
   song_link_url?: string;         // cross-platform song.link aggregator URL
   preview_url?: string;           // 30s Spotify preview MP3 URL (null if unavailable)

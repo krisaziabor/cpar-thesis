@@ -17,7 +17,15 @@ import {
 } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
 import { db, storage } from "./firebase";
-import type { Item, AudioVersion, DeletionRequest, Connection, ConnectionItem, Response as ItemResponse } from "./types";
+import type {
+  Item,
+  AudioVersion,
+  DeletionRequest,
+  Connection,
+  ConnectionItem,
+  Response as ConnectionResponse,
+  ItemResponse,
+} from "./types";
 import type { SourceMetadata } from "./metadata/types";
 import { trackCreatedConnectionForUser, trackPublishedTextForUser } from "./user-checklist";
 
@@ -68,7 +76,7 @@ export async function uploadItemFile(file: File, itemId: string): Promise<string
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type ItemFields = Pick<Item, "title" | "type" | "creator" | "tags" | "added_by" | "media_url"> & {
+type ItemFields = Pick<Item, "title" | "description" | "media_date" | "type" | "creator" | "tags" | "added_by" | "media_url"> & {
   link?: string;
   thumbnail_url?: string;
   source_metadata?: SourceMetadata;
@@ -116,6 +124,19 @@ function queueConnectionTranscript(connectionId: string, audioUrl: string): void
   })();
 }
 
+function queueItemResponseTranscript(itemId: string, responseId: string, audioUrl: string): void {
+  if (!db || !audioUrl) return;
+  void (async () => {
+    const transcript = await requestTranscript(audioUrl);
+    if (!transcript) return;
+    try {
+      await updateDoc(doc(db, "items", itemId, "responses", responseId), { transcript });
+    } catch {
+      // Best-effort background transcription; ignore write failures.
+    }
+  })();
+}
+
 // ─── Published items ──────────────────────────────────────────────────────────
 
 /**
@@ -133,7 +154,12 @@ export async function createItemDoc(data: ItemFields): Promise<string> {
     created_at: serverTimestamp(),
   });
   if (data.added_by) {
-    await trackPublishedTextForUser(data.added_by);
+    try {
+      await trackPublishedTextForUser(data.added_by);
+    } catch (error) {
+      // Checklist tracking is best-effort and should not block item creation.
+      console.warn("[createItemDoc] checklist tracking failed", error);
+    }
   }
   return docRef.id;
 }
@@ -180,13 +206,45 @@ export async function getItem(id: string): Promise<Item | null> {
   return snap.exists() ? ({ id: snap.id, ...snap.data() } as Item) : null;
 }
 
+/** Find an existing published item by exact external link. */
+export async function findPublishedItemByLink(link: string): Promise<Item | null> {
+  if (!db) return null;
+  const normalized = link.trim();
+  if (!normalized) return null;
+  try {
+    // Rules-safe query: only published items are globally readable.
+    const snap = await getDocs(
+      query(
+        collection(db, "items"),
+        where("is_draft", "==", false),
+        where("link", "==", normalized),
+        limit(1)
+      )
+    );
+    const first = snap.docs[0];
+    return first ? ({ id: first.id, ...first.data() } as Item) : null;
+  } catch {
+    // Duplicate-check should never block creation flow.
+    return null;
+  }
+}
+
 /** Update editable metadata fields on a published item. */
 export async function updateItem(
   id: string,
-  data: Partial<Pick<Item, "title" | "type" | "creator" | "link" | "tags" | "media_url" | "thumbnail_url" | "source_metadata">>
+  data: Partial<
+    Pick<
+      Item,
+      "title" | "description" | "media_date" | "type" | "creator" | "link" | "tags" | "media_url" | "thumbnail_url" | "source_metadata"
+    >
+  >
 ): Promise<void> {
   if (!db) throw new Error("Firestore not initialised");
-  await updateDoc(doc(db, "items", id), data);
+  const cleaned = Object.fromEntries(
+    Object.entries(data).filter(([, value]) => value !== undefined)
+  );
+  if (Object.keys(cleaned).length === 0) return;
+  await updateDoc(doc(db, "items", id), cleaned);
 }
 
 /** Delete an item from Firestore and remove its audio from Storage. */
@@ -269,7 +327,12 @@ export async function createAndPublishItem(
     voice_recording_url: audioUrl,
     is_draft: false,
   });
-  await trackPublishedTextForUser(userEmail);
+  try {
+    await trackPublishedTextForUser(userEmail);
+  } catch (error) {
+    // Checklist tracking is best-effort and should not block publish.
+    console.warn("[createAndPublishItem] checklist tracking failed", error);
+  }
   queueItemTranscript(draftId, audioUrl);
   console.log("[createAndPublishItem] done", draftId);
 
@@ -302,7 +365,12 @@ export async function publishDraft(
   const draftSnap = await getDoc(doc(db, "items", draftId));
   const addedBy = draftSnap.exists() ? (draftSnap.data().added_by as string | undefined) : undefined;
   if (addedBy) {
-    await trackPublishedTextForUser(addedBy);
+    try {
+      await trackPublishedTextForUser(addedBy);
+    } catch (error) {
+      // Checklist tracking is best-effort and should not block publish.
+      console.warn("[publishDraft] checklist tracking failed", error);
+    }
   }
   if (audioUrl) queueItemTranscript(draftId, audioUrl);
 }
@@ -515,6 +583,37 @@ export async function createConnection(
   return connectionRef.id;
 }
 
+/**
+ * Find an existing connection that has exactly the same set of item IDs.
+ * Returns the connection ID when found, otherwise null.
+ */
+export async function findExistingConnectionByItemIds(itemIds: string[]): Promise<string | null> {
+  if (!db) return null;
+  const target = [...new Set(itemIds)].sort();
+  if (target.length < 2) return null;
+
+  const allJunctions = await getDocs(collection(db, "connection_items"));
+  const byConnection = new Map<string, Set<string>>();
+
+  allJunctions.docs.forEach((docSnap) => {
+    const data = docSnap.data();
+    const connectionId = data.connection_id as string | undefined;
+    const itemId = data.item_id as string | undefined;
+    if (!connectionId || !itemId) return;
+    if (!byConnection.has(connectionId)) byConnection.set(connectionId, new Set());
+    byConnection.get(connectionId)!.add(itemId);
+  });
+
+  for (const [connectionId, itemSet] of byConnection.entries()) {
+    const ids = [...itemSet].sort();
+    if (ids.length !== target.length) continue;
+    if (!ids.every((id, index) => id === target[index])) continue;
+    const connectionSnap = await getDoc(doc(db, "connections", connectionId));
+    if (connectionSnap.exists()) return connectionId;
+  }
+  return null;
+}
+
 /** Real-time listener for all connections, newest-first. */
 export function subscribeToAllConnections(
   callback: (connections: Connection[]) => void
@@ -565,7 +664,7 @@ export async function getConnectionItemIds(connectionId: string): Promise<string
 /** Real-time listener for responses on a connection, newest-first. */
 export function subscribeToResponses(
   connectionId: string,
-  callback: (responses: ItemResponse[]) => void
+  callback: (responses: ConnectionResponse[]) => void
 ): Unsubscribe {
   if (!db) return () => {};
   const q = query(
@@ -574,8 +673,65 @@ export function subscribeToResponses(
   );
   return onSnapshot(
     q,
-    (snap) => { callback(snap.docs.map((d) => ({ id: d.id, ...d.data() }) as ItemResponse)); },
+    (snap) => { callback(snap.docs.map((d) => ({ id: d.id, ...d.data() }) as ConnectionResponse)); },
     (err) => { console.warn("[subscribeToResponses]", err.code); }
+  );
+}
+
+/**
+ * Create an audio response on an item.
+ * Stores audio in Storage, writes response doc, then backfills transcript.
+ */
+export async function addItemResponse(
+  itemId: string,
+  blob: Blob,
+  createdBy: string
+): Promise<string> {
+  if (!db) throw new Error("Firestore not initialised");
+  if (!storage) throw new Error("Storage not initialised");
+
+  const mimeType = blob.type || "audio/webm";
+  const ext = mimeType.includes("mp4")
+    ? "mp4"
+    : mimeType.includes("ogg")
+    ? "ogg"
+    : "webm";
+
+  const responseRef = doc(collection(db, "items", itemId, "responses"));
+  const storageRef = ref(storage, `audio/item_responses/${itemId}/${responseRef.id}.${ext}`);
+  await uploadBytes(storageRef, blob, { contentType: mimeType });
+  const audioUrl = await getDownloadURL(storageRef);
+
+  await setDoc(responseRef, {
+    item_id: itemId,
+    audio_url: audioUrl,
+    transcript: "",
+    created_by: createdBy,
+    created_at: serverTimestamp(),
+  });
+
+  queueItemResponseTranscript(itemId, responseRef.id, audioUrl);
+  return responseRef.id;
+}
+
+/** Real-time listener for responses on an item, newest-first. */
+export function subscribeToItemResponses(
+  itemId: string,
+  callback: (responses: ItemResponse[]) => void
+): Unsubscribe {
+  if (!db) return () => {};
+  const q = query(
+    collection(db, "items", itemId, "responses"),
+    orderBy("created_at", "desc")
+  );
+  return onSnapshot(
+    q,
+    (snap) => {
+      callback(snap.docs.map((d) => ({ id: d.id, ...d.data() }) as ItemResponse));
+    },
+    (err) => {
+      console.warn("[subscribeToItemResponses]", err.code);
+    }
   );
 }
 

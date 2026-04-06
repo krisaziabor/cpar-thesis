@@ -25,20 +25,6 @@ interface OdesliResponse {
   linksByPlatform: Record<string, { url: string; nativeAppUriMobile?: string }>;
 }
 
-const PLATFORM_LABELS: Record<string, string> = {
-  spotify: "Spotify",
-  itunes: "Apple Music",
-  appleMusic: "Apple Music",
-  youtube: "YouTube",
-  youtubeMusic: "YouTube Music",
-  soundcloud: "SoundCloud",
-  tidal: "Tidal",
-  deezer: "Deezer",
-  amazonMusic: "Amazon Music",
-  pandora: "Pandora",
-  napster: "Napster",
-};
-
 // Maps Odesli platform keys → our MusicPlatform slugs
 const ODESLI_TO_PLATFORM: Record<string, string> = {
   spotify: "spotify",
@@ -103,31 +89,73 @@ async function getSpotifyToken(): Promise<string | null> {
 }
 
 interface SpotifyTrackDetails {
+  title: string | null;
+  creator: string | null;
+  thumbnailUrl: string | null;
+  spotifyUrl: string | null;
   previewUrl: string | null;
   albumTitle: string | null;
   year: number | null;
+  releaseDate: string | null;
 }
 
 interface ItunesTrackDetails {
   albumTitle: string | null;
   year: number | null;
+  releaseDate: string | null;
 }
 
 async function fetchSpotifyTrackDetails(spotifyUrl: string): Promise<SpotifyTrackDetails> {
   const token = await getSpotifyToken();
-  if (!token) return { previewUrl: null, albumTitle: null, year: null };
+  if (!token) {
+    return {
+      title: null,
+      creator: null,
+      thumbnailUrl: null,
+      spotifyUrl: null,
+      previewUrl: null,
+      albumTitle: null,
+      year: null,
+      releaseDate: null,
+    };
+  }
 
   const match = spotifyUrl.match(/track\/([A-Za-z0-9]+)/);
-  if (!match) return { previewUrl: null, albumTitle: null, year: null };
+  if (!match) {
+    return {
+      title: null,
+      creator: null,
+      thumbnailUrl: null,
+      spotifyUrl: null,
+      previewUrl: null,
+      albumTitle: null,
+      year: null,
+      releaseDate: null,
+    };
+  }
 
   try {
     const res = await fetch(`https://api.spotify.com/v1/tracks/${match[1]}`, {
       headers: { Authorization: `Bearer ${token}` },
     });
-    if (!res.ok) return { previewUrl: null, albumTitle: null, year: null };
+    if (!res.ok) {
+      return {
+        title: null,
+        creator: null,
+        thumbnailUrl: null,
+        spotifyUrl: null,
+        previewUrl: null,
+        albumTitle: null,
+        year: null,
+        releaseDate: null,
+      };
+    }
     const data = await res.json() as {
+      name?: string;
+      artists?: Array<{ name?: string }>;
+      external_urls?: { spotify?: string };
       preview_url: string | null;
-      album?: { name?: string; release_date?: string };
+      album?: { name?: string; release_date?: string; images?: Array<{ url?: string }> };
     };
 
     const albumTitle =
@@ -140,13 +168,74 @@ async function fetchSpotifyTrackDetails(spotifyUrl: string): Promise<SpotifyTrac
     const year = Number.isFinite(parsedYear) ? parsedYear : null;
 
     return {
+      title: data.name?.trim() || null,
+      creator: data.artists?.map((artist) => artist.name?.trim()).filter(Boolean).join(", ") || null,
+      thumbnailUrl: data.album?.images?.[0]?.url?.trim() || null,
+      spotifyUrl: data.external_urls?.spotify?.trim() || null,
       previewUrl: data.preview_url ?? null,
       albumTitle,
       year,
+      releaseDate: releaseDate || null,
     };
   } catch {
-    return { previewUrl: null, albumTitle: null, year: null };
+    return {
+      title: null,
+      creator: null,
+      thumbnailUrl: null,
+      spotifyUrl: null,
+      previewUrl: null,
+      albumTitle: null,
+      year: null,
+      releaseDate: null,
+    };
   }
+}
+
+function buildFallbackMusicMetadata(url: string, platform: string): CanonItemMetadata {
+  const sourceMetadata: SourceMetadata = {
+    source_type: "music",
+    platform,
+    platforms: [],
+    platform_links: platform ? { [platform]: url } : {},
+  };
+
+  return {
+    title: "Unknown Track",
+    type: "song",
+    creator: "Unknown Artist",
+    link: url,
+    tags: [],
+    source_metadata: sourceMetadata,
+  };
+}
+
+async function fallbackFromSpotifyUrl(url: string, platform: string): Promise<CanonItemMetadata> {
+  const spotifyDetails = await fetchSpotifyTrackDetails(url);
+  if (!spotifyDetails.title && !spotifyDetails.creator) {
+    return buildFallbackMusicMetadata(url, platform);
+  }
+
+  const sourceMetadata: SourceMetadata = {
+    source_type: "music",
+    platform,
+    album: spotifyDetails.albumTitle ?? undefined,
+    release_date: spotifyDetails.releaseDate ?? undefined,
+    year: spotifyDetails.year ?? undefined,
+    published_date: spotifyDetails.releaseDate ?? undefined,
+    preview_url: spotifyDetails.previewUrl ?? undefined,
+    platforms: ["spotify"],
+    platform_links: { spotify: spotifyDetails.spotifyUrl ?? url },
+  };
+
+  return {
+    title: spotifyDetails.title ?? "Unknown Track",
+    type: "song",
+    creator: spotifyDetails.creator ?? "Unknown Artist",
+    link: spotifyDetails.spotifyUrl ?? url,
+    tags: [],
+    thumbnail_url: spotifyDetails.thumbnailUrl ?? undefined,
+    source_metadata: sourceMetadata,
+  };
 }
 
 function extractItunesTrackId(itunesUrl: string): string | null {
@@ -163,18 +252,18 @@ function extractItunesTrackId(itunesUrl: string): string | null {
 }
 
 async function fetchItunesTrackDetails(trackId: string): Promise<ItunesTrackDetails> {
-  if (!trackId) return { albumTitle: null, year: null };
+  if (!trackId) return { albumTitle: null, year: null, releaseDate: null };
   try {
     const res = await fetch(`https://itunes.apple.com/lookup?id=${encodeURIComponent(trackId)}`, {
       headers: { "User-Agent": "Kanon/1.0 (https://kanon.app)" },
     });
-    if (!res.ok) return { albumTitle: null, year: null };
+    if (!res.ok) return { albumTitle: null, year: null, releaseDate: null };
 
     const data = await res.json() as {
       results?: Array<{ collectionName?: string; releaseDate?: string }>;
     };
     const first = data.results?.[0];
-    if (!first) return { albumTitle: null, year: null };
+    if (!first) return { albumTitle: null, year: null, releaseDate: null };
 
     const albumTitle =
       typeof first.collectionName === "string" && first.collectionName.trim()
@@ -183,15 +272,16 @@ async function fetchItunesTrackDetails(trackId: string): Promise<ItunesTrackDeta
     const parsedYear = Number.parseInt((first.releaseDate ?? "").slice(0, 4), 10);
     const year = Number.isFinite(parsedYear) ? parsedYear : null;
 
-    return { albumTitle, year };
+    return { albumTitle, year, releaseDate: first.releaseDate ?? null };
   } catch {
-    return { albumTitle: null, year: null };
+    return { albumTitle: null, year: null, releaseDate: null };
   }
 }
 
 // ─── Main handler ─────────────────────────────────────────────────────────────
 
 export async function fetchMusicMetadata(url: string): Promise<CanonItemMetadata> {
+  const platform = detectPlatform(url);
   const apiUrl = `${ODESLI_BASE}?url=${encodeURIComponent(url)}&userCountry=US`;
 
   const res = await fetch(apiUrl, {
@@ -199,6 +289,14 @@ export async function fetchMusicMetadata(url: string): Promise<CanonItemMetadata
   });
 
   if (!res.ok) {
+    // Odesli can rate-limit aggressively. Fallback to direct Spotify lookup (if possible)
+    // or return minimal music metadata so add flow can continue.
+    if (res.status === 429 || res.status >= 500) {
+      if (platform === "spotify") {
+        return fallbackFromSpotifyUrl(url, platform);
+      }
+      return buildFallbackMusicMetadata(url, platform);
+    }
     throw new Error(`Odesli API error ${res.status} for URL: ${url}`);
   }
 
@@ -209,8 +307,6 @@ export async function fetchMusicMetadata(url: string): Promise<CanonItemMetadata
     throw new Error("Odesli returned no entity data");
   }
 
-  const platform = detectPlatform(url);
-
   // Build normalised platform_links (our MusicPlatform slugs → URL)
   const platform_links: Record<string, string> = {};
   for (const [key, val] of Object.entries(data.linksByPlatform)) {
@@ -220,16 +316,20 @@ export async function fetchMusicMetadata(url: string): Promise<CanonItemMetadata
     }
   }
 
-  // Tags from recognisable platform names
-  const platformTags = Object.keys(data.linksByPlatform)
-    .map((p) => PLATFORM_LABELS[p])
-    .filter((label): label is string => Boolean(label));
-
   // Try to fetch Spotify details (silent fail): preview, album, release year.
   const spotifyUrl = data.linksByPlatform.spotify?.url;
   const spotifyDetails = spotifyUrl
     ? await fetchSpotifyTrackDetails(spotifyUrl)
-    : { previewUrl: null, albumTitle: null, year: null };
+    : {
+        title: null,
+        creator: null,
+        thumbnailUrl: null,
+        spotifyUrl: null,
+        previewUrl: null,
+        albumTitle: null,
+        year: null,
+        releaseDate: null,
+      };
   const preview_url = spotifyDetails.previewUrl ?? undefined;
 
   const itunesUrl = data.linksByPlatform.itunes?.url ?? data.linksByPlatform.appleMusic?.url;
@@ -240,19 +340,22 @@ export async function fetchMusicMetadata(url: string): Promise<CanonItemMetadata
       : null);
   const itunesDetails = itunesTrackId
     ? await fetchItunesTrackDetails(itunesTrackId)
-    : { albumTitle: null, year: null };
+    : { albumTitle: null, year: null, releaseDate: null };
 
   const albumTitle =
     spotifyDetails.albumTitle ??
     itunesDetails.albumTitle ??
     (entity.type === "album" ? entity.title : undefined);
   const releaseYear = spotifyDetails.year ?? itunesDetails.year ?? undefined;
+  const releaseDate = spotifyDetails.releaseDate ?? itunesDetails.releaseDate ?? undefined;
 
   const sourceMetadata: SourceMetadata = {
     source_type: "music",
     platform,
     album: albumTitle,
+    release_date: releaseDate,
     year: releaseYear,
+    published_date: releaseDate,
     platforms: Object.keys(data.linksByPlatform),
     song_link_url: data.pageUrl,
     preview_url,
@@ -265,7 +368,7 @@ export async function fetchMusicMetadata(url: string): Promise<CanonItemMetadata
     type: "song",
     creator: entity.artistName ?? "Unknown Artist",
     link: data.pageUrl,
-    tags: platformTags.slice(0, 6),
+    tags: [],
     thumbnail_url: entity.thumbnailUrl,
     source_metadata: sourceMetadata,
   };
