@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { motion } from "framer-motion";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
@@ -382,11 +381,7 @@ export default function ItemPanel({ itemId }: { itemId: string }) {
   }
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.22, ease: [0.215, 0.61, 0.355, 1] }}
-    >
+    <div>
       {/* ─── Top media — full bleed ──────────────────────────── */}
       {topIsVideo && (
         <VideoMediaPlayer url={item.media_url!} title={item.title} />
@@ -682,6 +677,6 @@ export default function ItemPanel({ itemId }: { itemId: string }) {
         {/* Bottom padding for floating nav clearance */}
         <div className="h-16" />
       </div>
-    </motion.div>
+    </div>
   );
 }

@@ -6,6 +6,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { useAuth } from "@/lib/auth-context";
 import { useSequenceReplayNonce, useSequenceTimings } from "@/lib/sequence-dialkit";
+import { EASE_OUT, MOTION_DURATION } from "@/lib/motion";
 
 export default function FloatingNav() {
   const { user } = useAuth();
@@ -70,7 +71,7 @@ export default function FloatingNav() {
       animate={{ opacity: 1, y: 0 }}
       transition={{
         duration: shouldReduceMotion ? 0 : timings.bottomEnterMs / 1000,
-        ease: [0.215, 0.61, 0.355, 1],
+        ease: EASE_OUT,
         delay: enterDelay,
       }}
       className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2"
@@ -84,7 +85,7 @@ export default function FloatingNav() {
               initial={{ height: 0, opacity: 0 }}
               animate={{ height: "auto", opacity: 1 }}
               exit={{ height: 0, opacity: 0 }}
-              transition={{ duration: 0.22, ease: [0.215, 0.61, 0.355, 1] }}
+              transition={{ duration: MOTION_DURATION.standard, ease: EASE_OUT }}
               className="overflow-hidden border-b border-zinc-800"
             >
               <div className="flex flex-col gap-2 px-4 py-3">
@@ -130,7 +131,7 @@ export default function FloatingNav() {
               initial={{ opacity: 0, y: 4 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 4 }}
-              transition={{ duration: 0.2, ease: [0.215, 0.61, 0.355, 1] }}
+              transition={{ duration: MOTION_DURATION.standard, ease: EASE_OUT }}
               className="flex items-stretch divide-x divide-zinc-800 font-lector"
             >
               <button
@@ -189,7 +190,7 @@ export default function FloatingNav() {
               initial={{ opacity: 0, y: 4 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 4 }}
-              transition={{ duration: 0.2, ease: [0.215, 0.61, 0.355, 1] }}
+              transition={{ duration: MOTION_DURATION.standard, ease: EASE_OUT }}
               className="w-full px-5 py-2.5 text-center font-lector text-sm tracking-tight text-zinc-300 transition-colors hover:bg-zinc-900 hover:text-zinc-50"
             >
               Kanon

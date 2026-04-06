@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
-import { motion } from "framer-motion";
 import { useAuth } from "@/lib/auth-context";
 import {
   subscribeToItems,
@@ -215,12 +214,7 @@ export default function ActivityPanel() {
   }
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.22, ease: [0.215, 0.61, 0.355, 1] }}
-      className="space-y-5 px-6 py-6"
-    >
+    <div className="space-y-5 px-6 py-6">
       <div className="space-y-1">
         <p className="font-lector text-base text-zinc-300">Activity</p>
         <p className="text-xs text-zinc-500">
@@ -324,6 +318,6 @@ export default function ActivityPanel() {
 
       {/* Bottom padding for floating nav clearance */}
       <div className="h-16" />
-    </motion.div>
+    </div>
   );
 }

@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { motion, useReducedMotion } from "framer-motion";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { useAuth } from "@/lib/auth-context";
 import AudioRecorder from "@/components/AudioRecorder";
 import {
@@ -22,6 +22,7 @@ import { isDownloadableVideoPageUrl } from "@/lib/metadata/classify";
 import type { MetadataResult, SourceMetadata } from "@/lib/metadata/types";
 import { mirrorPreviewAudio, mirrorThumbnail, mirrorVideo, uploadBase64Thumbnail } from "@/lib/media-upload";
 import type { Item } from "@/lib/types";
+import { EASE_OUT, MOTION_DURATION } from "@/lib/motion";
 
 type Step = "source" | "details" | "record";
 type Destination = "holding" | "library";
@@ -711,7 +712,7 @@ function AddItemPageInner({
         <motion.div
           initial={shouldReduceMotion ? false : { opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: shouldReduceMotion ? 0 : 0.18, ease: [0.215, 0.61, 0.355, 1] }}
+          transition={{ duration: shouldReduceMotion ? 0 : MOTION_DURATION.standard, ease: EASE_OUT }}
           className="space-y-2"
         >
           <p className="text-sm text-zinc-300">Submitting…</p>
@@ -732,7 +733,7 @@ function AddItemPageInner({
             initial={shouldReduceMotion ? false : { opacity: 0, y: -4 }}
             animate={{ opacity: 1, y: 0 }}
             exit={shouldReduceMotion ? undefined : { opacity: 0, y: -4 }}
-            transition={{ duration: shouldReduceMotion ? 0 : 0.18, ease: [0.215, 0.61, 0.355, 1] }}
+            transition={{ duration: shouldReduceMotion ? 0 : MOTION_DURATION.standard, ease: EASE_OUT }}
             className="mb-4 rounded-md border border-zinc-800 bg-zinc-950/95 p-3"
           >
             <p className="font-sans text-sm text-zinc-100">Save this as a draft before closing?</p>
@@ -777,8 +778,16 @@ function AddItemPageInner({
           </motion.div>
         )}
 
+        <AnimatePresence initial={false} mode="wait">
         {step === "source" && (
-          <div className="space-y-5">
+          <motion.section
+            key="add-step-source"
+            initial={shouldReduceMotion ? false : { opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={shouldReduceMotion ? { opacity: 1, y: 0 } : { opacity: 0, y: -6 }}
+            transition={{ duration: shouldReduceMotion ? 0 : MOTION_DURATION.standard, ease: EASE_OUT }}
+            className="space-y-5"
+          >
             <div>
               <h1 className="font-lector text-lg text-zinc-100">Add record(s)</h1>
               <p className="mt-1 text-xs text-zinc-500">
@@ -882,7 +891,7 @@ function AddItemPageInner({
               <motion.div
                 initial={shouldReduceMotion ? false : { opacity: 0, y: 6 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: shouldReduceMotion ? 0 : 0.2, ease: [0.215, 0.61, 0.355, 1] }}
+                transition={{ duration: shouldReduceMotion ? 0 : MOTION_DURATION.standard, ease: EASE_OUT }}
                 className="space-y-2 border-t border-zinc-800 pt-3"
               >
                 {queuedItems.map((item, idx) => (
@@ -944,11 +953,18 @@ function AddItemPageInner({
                 {fetching ? "Fetching…" : "Next"}
               </button>
             </div>
-          </div>
+          </motion.section>
         )}
 
         {step === "details" && (
-          <div className="space-y-5">
+          <motion.section
+            key="add-step-details"
+            initial={shouldReduceMotion ? false : { opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={shouldReduceMotion ? { opacity: 1, y: 0 } : { opacity: 0, y: -6 }}
+            transition={{ duration: shouldReduceMotion ? 0 : MOTION_DURATION.standard, ease: EASE_OUT }}
+            className="space-y-5"
+          >
             <div>
               <h1 className="font-lector text-base text-zinc-100">Edit record details</h1>
               {queuedItems.length > 1 && (
@@ -1161,11 +1177,18 @@ function AddItemPageInner({
                 {detailsIndex < queuedItems.length - 1 ? "Next record" : "Add narrative"}
               </button>
             </div>
-          </div>
+          </motion.section>
         )}
 
         {step === "record" && (
-          <div className="space-y-5">
+          <motion.section
+            key="add-step-record"
+            initial={shouldReduceMotion ? false : { opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={shouldReduceMotion ? { opacity: 1, y: 0 } : { opacity: 0, y: -6 }}
+            transition={{ duration: shouldReduceMotion ? 0 : MOTION_DURATION.standard, ease: EASE_OUT }}
+            className="space-y-5"
+          >
             <div>
               <h1 className="text-base font-medium text-zinc-100">Record narratives</h1>
               <p className="mt-1 text-xs text-zinc-500">
@@ -1246,8 +1269,9 @@ function AddItemPageInner({
                 </button>
               )}
             </div>
-          </div>
+          </motion.section>
         )}
+        </AnimatePresence>
 
         {showDraftsSection && (
           <section className="mt-8 border-t border-zinc-800 pt-4">

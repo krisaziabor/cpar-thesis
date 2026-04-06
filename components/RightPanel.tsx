@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect } from "react";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import { EASE_OUT, MOTION_DURATION } from "@/lib/motion";
 
 interface RightPanelProps {
   title?: string;
@@ -20,6 +21,8 @@ export default function RightPanel({
   onClose,
   children,
 }: RightPanelProps) {
+  const shouldReduceMotion = useReducedMotion();
+
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
@@ -32,10 +35,10 @@ export default function RightPanel({
     /* No backdrop — panel floats over canvas so other nodes remain clickable */
     <motion.div
       className="fixed bottom-4 right-4 top-4 z-50 flex w-[460px] max-w-[92vw] flex-col overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-950 shadow-[0_20px_60px_rgba(0,0,0,0.7)]"
-      initial={{ opacity: 0, x: 24 }}
+      initial={shouldReduceMotion ? false : { opacity: 0, x: 24 }}
       animate={{ opacity: 1, x: 0 }}
-      exit={{ opacity: 0, x: 24 }}
-      transition={{ duration: 0.25, ease: [0.215, 0.61, 0.355, 1] }}
+      exit={shouldReduceMotion ? { opacity: 1, x: 0 } : { opacity: 0, x: 24 }}
+      transition={{ duration: shouldReduceMotion ? 0 : MOTION_DURATION.panel, ease: EASE_OUT }}
     >
       {/* Header */}
       <div className="relative flex shrink-0 items-center justify-between border-b border-zinc-800 px-5 py-3">
@@ -55,7 +58,7 @@ export default function RightPanel({
                 initial={{ opacity: 0, x: -6 }}
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -6 }}
-                transition={{ duration: 0.16, ease: [0.215, 0.61, 0.355, 1] }}
+                transition={{ duration: shouldReduceMotion ? 0 : MOTION_DURATION.fast, ease: EASE_OUT }}
                 className="shrink-0 text-base leading-none text-zinc-500 transition-colors hover:text-zinc-200"
               >
                 ←
