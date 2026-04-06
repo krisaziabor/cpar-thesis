@@ -172,7 +172,10 @@ export async function setItemAudioUrl(itemId: string, url: string): Promise<void
 }
 
 /** Real-time listener for all *published* items, newest-first. */
-export function subscribeToItems(callback: (items: Item[]) => void): Unsubscribe {
+export function subscribeToItems(
+  callback: (items: Item[]) => void,
+  onError?: (error: { code?: string; message?: string }) => void
+): Unsubscribe {
   if (!db) return () => {};
   const q = query(
     collection(db, "items"),
@@ -182,7 +185,10 @@ export function subscribeToItems(callback: (items: Item[]) => void): Unsubscribe
   return onSnapshot(
     q,
     (snap) => { callback(snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Item)); },
-    (err) => { console.warn("[subscribeToItems]", err.code); }
+    (err) => {
+      console.warn("[subscribeToItems]", err.code);
+      onError?.({ code: err.code, message: err.message });
+    }
   );
 }
 
