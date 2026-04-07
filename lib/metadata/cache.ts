@@ -70,7 +70,17 @@ export async function getCachedMetadata(url: string): Promise<CanonItemMetadata 
     // stale entries so fresh fetch is attempted first
     if (ageDays > CACHE_TTL_DAYS) return null;
 
-    return entry.metadata;
+    const metadata = entry.metadata;
+    const sourceType = metadata.source_metadata?.source_type;
+    const publishedDate = metadata.source_metadata?.published_date?.trim();
+
+    // Backfill path: old YouTube cache entries may predate published_date support.
+    // Force a refresh once so the date can be recovered and recached.
+    if (sourceType === "youtube" && !publishedDate) {
+      return null;
+    }
+
+    return metadata;
   } catch {
     return null;
   }

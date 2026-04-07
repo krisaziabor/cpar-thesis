@@ -33,6 +33,7 @@ interface YouTubeApiVideo {
     description?: string;
     channelTitle?: string;
     channelId?: string;
+    publishedAt?: string;
     tags?: string[];
     thumbnails?: {
       maxres?: { url: string };
@@ -64,6 +65,7 @@ export async function fetchYouTubeMetadata(url: string): Promise<CanonItemMetada
   let title = oembed.title;
   let channel = oembed.author_name;
   let thumbnailUrl: string = oembed.thumbnail_url;
+  let publishedDate: string | undefined;
   let tags: string[] = [];
 
   // YouTube Data API v3 — optional, unlocks description / tags / duration / stats
@@ -81,6 +83,7 @@ export async function fetchYouTubeMetadata(url: string): Promise<CanonItemMetada
         const s = video.snippet;
         title = s.title ?? title;
         channel = s.channelTitle ?? channel;
+        publishedDate = normalizeYouTubeDate(s.publishedAt) ?? publishedDate;
         thumbnailUrl =
           s.thumbnails?.maxres?.url ??
           s.thumbnails?.high?.url ??
@@ -92,6 +95,7 @@ export async function fetchYouTubeMetadata(url: string): Promise<CanonItemMetada
           ...sourceMetadata,
           channel,
           channel_id: s.channelId,
+          published_date: publishedDate,
           description: s.description?.slice(0, 500),
           duration_seconds: parseDuration(video.contentDetails?.duration),
           view_count: video.statistics?.viewCount
@@ -108,10 +112,25 @@ export async function fetchYouTubeMetadata(url: string): Promise<CanonItemMetada
   // Get direct video download URL via ytdl-core (no API key needed)
   let videoDownloadUrl: string | undefined;
   try {
-    videoDownloadUrl = await getDirectVideoUrl(url);
+    const directInfo = await getDirectVideoInfo(url);
+    videoDownloadUrl = directInfo.url;
+    if (!publishedDate && directInfo.publishedDate) {
+      publishedDate = directInfo.publishedDate;
+    }
   } catch (err) {
     console.warn("[youtube] Could not get direct video URL:", err);
   }
+
+  // Final fallback for cases where APIs and ytdl cannot provide the date.
+  if (!publishedDate) {
+    publishedDate = await fetchYouTubePublishedDateFromWatchPage(videoId);
+  }
+
+  sourceMetadata = {
+    ...sourceMetadata,
+    channel,
+    published_date: publishedDate,
+  };
 
   return {
     title,
@@ -128,14 +147,39 @@ export async function fetchYouTubeMetadata(url: string): Promise<CanonItemMetada
 // ─── Video download ───────────────────────────────────────────────────────────
 
 /** Returns the highest-quality direct video URL (temporary YouTube CDN link). */
-async function getDirectVideoUrl(url: string): Promise<string> {
+async function getDirectVideoInfo(
+  url: string
+): Promise<{ url?: string; publishedDate?: string }> {
   const ytdl = await import("@distube/ytdl-core");
   const info = await ytdl.default.getInfo(url);
-  const format = ytdl.default.chooseFormat(info.formats, {
-    quality: "highestvideo",
-    filter: "audioandvideo",
-  });
-  return format.url;
+
+  const videoDetails = info.videoDetails as { publishDate?: string; uploadDate?: string };
+  const playerResponse = info.player_response as {
+    microformat?: {
+      playerMicroformatRenderer?: {
+        publishDate?: string;
+        uploadDate?: string;
+      };
+    };
+  };
+
+  const publishedDate =
+    normalizeYouTubeDate(videoDetails.publishDate) ??
+    normalizeYouTubeDate(videoDetails.uploadDate) ??
+    normalizeYouTubeDate(playerResponse.microformat?.playerMicroformatRenderer?.publishDate) ??
+    normalizeYouTubeDate(playerResponse.microformat?.playerMicroformatRenderer?.uploadDate);
+  let urlResult: string | undefined;
+  try {
+    const format = ytdl.default.chooseFormat(info.formats, {
+      quality: "highestvideo",
+      filter: "audioandvideo",
+    });
+    urlResult = format.url;
+  } catch {
+    // Keep published date even if we cannot derive a direct stream URL.
+  }
+
+  return { url: urlResult, publishedDate };
 }
 
 /**
@@ -188,4 +232,38 @@ function parseDuration(iso?: string): number | undefined {
     (parseInt(m[2] ?? "0", 10) * 60) +
     parseInt(m[3] ?? "0", 10)
   );
+}
+
+function normalizeYouTubeDate(raw?: string): string | undefined {
+  if (!raw) return undefined;
+  const value = raw.trim();
+  if (!value) return undefined;
+  if (/^\d{4}-\d{2}-\d{2}/.test(value)) return value;
+  if (/^\d{8}$/.test(value)) {
+    return `${value.slice(0, 4)}-${value.slice(4, 6)}-${value.slice(6, 8)}`;
+  }
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return undefined;
+  return parsed.toISOString();
+}
+
+async function fetchYouTubePublishedDateFromWatchPage(videoId: string): Promise<string | undefined> {
+  try {
+    const watchUrl = `https://www.youtube.com/watch?v=${videoId}`;
+    const res = await fetch(watchUrl, {
+      headers: { "User-Agent": "Mozilla/5.0 (compatible; kanon-metadata/1.0)" },
+    });
+    if (!res.ok) return undefined;
+
+    const html = await res.text();
+    const match =
+      html.match(/itemprop="datePublished"\s+content="([^"]+)"/i) ??
+      html.match(/"uploadDate":"([^"]+)"/i) ??
+      html.match(/"datePublished":"([^"]+)"/i);
+
+    return normalizeYouTubeDate(match?.[1]);
+  } catch {
+    return undefined;
+  }
 }
