@@ -7,6 +7,7 @@ import { fetchInstagramMetadata, fetchTikTokMetadata, fetchTwitterMetadata } fro
 import { fetchUrlMetadata } from "./handlers/url";
 import { fetchImageMetadata } from "./handlers/image";
 import { fetchNewsMetadata } from "./handlers/news";
+import { fetchMediaFileMetadata } from "./handlers/media-file";
 import { scoreMetadata, AI_CONFIDENCE_THRESHOLD } from "./score";
 import { getCachedMetadata, setCachedMetadata, logEnrichment } from "./cache";
 import { aiEnrichMetadata, mergeMetadata } from "./ai-enrich";
@@ -35,6 +36,13 @@ export async function runMetadataPipeline(
           break;
         case "image":
           metadata = await fetchImageMetadata(input.file.buffer, input.file.name);
+          break;
+        case "audio":
+        case "video":
+          metadata = await fetchMediaFileMetadata(
+            { name: input.file.name, type: input.file.type },
+            sourceType
+          );
           break;
         default:
           throw new Error(`Unsupported file type: ${input.file.type}`);

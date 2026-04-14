@@ -1,0 +1,139 @@
+import {
+  doc,
+  getDoc,
+  onSnapshot,
+  setDoc,
+  serverTimestamp,
+  type Unsubscribe,
+} from "firebase/firestore";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { db, storage } from "./firebase";
+import type { InstallationOnboarding, OnboardingStep } from "./types";
+
+const COLLECTION = "installation_onboarding";
+
+function docId(email: string): string {
+  return email.trim().toLowerCase();
+}
+
+function docRef(email: string) {
+  if (!db) throw new Error("Firestore not initialised");
+  return doc(db, COLLECTION, docId(email));
+}
+
+/** Derive which step the user should see next based on saved progress. */
+export function currentStep(data: InstallationOnboarding | null): OnboardingStep {
+  if (!data) return "media_opt_in";
+  if (data.completed_at) return "complete";
+  if (data.media_opt_in_at == null) return "media_opt_in";
+  if (data.book_submitted_at == null) return "book_text";
+  if (data.contact_submitted_at == null) return "contact";
+  return "complete";
+}
+
+/** Fetch the user's onboarding doc (null if they haven't started). */
+export async function getOnboarding(
+  email: string
+): Promise<InstallationOnboarding | null> {
+  if (!db) return null;
+  const snap = await getDoc(docRef(email));
+  if (!snap.exists()) return null;
+  return { id: snap.id, ...snap.data() } as InstallationOnboarding;
+}
+
+/** Real-time subscription to onboarding progress. */
+export function subscribeToOnboarding(
+  email: string,
+  cb: (data: InstallationOnboarding | null) => void
+): Unsubscribe {
+  if (!db) {
+    cb(null);
+    return () => {};
+  }
+  return onSnapshot(docRef(email), (snap) => {
+    if (!snap.exists()) {
+      cb(null);
+      return;
+    }
+    cb({ id: snap.id, ...snap.data() } as InstallationOnboarding);
+  });
+}
+
+/** Step 1 — save media opt-in decision. */
+export async function submitMediaOptIn(
+  email: string,
+  name: string,
+  optIn: boolean
+): Promise<void> {
+  if (!db) return;
+  await setDoc(
+    docRef(email),
+    {
+      user_email: email,
+      user_name: name,
+      media_opt_in: optIn,
+      media_opt_in_at: serverTimestamp(),
+      created_at: serverTimestamp(),
+      updated_at: serverTimestamp(),
+    },
+    { merge: true }
+  );
+}
+
+/** Upload the formatting PDF to Storage and return the download URL. */
+async function uploadBookPdf(
+  email: string,
+  file: File
+): Promise<string> {
+  if (!storage) throw new Error("Firebase Storage not initialised");
+  const path = `files/book-submissions/${docId(email)}/${file.name}`;
+  const storageRef = ref(storage, path);
+  await uploadBytes(storageRef, file);
+  return getDownloadURL(storageRef);
+}
+
+/** Step 2 — save book text (and optional formatting PDF). */
+export async function submitBookText(
+  email: string,
+  title: string,
+  date: string | undefined,
+  text: string,
+  pdfFile?: File | null
+): Promise<void> {
+  if (!db) return;
+
+  let pdfUrl: string | undefined;
+  if (pdfFile) {
+    pdfUrl = await uploadBookPdf(email, pdfFile);
+  }
+
+  const payload: Record<string, unknown> = {
+    book_title: title,
+    book_text: text,
+    book_submitted_at: serverTimestamp(),
+    updated_at: serverTimestamp(),
+  };
+  if (date) payload.book_date = date;
+  if (pdfUrl) payload.book_pdf_url = pdfUrl;
+
+  await setDoc(docRef(email), payload, { merge: true });
+}
+
+/** Step 3 — save contact preferences and mark flow complete. */
+export async function submitContactAndComplete(
+  email: string,
+  contactMethod: "email" | "text",
+  phoneNumber?: string
+): Promise<void> {
+  if (!db) return;
+
+  const payload: Record<string, unknown> = {
+    preferred_contact_method: contactMethod,
+    contact_submitted_at: serverTimestamp(),
+    completed_at: serverTimestamp(),
+    updated_at: serverTimestamp(),
+  };
+  if (phoneNumber) payload.phone_number = phoneNumber;
+
+  await setDoc(docRef(email), payload, { merge: true });
+}

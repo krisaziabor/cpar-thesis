@@ -1,5 +1,7 @@
 export type SourceType =
   | "pdf"
+  | "audio"
+  | "video"
   | "doi"
   | "youtube"
   | "music"

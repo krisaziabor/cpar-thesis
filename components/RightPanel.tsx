@@ -11,6 +11,8 @@ interface RightPanelProps {
   onBack?: () => void;
   onClose: () => void;
   children: React.ReactNode;
+  /** When true the body area will not scroll; the child is responsible for its own overflow. */
+  disableBodyScroll?: boolean;
 }
 
 export default function RightPanel({
@@ -20,6 +22,7 @@ export default function RightPanel({
   onBack,
   onClose,
   children,
+  disableBodyScroll,
 }: RightPanelProps) {
   const shouldReduceMotion = useReducedMotion();
 
@@ -80,8 +83,8 @@ export default function RightPanel({
         {headerActions && <div className="ml-4 shrink-0">{headerActions}</div>}
       </div>
 
-      {/* Scrollable body */}
-      <div className="flex-1 overflow-y-auto">
+      {/* Body */}
+      <div className={`flex-1 ${disableBodyScroll ? "overflow-hidden" : "overflow-y-auto"}`}>
         {children}
       </div>
     </motion.div>

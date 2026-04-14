@@ -1,10 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
+
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { useAuth } from "@/lib/auth-context";
+import { useNavGuard } from "@/lib/nav-guard-context";
 import { useSequenceReplayNonce, useSequenceTimings } from "@/lib/sequence-dialkit";
 import { EASE_OUT, MOTION_DURATION } from "@/lib/motion";
 
@@ -16,6 +17,7 @@ export default function FloatingNav() {
   const shouldReduceMotion = useReducedMotion();
   const timings = useSequenceTimings();
   const replayNonce = useSequenceReplayNonce();
+  const { navigateWithGuard } = useNavGuard();
   const [expanded, setExpanded] = useState(false);
 
   const panel = searchParams.get("panel");
@@ -33,14 +35,14 @@ export default function FloatingNav() {
   const isHoldingActive = (pathname === "/" && panel === "holds") || pathname.startsWith("/kanon");
   const holdingHref = "/?panel=holds";
 
-  if (!user || pathname === "/login" || pathname === "/colophon") return null;
+  if (!user || pathname === "/login" || pathname === "/colophon" || pathname === "/onboarding") return null;
 
   const enterDelay = pathname === "/" && !shouldReduceMotion
     ? Math.max(0, timings.bottomStartMs + timings.navDelayMs) / 1000
     : 0;
 
   function handleTabPress(isActive: boolean, href: string) {
-    router.push(isActive ? "/" : href);
+    navigateWithGuard(isActive ? "/" : href);
   }
 
   function handleConnectCancel() {
@@ -158,14 +160,14 @@ export default function FloatingNav() {
               >
                 Search
               </button>
-              <Link
-                href={holdingHref}
+              <button
+                onClick={() => handleTabPress(isHoldingActive, holdingHref)}
                 className={`px-4 py-2.5 text-sm whitespace-nowrap transition-colors hover:bg-zinc-900 hover:text-zinc-50 ${
                   isHoldingActive ? "font-medium text-zinc-300" : "text-zinc-400"
                 }`}
               >
                 Hold
-              </Link>
+              </button>
               <button
                 onClick={() => handleTabPress(isActivityActive, "/?panel=activity")}
                 className={`px-4 py-2.5 text-sm whitespace-nowrap transition-colors hover:bg-zinc-900 hover:text-zinc-50 ${

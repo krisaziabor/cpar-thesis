@@ -3,10 +3,12 @@ import {
   addDoc,
   deleteDoc,
   doc,
+  getDocs,
   onSnapshot,
   query,
   where,
   orderBy,
+  limit,
   serverTimestamp,
   type Unsubscribe,
 } from "firebase/firestore";
@@ -128,4 +130,30 @@ export function subscribeToItemHolders(
       .filter((email): email is string => typeof email === "string" && email.length > 0);
     cb([...new Set(emails)]);
   });
+}
+
+/** One-time check: is a specific item/connection already saved by this user? */
+export async function hasKanonSave(
+  userEmail: string,
+  referenceType: "item" | "connection",
+  referenceId: string
+): Promise<boolean> {
+  if (!db) return false;
+  const normalizedEmail = userEmail.trim();
+  const normalizedReferenceId = referenceId.trim();
+  if (!normalizedEmail || !normalizedReferenceId) return false;
+  try {
+    const snap = await getDocs(
+      query(
+        collection(db, KANON_SAVES),
+        where("user_email", "==", normalizedEmail),
+        where("reference_type", "==", referenceType),
+        where("reference_id", "==", normalizedReferenceId),
+        limit(1)
+      )
+    );
+    return !snap.empty;
+  } catch {
+    return false;
+  }
 }

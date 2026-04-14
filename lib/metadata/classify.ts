@@ -160,6 +160,18 @@ export function classifyFile(file: { name: string; type: string }): SourceType {
 
   if (mime === "application/pdf" || ext === "pdf") return "pdf";
   if (
+    mime.startsWith("audio/") ||
+    ["mp3", "wav", "m4a", "aac", "flac", "ogg", "opus", "aif", "aiff"].includes(ext)
+  ) {
+    return "audio";
+  }
+  if (
+    mime.startsWith("video/") ||
+    ["mp4", "m4v", "mov", "webm", "mkv", "avi", "wmv", "mpeg", "mpg"].includes(ext)
+  ) {
+    return "video";
+  }
+  if (
     mime.startsWith("image/") ||
     ["jpg", "jpeg", "png", "gif", "webp", "avif", "svg"].includes(ext)
   ) {
