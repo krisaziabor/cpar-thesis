@@ -1609,7 +1609,7 @@ function AddItemPageInner({
                                 disabled={duplicatePrompt.libraryItemAlreadyInHold}
                                 onClick={async () => {
                                   try {
-                                    await saveToKanon(user.email, "item", duplicatePrompt.libraryItemId!);
+                                    await saveToKanon(user.email!, "item", duplicatePrompt.libraryItemId!);
                                     setQueuedItems((prev) =>
                                       prev.filter((queuedItem) => queuedItem.id !== duplicatePrompt.targetQueueItemId)
                                     );
