@@ -59,6 +59,7 @@ function HomeInner() {
   const [addPanelBackSignal, setAddPanelBackSignal] = useState(0);
   const [addPanelCloseSignal, setAddPanelCloseSignal] = useState(0);
   const [addPanelCanGoBack, setAddPanelCanGoBack] = useState(false);
+  const [addPanelSourceScrollLocked, setAddPanelSourceScrollLocked] = useState(true);
   const [addPanelHasUnsaved, setAddPanelHasUnsaved] = useState(false);
   const [pendingNavAfterAddClose, setPendingNavAfterAddClose] = useState<string | null>(null);
   const [{ isFirst, shuffleSeed }] = useState<{
@@ -101,6 +102,10 @@ function HomeInner() {
     });
     return () => unregisterGuard();
   }, [panelMode, addPanelHasUnsaved, registerGuard, unregisterGuard]);
+
+  useEffect(() => {
+    if (panelMode !== "add") setAddPanelSourceScrollLocked(true);
+  }, [panelMode]);
 
   useEffect(() => {
     return subscribeToItems(
@@ -392,7 +397,7 @@ function HomeInner() {
             onBack={addPanelCanGoBack ? () => setAddPanelBackSignal((prev) => prev + 1) : undefined}
             onClose={() => setAddPanelCloseSignal((prev) => prev + 1)}
             progressPercent={addProgressPercent}
-            disableBodyScroll
+            disableBodyScroll={addPanelSourceScrollLocked}
           >
             <AddItemPageInnerWithSuspense
               onProgressChange={setAddProgressPercent}
@@ -406,6 +411,7 @@ function HomeInner() {
               }}
               onCanGoBackChange={setAddPanelCanGoBack}
               onHasUnsavedProgressChange={setAddPanelHasUnsaved}
+              onSourceStepScrollLockChange={setAddPanelSourceScrollLocked}
             />
           </RightPanel>
         )}

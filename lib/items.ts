@@ -77,6 +77,7 @@ export async function uploadItemFile(file: File, itemId: string): Promise<string
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type ItemFields = Pick<Item, "title" | "description" | "media_date" | "type" | "creator" | "tags" | "added_by" | "media_url"> & {
+  encountered_source?: string;
   link?: string;
   thumbnail_url?: string;
   source_metadata?: SourceMetadata;

@@ -33,6 +33,7 @@ export interface Item {
   id: string;
   title: string;
   description?: string;
+  encountered_source?: string;
   /** Original date of the media/record (free-text: year, month/year, or full date). */
   media_date?: string;
   type: string;
