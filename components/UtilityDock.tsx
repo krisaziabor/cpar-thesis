@@ -6,6 +6,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { useAuth } from "@/lib/auth-context";
 import { useSequenceReplayNonce, useSequenceTimings } from "@/lib/sequence-dialkit";
+import { EASE_OUT, MOTION_DURATION } from "@/lib/motion";
 
 export default function UtilityDock() {
   const { user, role, signOut } = useAuth();
@@ -22,7 +23,7 @@ export default function UtilityDock() {
     "friend";
   const userInitial = displayName.charAt(0).toUpperCase();
 
-  if (!user || pathname === "/login") return null;
+  if (!user || pathname === "/login" || pathname === "/onboarding") return null;
 
   const enterDelay = pathname === "/" && !shouldReduceMotion
     ? Math.max(0, timings.bottomStartMs + timings.utilityDelayMs) / 1000
@@ -42,7 +43,7 @@ export default function UtilityDock() {
       animate={{ opacity: 1, y: 0 }}
       transition={{
         duration: shouldReduceMotion ? 0 : timings.bottomEnterMs / 1000,
-        ease: [0.215, 0.61, 0.355, 1],
+        ease: EASE_OUT,
         delay: enterDelay,
       }}
       className="fixed bottom-6 left-6 z-50"
@@ -53,7 +54,7 @@ export default function UtilityDock() {
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 6 }}
-            transition={{ duration: 0.22, ease: [0.215, 0.61, 0.355, 1] }}
+            transition={{ duration: MOTION_DURATION.standard, ease: EASE_OUT }}
             className="mb-3 w-[17rem] overflow-hidden rounded-lg border border-zinc-800 bg-zinc-950 shadow-[0_4px_24px_rgba(0,0,0,0.5)]"
           >
             <div className="border-b border-zinc-800 px-4 py-2 text-[11px] text-zinc-500">

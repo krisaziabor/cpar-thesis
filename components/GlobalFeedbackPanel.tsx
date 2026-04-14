@@ -14,7 +14,7 @@ export default function GlobalFeedbackPanel() {
   const homeHasRightPanel =
     pathname === "/" &&
     (searchParams.get("item") != null || searchParams.get("connectPanel") === "1");
-  const isOpen = panel === "feedback" && pathname !== "/login" && !homeHasRightPanel;
+  const isOpen = panel === "feedback" && pathname !== "/login" && pathname !== "/onboarding" && !homeHasRightPanel;
 
   function closePanel() {
     const params = new URLSearchParams(searchParams.toString());

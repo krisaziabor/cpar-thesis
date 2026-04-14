@@ -142,6 +142,21 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // Installation onboarding — pre-launch opt-in flow.
+    // Doc ID is the user's email. Users can only read/write their own document.
+    // Admins can read all documents (to review opt-ins and book submissions).
+    match /installation_onboarding/{email} {
+      allow read: if request.auth != null
+        && (request.auth.token.email == email || isAdmin());
+      allow create: if request.auth != null
+        && request.auth.token.email == email
+        && request.resource.data.user_email == email;
+      allow update: if request.auth != null
+        && request.auth.token.email == email
+        && resource.data.user_email == email;
+      allow delete: if false;
+    }
+
     // Product feedback submissions
     match /feedback/{feedbackId} {
       // Authenticated users can create feedback tied to their own identity.

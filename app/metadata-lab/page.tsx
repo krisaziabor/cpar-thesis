@@ -22,6 +22,8 @@ type MediaStatus = "idle" | "loading" | "success" | "error";
 
 const SOURCE_LABELS: Record<SourceType, string> = {
   pdf: "PDF",
+  audio: "Audio",
+  video: "Video",
   doi: "DOI / Scholarly",
   youtube: "YouTube",
   music: "Music",
@@ -36,6 +38,8 @@ const SOURCE_LABELS: Record<SourceType, string> = {
 
 const SOURCE_COLORS: Record<SourceType, string> = {
   pdf: "bg-red-100 text-red-800",
+  audio: "bg-indigo-100 text-indigo-800",
+  video: "bg-violet-100 text-violet-800",
   doi: "bg-blue-100 text-blue-800",
   youtube: "bg-rose-100 text-rose-800",
   music: "bg-green-100 text-green-800",

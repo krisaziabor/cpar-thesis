@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, Suspense } from "react";
+import { useState, useEffect, useCallback, useMemo, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { PanOnScrollMode, ReactFlow, type Node, type NodeTypes } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
@@ -18,6 +18,7 @@ import HoldsPanel from "@/components/HoldsPanel";
 import { AddItemPageInnerWithSuspense } from "@/app/add/page";
 import ConnectPanel from "@/components/ConnectPanel";
 import NewUserChecklistCard from "@/components/NewUserChecklistCard";
+import { useNavGuard } from "@/lib/nav-guard-context";
 import { useSequenceReplayNonce, useSequenceTimings } from "@/lib/sequence-dialkit";
 
 const NODE_TYPES: NodeTypes = {
@@ -37,6 +38,7 @@ function HomeInner() {
   const shouldReduceMotion = useReducedMotion();
   const timings = useSequenceTimings();
   const replayNonce = useSequenceReplayNonce();
+  const { registerGuard, unregisterGuard, navigateWithGuard } = useNavGuard();
   const [items, setItems] = useState<Item[]>(() => {
     if (typeof window === "undefined") return [];
     try {
@@ -57,6 +59,8 @@ function HomeInner() {
   const [addPanelBackSignal, setAddPanelBackSignal] = useState(0);
   const [addPanelCloseSignal, setAddPanelCloseSignal] = useState(0);
   const [addPanelCanGoBack, setAddPanelCanGoBack] = useState(false);
+  const [addPanelHasUnsaved, setAddPanelHasUnsaved] = useState(false);
+  const [pendingNavAfterAddClose, setPendingNavAfterAddClose] = useState<string | null>(null);
   const [{ isFirst, shuffleSeed }] = useState<{
     isFirst: boolean;
     shuffleSeed: number | null;
@@ -84,6 +88,19 @@ function HomeInner() {
     .map((v) => v.trim())
     .filter(Boolean);
   const isConnectSelecting = panelMode === "connect";
+
+  useEffect(() => {
+    if (panelMode !== "add" || !addPanelHasUnsaved) {
+      unregisterGuard();
+      return;
+    }
+    registerGuard((href) => {
+      setPendingNavAfterAddClose(href);
+      setAddPanelCloseSignal((prev) => prev + 1);
+      return true;
+    });
+    return () => unregisterGuard();
+  }, [panelMode, addPanelHasUnsaved, registerGuard, unregisterGuard]);
 
   useEffect(() => {
     return subscribeToItems(
@@ -188,6 +205,7 @@ function HomeInner() {
     }
     router.push("/");
   }
+
 
   function setConnectIds(nextIds: string[]) {
     const params = new URLSearchParams(searchParams.toString());
@@ -300,7 +318,7 @@ function HomeInner() {
                 toggleConnectSelection(node.id);
                 return;
               }
-              router.push(`/?item=${node.id}`);
+              navigateWithGuard(`/?item=${node.id}`);
             }}
             style={{ background: "#000000" }}
             proOptions={{ hideAttribution: true }}
@@ -374,13 +392,20 @@ function HomeInner() {
             onBack={addPanelCanGoBack ? () => setAddPanelBackSignal((prev) => prev + 1) : undefined}
             onClose={() => setAddPanelCloseSignal((prev) => prev + 1)}
             progressPercent={addProgressPercent}
+            disableBodyScroll
           >
             <AddItemPageInnerWithSuspense
               onProgressChange={setAddProgressPercent}
               backSignal={addPanelBackSignal}
               closeSignal={addPanelCloseSignal}
-              onRequestPanelClose={closePanel}
+              onRequestPanelClose={() => {
+                const dest = pendingNavAfterAddClose;
+                setPendingNavAfterAddClose(null);
+                setAddPanelHasUnsaved(false);
+                router.push(dest ?? "/");
+              }}
               onCanGoBackChange={setAddPanelCanGoBack}
+              onHasUnsavedProgressChange={setAddPanelHasUnsaved}
             />
           </RightPanel>
         )}

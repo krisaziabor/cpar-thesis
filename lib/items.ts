@@ -235,6 +235,81 @@ export async function findPublishedItemByLink(link: string): Promise<Item | null
   }
 }
 
+/** Find an existing published item by normalized title (and optional creator). */
+export async function findPublishedItemByTitle(
+  title: string,
+  creator?: string
+): Promise<Item | null> {
+  if (!db) return null;
+  const normalizedTitle = title.trim();
+  if (!normalizedTitle) return null;
+  try {
+    const constraints = [
+      where("is_draft", "==", false),
+      where("title", "==", normalizedTitle),
+      limit(5),
+    ] as const;
+    const snap = await getDocs(query(collection(db, "items"), ...constraints));
+    if (snap.empty) return null;
+
+    const normalizedCreator = creator?.trim().toLowerCase();
+    if (!normalizedCreator) {
+      const first = snap.docs[0];
+      return first ? ({ id: first.id, ...first.data() } as Item) : null;
+    }
+
+    const creatorMatched = snap.docs.find((docSnap) => {
+      const value = (docSnap.data().creator as string | undefined)?.trim().toLowerCase() ?? "";
+      return value === normalizedCreator;
+    });
+    const chosen = creatorMatched ?? snap.docs[0];
+    return chosen ? ({ id: chosen.id, ...chosen.data() } as Item) : null;
+  } catch {
+    // Duplicate-check should never block creation flow.
+    return null;
+  }
+}
+
+/** Find an existing published music item by canonical song.link URL. */
+export async function findPublishedMusicItemBySongLink(songLinkUrl: string): Promise<Item | null> {
+  if (!db) return null;
+  const normalized = songLinkUrl.trim();
+  if (!normalized) return null;
+  const candidateUrls = new Set<string>([normalized]);
+  try {
+    const parsed = new URL(normalized);
+    candidateUrls.add(`${parsed.origin}${parsed.pathname}`.replace(/\/+$/, ""));
+  } catch {
+    // ignore parse fallback
+  }
+
+  async function queryByField(fieldPath: "source_metadata.song_link_url" | "link", value: string): Promise<Item | null> {
+    const snap = await getDocs(
+      query(
+        collection(db!, "items"),
+        where("is_draft", "==", false),
+        where(fieldPath, "==", value),
+        limit(1)
+      )
+    );
+    const first = snap.docs[0];
+    return first ? ({ id: first.id, ...first.data() } as Item) : null;
+  }
+
+  try {
+    for (const candidate of candidateUrls) {
+      const bySourceMetadata = await queryByField("source_metadata.song_link_url", candidate);
+      if (bySourceMetadata) return bySourceMetadata;
+      const byLink = await queryByField("link", candidate);
+      if (byLink) return byLink;
+    }
+    return null;
+  } catch {
+    // Duplicate-check should never block creation flow.
+    return null;
+  }
+}
+
 /** Update editable metadata fields on a published item. */
 export async function updateItem(
   id: string,

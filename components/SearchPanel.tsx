@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { subscribeToItems } from "@/lib/items";
 import type { Item } from "@/lib/types";
@@ -49,12 +48,7 @@ export default function SearchPanel() {
   }, [items, query]);
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.22, ease: [0.215, 0.61, 0.355, 1] }}
-      className="space-y-4 px-6 py-6"
-    >
+    <div className="space-y-4 px-6 py-6">
       <div className="space-y-1">
         <p className="font-lector text-sm text-zinc-300">Search</p>
         <p className="text-xs text-zinc-500">Find texts by title, creator, tag, or transcript.</p>
@@ -97,6 +91,6 @@ export default function SearchPanel() {
 
       {/* Bottom padding for floating nav clearance */}
       <div className="h-16" />
-    </motion.div>
+    </div>
   );
 }

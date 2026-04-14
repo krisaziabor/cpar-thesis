@@ -127,3 +127,36 @@ export interface Feedback {
   text: string;
   created_at: Timestamp;
 }
+
+/**
+ * Installation onboarding: tracks a user's progress through the
+ * pre-launch opt-in flow (media consent → book text → contact info).
+ * Each step is persisted independently so users can resume mid-flow.
+ */
+export type OnboardingStep = "media_opt_in" | "book_text" | "contact" | "complete";
+
+export interface InstallationOnboarding {
+  id: string;
+  user_email: string;
+  user_name: string;
+
+  /** Step 1 — three pillars: consent to include media in installation */
+  media_opt_in?: boolean;
+  media_opt_in_at?: Timestamp;
+
+  /** Step 2 — plinth/book: special written piece */
+  book_title?: string;
+  book_date?: string;
+  book_text?: string;
+  book_pdf_url?: string;
+  book_submitted_at?: Timestamp;
+
+  /** Step 3 — contact preferences */
+  phone_number?: string;
+  preferred_contact_method?: "email" | "text";
+  contact_submitted_at?: Timestamp;
+
+  completed_at?: Timestamp;
+  created_at: Timestamp;
+  updated_at: Timestamp;
+}

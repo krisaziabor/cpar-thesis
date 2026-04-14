@@ -38,6 +38,15 @@ service firebase.storage {
       allow delete: if request.auth != null;
     }
 
+    // Book formatting PDFs submitted during installation onboarding, max 50 MB.
+    match /files/book-submissions/{allPaths=**} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null
+        && request.resource.size < 50 * 1024 * 1024
+        && request.resource.contentType == 'application/pdf';
+      allow delete: if request.auth != null;
+    }
+
     // Downloaded video files (Instagram Reels, TikTok, YouTube, Twitter), max 500 MB.
     match /media/{allPaths=**} {
       allow read: if request.auth != null;
