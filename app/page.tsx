@@ -380,7 +380,7 @@ function HomeInner() {
   if (authLoading || shuffleSeed == null) {
     return (
       <div className="min-h-screen bg-black">
-        <div className="fixed left-6 top-6 z-30">
+        <div className="fixed left-0 right-0 top-6 z-30 flex flex-col items-center">
           <h1 className="font-lector text-2xl tracking-tight text-white/90">Kanon</h1>
         </div>
       </div>
@@ -396,7 +396,7 @@ function HomeInner() {
 
   return (
     <div className="flex h-screen flex-col bg-black">
-      <div className="fixed left-6 top-6 z-30">
+      <div className="fixed left-0 right-0 top-6 z-30 flex flex-col items-center">
         {!shouldReduceMotion && (
           <motion.h1
             key={`home-intro-kanon-${replayNonce}`}

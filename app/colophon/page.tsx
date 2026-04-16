@@ -5,7 +5,7 @@ import Link from "next/link";
 export default function ColophonPage() {
   return (
     <div className="min-h-screen bg-black text-zinc-200">
-      <div className="fixed left-6 top-6 z-20">
+      <div className="fixed left-0 right-0 top-6 z-20 flex flex-col items-center">
         <h1 className="font-lector text-2xl tracking-tight text-white/90">Kanon</h1>
       </div>
 

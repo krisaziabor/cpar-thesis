@@ -86,9 +86,11 @@ function useStepTranscript(stepKey: string | undefined) {
 function ListenGate({
   locked,
   children,
+  className,
 }: {
   locked: boolean;
   children: React.ReactNode;
+  className?: string;
 }) {
   const [showTip, setShowTip] = useState(false);
   const [tipPos, setTipPos] = useState({ x: 0, y: 0 });
@@ -108,39 +110,49 @@ function ListenGate({
 
   useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
 
-  if (!locked) return <>{children}</>;
-
   return (
-    <div ref={containerRef} className="relative h-full self-stretch">
-      <div className="pointer-events-none opacity-30 h-full">{children}</div>
-      <button
-        type="button"
-        onClick={flash}
-        className="absolute inset-0 z-10 cursor-default"
-        aria-label="Listen to the full recording first"
-      />
-      {typeof document !== "undefined" && createPortal(
-        <AnimatePresence>
-          {showTip && (
-            <motion.div
-              key="listen-tip"
-              initial={reduced ? false : { opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              transition={
-                reduced
-                  ? { duration: 0 }
-                  : { duration: 0.15, ease: [0.215, 0.61, 0.355, 1] as const }
-              }
-              style={{ left: tipPos.x, top: tipPos.y }}
-              className="pointer-events-none fixed z-[9999] -translate-x-1/2 -translate-y-1/2 whitespace-nowrap rounded bg-zinc-800 px-3 py-1.5 font-sans text-xs text-zinc-300 shadow-lg"
-            >
-              Listen to the full recording first
-            </motion.div>
-          )}
-        </AnimatePresence>,
-        document.body
+    <div ref={containerRef} className={`relative ${className ?? ""}`}>
+      <div
+        style={{
+          opacity: locked ? 0.3 : 1,
+          pointerEvents: locked ? "none" : "auto",
+          transition: "opacity 0.3s ease",
+        }}
+      >
+        {children}
+      </div>
+      {locked && (
+        <button
+          type="button"
+          onClick={flash}
+          className="absolute inset-0 z-10 cursor-default"
+          aria-label="Listen to the full recording first"
+        />
       )}
+      {locked &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <AnimatePresence>
+            {showTip && (
+              <motion.div
+                key="listen-tip"
+                initial={reduced ? false : { opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                transition={
+                  reduced
+                    ? { duration: 0 }
+                    : { duration: 0.15, ease: [0.215, 0.61, 0.355, 1] as const }
+                }
+                style={{ left: tipPos.x, top: tipPos.y }}
+                className="pointer-events-none fixed z-[9999] -translate-x-1/2 -translate-y-1/2 whitespace-nowrap rounded bg-zinc-800 px-3 py-1.5 font-sans text-xs text-zinc-300 shadow-lg"
+              >
+                Listen to the full recording first
+              </motion.div>
+            )}
+          </AnimatePresence>,
+          document.body,
+        )}
     </div>
   );
 }
@@ -490,11 +502,7 @@ export default function OnboardingLabPage() {
                   })}
                 </div>
 
-                <motion.div
-                  layout
-                  transition={shouldReduceMotion ? { duration: 0 } : CARD.spring}
-                  className="w-full"
-                >
+                <div className="w-full">
                   <AnimatePresence initial={false} mode="wait">
                     <motion.div
                       key={COLOR_STEPS[colorStep].key}
@@ -513,7 +521,7 @@ export default function OnboardingLabPage() {
                       )}
                     </motion.div>
                   </AnimatePresence>
-                </motion.div>
+                </div>
               </div>
 
               <div
@@ -588,8 +596,8 @@ export default function OnboardingLabPage() {
                       </p>
                     )}
                   </div>
-                  <ListenGate locked={!hasListened}>
-                    <div className="flex flex-[2] flex-col items-start gap-1.5 min-w-[220px]">
+                  <ListenGate locked={!hasListened} className="flex-[2] min-w-[220px]">
+                    <div className="flex flex-col items-start gap-1.5">
                       <input
                         ref={profileInputRef}
                         type="text"
