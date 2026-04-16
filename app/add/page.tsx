@@ -26,6 +26,7 @@ import type { MetadataResult, SourceMetadata, SourceType } from "@/lib/metadata/
 import { mirrorPreviewAudio, mirrorThumbnail, mirrorVideo, uploadBase64Thumbnail } from "@/lib/media-upload";
 import type { Item } from "@/lib/types";
 import { EASE_OUT, MOTION_DURATION } from "@/lib/motion";
+import { useNavStatus } from "@/lib/nav-status-context";
 
 type Step = "source" | "details" | "record";
 type Destination = "holding" | "library";
@@ -34,6 +35,7 @@ interface ItemDraft {
   url: string;
   title: string;
   description: string;
+  encounteredSource: string;
   mediaDate: string;
   type: string;
   creator: string;
@@ -54,6 +56,7 @@ interface QueueItem {
   sourceLabel: string;
   title: string;
   description: string;
+  encounteredSource: string;
   mediaDate: string;
   type: string;
   creator: string;
@@ -86,6 +89,7 @@ const EMPTY: ItemDraft = {
   url: "",
   title: "",
   description: "",
+  encounteredSource: "",
   mediaDate: "",
   type: DEFAULT_ITEM_TYPES[0],
   creator: "",
@@ -146,6 +150,7 @@ function toQueueItem(draft: ItemDraft): QueueItem {
     sourceLabel: draft.url.trim() || (draft.fileFile?.name ?? "Uploaded file"),
     title: draft.title,
     description: draft.description.trim(),
+    encounteredSource: draft.encounteredSource.trim(),
     mediaDate: draft.mediaDate.trim(),
     type: draft.type,
     creator: draft.creator,
@@ -396,6 +401,7 @@ export function AddItemPageInnerWithSuspense({
   onRequestPanelClose,
   onCanGoBackChange,
   onHasUnsavedProgressChange,
+  onSourceStepScrollLockChange,
 }: {
   hideHeader?: boolean;
   onProgressChange?: (progressPercent: number) => void;
@@ -404,6 +410,7 @@ export function AddItemPageInnerWithSuspense({
   onRequestPanelClose?: () => void;
   onCanGoBackChange?: (canGoBack: boolean) => void;
   onHasUnsavedProgressChange?: (hasUnsaved: boolean) => void;
+  onSourceStepScrollLockChange?: (locked: boolean) => void;
 }) {
   return (
     <Suspense>
@@ -415,6 +422,7 @@ export function AddItemPageInnerWithSuspense({
         onRequestPanelClose={onRequestPanelClose}
         onCanGoBackChange={onCanGoBackChange}
         onHasUnsavedProgressChange={onHasUnsavedProgressChange}
+        onSourceStepScrollLockChange={onSourceStepScrollLockChange}
       />
     </Suspense>
   );
@@ -428,6 +436,7 @@ function AddItemPageInner({
   onRequestPanelClose,
   onCanGoBackChange,
   onHasUnsavedProgressChange,
+  onSourceStepScrollLockChange,
 }: {
   hideHeader?: boolean;
   onProgressChange?: (progressPercent: number) => void;
@@ -436,13 +445,16 @@ function AddItemPageInner({
   onRequestPanelClose?: () => void;
   onCanGoBackChange?: (canGoBack: boolean) => void;
   onHasUnsavedProgressChange?: (hasUnsaved: boolean) => void;
+  onSourceStepScrollLockChange?: (locked: boolean) => void;
 }) {
   const { loading: authLoading, user } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
   const shouldReduceMotion = useReducedMotion();
   const urlInputControls = useAnimationControls();
+  const { enqueue: enqueueNavStatus, startProgress: startNavProgress } = useNavStatus();
   const urlDraftId = searchParams.get("draft");
+  const isPanelAddMode = searchParams.get("panel") === "add";
 
   const [step, setStep] = useState<Step>("source");
   const [draft, setDraft] = useState<ItemDraft>(EMPTY);
@@ -462,16 +474,13 @@ function AddItemPageInner({
   const [editingSourceError, setEditingSourceError] = useState("");
   const [draftLoading, setDraftLoading] = useState(!!urlDraftId);
   const [sourceError, setSourceError] = useState("");
-  const [saveError, setSaveError] = useState("");
-  const [saveStage, setSaveStage] = useState("");
-  const [saving, setSaving] = useState(false);
+  
   const [itemTypes, setItemTypes] = useState<string[]>([...DEFAULT_ITEM_TYPES]);
   const [isTypeMenuOpen, setIsTypeMenuOpen] = useState(false);
   const [, setFilePreviewUrl] = useState<string | null>(null);
   const [isDragActive, setIsDragActive] = useState(false);
   const [showClosePrompt, setShowClosePrompt] = useState(false);
-  const [draftPromptSaving, setDraftPromptSaving] = useState(false);
-  const [draftPromptError, setDraftPromptError] = useState("");
+  
   const fileInputRef = useRef<HTMLInputElement>(null);
   const editFileInputRef = useRef<HTMLInputElement>(null);
   const cardsScrollRef = useRef<HTMLDivElement>(null);
@@ -516,6 +525,7 @@ function AddItemPageInner({
           url: item.link ?? "",
           title: item.title,
           description: item.description ?? "",
+          encounteredSource: item.encountered_source ?? "",
           mediaDate: item.media_date ?? "",
           type: item.type,
           creator: item.creator,
@@ -534,6 +544,7 @@ function AddItemPageInner({
             url: item.link ?? "",
             title: item.title,
             description: item.description ?? "",
+            encounteredSource: item.encountered_source ?? "",
             mediaDate: item.media_date ?? "",
             type: item.type,
             creator: item.creator,
@@ -596,6 +607,7 @@ function AddItemPageInner({
     !!draft.fileFile ||
     !!draft.title.trim() ||
     !!draft.description.trim() ||
+    !!draft.encounteredSource.trim() ||
     !!draft.creator.trim() ||
     !!draft.mediaDate.trim() ||
     !!draft.tags.trim();
@@ -608,6 +620,10 @@ function AddItemPageInner({
   useEffect(() => {
     onHasUnsavedProgressChange?.(hasUnsavedProgress);
   }, [hasUnsavedProgress, onHasUnsavedProgressChange]);
+
+  useEffect(() => {
+    onSourceStepScrollLockChange?.(step === "source");
+  }, [onSourceStepScrollLockChange, step]);
 
   useEffect(() => {
     onCanGoBackChange?.(step !== "source");
@@ -720,6 +736,8 @@ function AddItemPageInner({
   }
 
   async function queueSourceDraft(sourceDraft: ItemDraft, replaceItemId: string | null = null): Promise<QueueItem | null> {
+    const pendingStartedAt = performance.now();
+    const MIN_PENDING_CARD_MS = 220;
     let preparedDraft = sourceDraft;
     if (!preparedDraft.thumbnailUrl && preparedDraft.fileFile?.type.startsWith("video/")) {
       const generatedThumbnail = await generateVideoThumbnailDataUrl(preparedDraft.fileFile);
@@ -746,6 +764,11 @@ function AddItemPageInner({
       });
       return nextItem;
     } finally {
+      const elapsed = performance.now() - pendingStartedAt;
+      const remaining = MIN_PENDING_CARD_MS - elapsed;
+      if (remaining > 0) {
+        await new Promise((resolve) => setTimeout(resolve, remaining));
+      }
       setPendingSourceCards((prev) => prev.filter((card) => card.id !== pendingCardId));
       setActiveFetchCount((count) => Math.max(0, count - 1));
     }
@@ -900,6 +923,7 @@ function AddItemPageInner({
       url: "",
       title: "",
       description: "",
+      encounteredSource: "",
       mediaDate: "",
       type: DEFAULT_ITEM_TYPES[0],
       creator: "",
@@ -997,6 +1021,7 @@ function AddItemPageInner({
       sourceLabel: item.sourceLabel,
       title: item.title,
       description: item.description,
+      encounteredSource: item.encounteredSource,
       mediaDate: item.mediaDate,
       type: item.type,
       creator: item.creator,
@@ -1025,84 +1050,124 @@ function AddItemPageInner({
       itemsToDraft.push(toQueueItem(draft));
     }
 
-    const uniqueTypes = [...new Set(itemsToDraft.map((q) => q.type))];
-    await Promise.all(
-      uniqueTypes.map((t) => ensureItemTypeExists(t, userEmail).catch(() => {}))
-    );
+    const thumbs = itemsToDraft
+      .map((q) => q.thumbnailUrl)
+      .filter((u): u is string => !!u);
+    const plural = itemsToDraft.length !== 1;
+    const { resolve, reject } = startNavProgress({
+      id: `draft-${Date.now()}`,
+      text: plural ? "Saving drafts" : "Saving draft",
+      thumbnails: thumbs.length > 0 ? thumbs : undefined,
+      showProgress: true,
+      durationMs: 2400,
+    });
 
-    let lastDraftId = "";
-    await Promise.all(
-      itemsToDraft.map(async (queuedItem) => {
-        const { draftId } = await upsertDraft(userEmail, null, {
-          title: queuedItem.title || "Untitled record",
-          description: queuedItem.description.trim(),
-          media_date: queuedItem.mediaDate.trim() || "Unknown",
-          type: queuedItem.type,
-          creator: queuedItem.creator || "Unknown creator",
-          ...(queuedItem.link ? { link: queuedItem.link } : {}),
-          tags: parseTags(queuedItem.tags),
-          added_by: userEmail,
-          ...(queuedItem.thumbnailUrl && !queuedItem.thumbnailUrl.startsWith("data:")
-            ? { thumbnail_url: queuedItem.thumbnailUrl }
-            : {}),
-          ...(queuedItem.sourceMetadata ? { source_metadata: queuedItem.sourceMetadata } : {}),
-        });
-        lastDraftId = draftId;
+    try {
+      const uniqueTypes = [...new Set(itemsToDraft.map((q) => q.type))];
+      await Promise.all(
+        uniqueTypes.map((t) => ensureItemTypeExists(t, userEmail).catch(() => {}))
+      );
 
-        const mediaUploads: Promise<void>[] = [];
+      let lastDraftId = "";
+      await Promise.all(
+        itemsToDraft.map(async (queuedItem) => {
+          const { draftId } = await upsertDraft(userEmail, null, {
+            title: queuedItem.title || "Untitled record",
+            description: queuedItem.description.trim(),
+            encountered_source: queuedItem.encounteredSource.trim(),
+            media_date: queuedItem.mediaDate.trim() || "Unknown",
+            type: queuedItem.type,
+            creator: queuedItem.creator || "Unknown creator",
+            ...(queuedItem.link ? { link: queuedItem.link } : {}),
+            tags: parseTags(queuedItem.tags),
+            added_by: userEmail,
+            ...(queuedItem.thumbnailUrl && !queuedItem.thumbnailUrl.startsWith("data:")
+              ? { thumbnail_url: queuedItem.thumbnailUrl }
+              : {}),
+            ...(queuedItem.sourceMetadata ? { source_metadata: queuedItem.sourceMetadata } : {}),
+          });
+          lastDraftId = draftId;
 
-        if (queuedItem.thumbnailUrl) {
-          mediaUploads.push(
-            (async () => {
-              let persistedUrl = queuedItem.thumbnailUrl!;
-              if (persistedUrl.startsWith("data:")) {
-                persistedUrl = await uploadBase64Thumbnail(persistedUrl, draftId);
-              } else if (
-                persistedUrl.startsWith("http") &&
-                !persistedUrl.includes("firebasestorage.googleapis.com")
-              ) {
-                persistedUrl = await mirrorThumbnail(persistedUrl, draftId);
-              } else {
-                return;
-              }
-              await updateItem(draftId, { thumbnail_url: persistedUrl });
-            })().catch(() => {})
-          );
-        }
+          const mediaUploads: Promise<void>[] = [];
 
-        if (queuedItem.fileFile) {
-          mediaUploads.push(
-            uploadItemFile(queuedItem.fileFile, draftId)
-              .then((fileUrl) => updateItem(draftId, { media_url: fileUrl }))
-              .catch(() => {})
-          );
-        }
+          if (queuedItem.thumbnailUrl) {
+            mediaUploads.push(
+              (async () => {
+                let persistedUrl = queuedItem.thumbnailUrl!;
+                if (persistedUrl.startsWith("data:")) {
+                  persistedUrl = await uploadBase64Thumbnail(persistedUrl, draftId);
+                } else if (
+                  persistedUrl.startsWith("http") &&
+                  !persistedUrl.includes("firebasestorage.googleapis.com")
+                ) {
+                  persistedUrl = await mirrorThumbnail(persistedUrl, draftId);
+                } else {
+                  return;
+                }
+                await updateItem(draftId, { thumbnail_url: persistedUrl });
+              })().catch(() => {})
+            );
+          }
 
-        await Promise.all(mediaUploads);
-      })
-    );
+          if (queuedItem.fileFile) {
+            mediaUploads.push(
+              uploadItemFile(queuedItem.fileFile, draftId)
+                .then((fileUrl) => updateItem(draftId, { media_url: fileUrl }))
+                .catch(() => {})
+            );
+          }
 
-    if (lastDraftId) setCurrentDraftId(lastDraftId);
+          await Promise.all(mediaUploads);
+        })
+      );
+
+      if (lastDraftId) setCurrentDraftId(lastDraftId);
+      resolve(plural ? "Drafts saved" : "Draft saved");
+    } catch (err) {
+      reject(err instanceof Error ? err.message : "Something went wrong, try again");
+    }
   }
 
   async function handleSubmitBatch() {
     const currentUser = user;
     const userEmail = currentUser?.email;
     if (!userEmail || !currentUser) return;
-    setSaveError("");
-    setSaving(true);
+
+    // Snapshot everything we need before closing the panel
+    const itemsToSave = [...recordingQueue];
+    const recordingsSnapshot = [...recordings];
+    const dest = destination;
+
+    const thumbs = itemsToSave
+      .map((q) => q.thumbnailUrl)
+      .filter((u): u is string => !!u);
+    const label = dest === "holding" ? "Adding to Hold" : "Adding to Kanon";
+    const successLabel = dest === "holding" ? "Added to Hold" : "Added to Kanon";
+
+    // Close panel immediately
+    router.push(dest === "holding" ? `/kanon/${encodeURIComponent(userEmail)}` : "/");
+
+    // Start progress in nav
+    const { resolve, reject } = startNavProgress({
+      id: `save-${Date.now()}`,
+      text: label,
+      thumbnails: thumbs.length > 0 ? thumbs : undefined,
+      showProgress: true,
+      durationMs: 2400,
+    });
+
     try {
-      for (let idx = 0; idx < recordingQueue.length; idx++) {
-        const itemData = recordingQueue[idx];
-        const recording = recordings[idx];
-        if (destination === "library" && !recording?.blob && !recording?.existingUrl) {
+      for (let idx = 0; idx < itemsToSave.length; idx++) {
+        const itemData = itemsToSave[idx];
+        const recording = recordingsSnapshot[idx];
+        if (dest === "library" && !recording?.blob && !recording?.existingUrl) {
           throw new Error(`Recording missing for item ${idx + 1}.`);
         }
 
-        setSaveStage(`Saving ${idx + 1} of ${recordingQueue.length}…`);
         const fields = {
           title: itemData.title,
           description: itemData.description,
+          encountered_source: itemData.encounteredSource,
           media_date: itemData.mediaDate,
           type: itemData.type,
           creator: itemData.creator,
@@ -1120,10 +1185,10 @@ function AddItemPageInner({
         try {
           await ensureItemTypeExists(itemData.type, userEmail);
         } catch {
-          // Non-fatal: item type sync should not block save flow.
+          // Non-fatal
         }
 
-        if (destination === "holding") {
+        if (dest === "holding") {
           const existingPublished =
             itemData.link?.trim() ? await findPublishedItemByLink(itemData.link.trim()) : null;
           if (existingPublished) {
@@ -1140,20 +1205,18 @@ function AddItemPageInner({
         }
 
         if (itemData.fileFile) {
-          setSaveStage(`Uploading file for ${idx + 1} of ${recordingQueue.length}…`);
           const fileUrl = await uploadItemFile(itemData.fileFile, itemId);
           await updateItem(itemId, { media_url: fileUrl });
         }
 
         if (itemData.thumbnailUrl) {
-          setSaveStage(`Saving thumbnail for ${idx + 1} of ${recordingQueue.length}…`);
           try {
             const savedThumbnail = itemData.thumbnailUrl.startsWith("data:")
               ? await uploadBase64Thumbnail(itemData.thumbnailUrl, itemId)
               : await mirrorThumbnail(itemData.thumbnailUrl, itemId);
             await updateItem(itemId, { thumbnail_url: savedThumbnail });
           } catch {
-            // Non-fatal.
+            // Non-fatal
           }
         }
 
@@ -1164,7 +1227,7 @@ function AddItemPageInner({
               source_metadata: { ...itemData.sourceMetadata, preview_url: previewUrl },
             });
           } catch {
-            // Non-fatal.
+            // Non-fatal
           }
         }
 
@@ -1180,15 +1243,14 @@ function AddItemPageInner({
             const { downloadUrl } = await mirrorVideo(pageUrl, itemId, token);
             await updateItem(itemId, { media_url: downloadUrl });
           } catch {
-            // Non-fatal.
+            // Non-fatal
           }
         }
       }
 
-      router.push(destination === "holding" ? `/kanon/${encodeURIComponent(userEmail)}` : "/");
+      resolve(successLabel);
     } catch (err) {
-      setSaveError(err instanceof Error ? err.message : "Save failed. Please try again.");
-      setSaving(false);
+      reject(err instanceof Error ? err.message : "Something went wrong, try again");
     }
   }
 
@@ -1256,22 +1318,6 @@ function AddItemPageInner({
     setIsTypeMenuOpen(false);
   }
 
-  if (saving) {
-    return (
-      <div className={hideHeader ? "p-6" : "flex min-h-screen items-center justify-center bg-black"}>
-        <motion.div
-          initial={shouldReduceMotion ? false : { opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: shouldReduceMotion ? 0 : MOTION_DURATION.standard, ease: EASE_OUT }}
-          className="space-y-2"
-        >
-          <p className="text-sm text-zinc-300">Submitting…</p>
-          <p className="text-xs text-zinc-500">{saveStage || "Preparing files and audio…"}</p>
-          {saveError && <p className="pt-2 text-xs text-red-500">{saveError}</p>}
-        </motion.div>
-      </div>
-    );
-  }
 
   return (
     <div className={hideHeader ? "relative" : "relative min-h-screen bg-black"}>
@@ -1285,7 +1331,11 @@ function AddItemPageInner({
             animate={{ opacity: 1 }}
             exit={shouldReduceMotion ? { opacity: 0 } : { opacity: 0 }}
             transition={{ duration: shouldReduceMotion ? 0 : MOTION_DURATION.panel, ease: EASE_OUT }}
-            className="absolute inset-0 z-30 flex items-start justify-start backdrop-blur-xl"
+            className={
+              isPanelAddMode
+                ? "fixed right-4 top-4 z-[60] flex h-[calc(100vh-2rem)] w-[460px] max-w-[92vw] items-start justify-start rounded-2xl backdrop-blur-xl"
+                : "absolute inset-0 z-30 flex items-start justify-start backdrop-blur-xl"
+            }
             style={{ backgroundColor: "rgba(0, 0, 0, 0.6)" }}
           >
             <motion.div
@@ -1313,27 +1363,15 @@ function AddItemPageInner({
                 </button>
                 <button
                   type="button"
-                  disabled={draftPromptSaving}
-                  onClick={async () => {
-                    setDraftPromptError("");
-                    setDraftPromptSaving(true);
-                    try {
-                      await saveSessionAsDrafts();
-                      onRequestPanelClose?.();
-                    } catch (error) {
-                      setDraftPromptError(
-                        error instanceof Error ? error.message : "Could not save draft."
-                      );
-                    } finally {
-                      setDraftPromptSaving(false);
-                    }
+                  onClick={() => {
+                    onRequestPanelClose?.();
+                    void saveSessionAsDrafts();
                   }}
-                  className="font-sans text-xs text-zinc-500 transition-colors duration-150 ease-[ease] hover:text-zinc-300 disabled:opacity-40"
+                  className="font-sans text-xs text-zinc-500 transition-colors duration-150 ease-[ease] hover:text-zinc-300"
                 >
-                  {draftPromptSaving ? "Saving..." : "Save drafts and close"}
+                  Save drafts and close
                 </button>
               </div>
-              {draftPromptError && <p className="mt-3 text-xs text-red-400">{draftPromptError}</p>}
             </motion.div>
           </motion.div>
         )}
@@ -1373,6 +1411,7 @@ function AddItemPageInner({
                               url: d.link ?? "",
                               title: d.title,
                               description: d.description ?? "",
+                              encounteredSource: d.encountered_source ?? "",
                               mediaDate: d.media_date ?? "",
                               type: d.type,
                               creator: d.creator,
@@ -1435,6 +1474,7 @@ function AddItemPageInner({
                                 url: draftItem.link ?? "",
                                 title: draftItem.title,
                                 description: draftItem.description ?? "",
+                                encounteredSource: draftItem.encountered_source ?? "",
                                 mediaDate: draftItem.media_date ?? "",
                                 type: draftItem.type,
                                 creator: draftItem.creator,
@@ -1610,6 +1650,18 @@ function AddItemPageInner({
                                 onClick={async () => {
                                   try {
                                     await saveToKanon(user.email!, "item", duplicatePrompt.libraryItemId!);
+
+                                    const targetItem = queuedItems.find(
+                                      (q) => q.id === duplicatePrompt.targetQueueItemId
+                                    );
+                                    enqueueNavStatus({
+                                      id: `hold-dup-${Date.now()}`,
+                                      text: "Added to Hold",
+                                      thumbnails: targetItem?.thumbnailUrl ? [targetItem.thumbnailUrl] : undefined,
+                                      showProgress: true,
+                                      durationMs: 2400,
+                                    });
+
                                     setQueuedItems((prev) =>
                                       prev.filter((queuedItem) => queuedItem.id !== duplicatePrompt.targetQueueItemId)
                                     );
@@ -1954,172 +2006,194 @@ function AddItemPageInner({
                 </div>
               )}
             </div>
-            <Field label="Title" required>
-              <input
-                type="text"
-                value={draft.title}
-                onChange={(e) => patch({ title: e.target.value })}
-                placeholder="e.g. Beloved"
-                className={inputCx}
-              />
-            </Field>
-            <Field label="Description">
-              <textarea
-                rows={3}
-                value={draft.description}
-                onChange={(e) => patch({ description: e.target.value })}
-                placeholder="A few words of context"
-                className={inputCx}
-              />
-            </Field>
-            <Field label="Original media date" required>
-              <div className="grid grid-cols-[1fr_auto] gap-2">
+            <div className="space-y-3 rounded-md border border-zinc-800 bg-zinc-950/40 p-3">
+              <Field label="Title" required>
                 <input
                   type="text"
-                  value={draft.mediaDate}
-                  onChange={(e) => patch({ mediaDate: e.target.value })}
-                  placeholder="e.g. 1998, Mar 2020, Mar 12 2020"
-                  className={inputCx}
-                />
-                <input
-                  type="date"
-                  value={toDateInputValue(draft.mediaDate)}
-                  onChange={(e) => patch({ mediaDate: fromDateInputValue(e.target.value) })}
-                  className="rounded-md border border-zinc-800 bg-zinc-950 px-2 py-2 text-xs text-zinc-300 outline-none transition-colors duration-150 ease-[ease] focus:border-zinc-600"
-                />
-              </div>
-              <p className="text-[11px] text-zinc-600">
-                All levels of detail are accepted.
-              </p>
-              {canResetMediaDate && (
-                <button
-                  type="button"
-                  onClick={() => patch({ mediaDate: fetchedMediaDate })}
-                  className="font-lector text-xs text-zinc-400 transition-colors duration-150 ease-[ease] hover:text-zinc-100"
-                >
-                  Reset to fetched date
-                </button>
-              )}
-            </Field>
-            {isMusicSource && (
-              <Field label="Album">
-                <input
-                  type="text"
-                  value={draft.sourceMetadata?.album ?? ""}
-                  onChange={(e) => patchSourceMetadata({ album: e.target.value })}
-                  placeholder="Album title"
+                  value={draft.title}
+                  onChange={(e) => patch({ title: e.target.value })}
+                  placeholder="e.g. Beloved"
                   className={inputCx}
                 />
               </Field>
-            )}
-            <Field label="Type" required>
-              <div className="space-y-1.5">
-                <div className="relative">
+              <Field label="Author / Creator" required>
+                <input
+                  type="text"
+                  value={draft.creator}
+                  onChange={(e) => patch({ creator: e.target.value })}
+                  placeholder="e.g. Toni Morrison"
+                  className={inputCx}
+                />
+              </Field>
+              <Field label="Type" required>
+                <div className="space-y-1.5">
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={draft.type}
+                      onFocus={() => setIsTypeMenuOpen(true)}
+                      onChange={(e) => {
+                        patch({ type: e.target.value.toLowerCase() });
+                        setIsTypeMenuOpen(true);
+                      }}
+                      onBlur={() => {
+                        if (typeBlurTimerRef.current) clearTimeout(typeBlurTimerRef.current);
+                        typeBlurTimerRef.current = setTimeout(() => setIsTypeMenuOpen(false), 120);
+                        if (!user?.email || !draft.type.trim()) return;
+                        void ensureItemTypeExists(draft.type, user.email).catch(() => {
+                          // Best-effort type creation.
+                        });
+                      }}
+                      placeholder="Type to choose or create"
+                      className={inputCx}
+                    />
+                    {isTypeMenuOpen && (
+                      <div className="absolute left-0 right-0 top-[calc(100%+6px)] z-20 overflow-hidden rounded-md border border-zinc-800 bg-zinc-950 shadow-[0_10px_28px_rgba(0,0,0,0.45)]">
+                        {filteredItemTypes.map((itemType) => (
+                          <button
+                            key={itemType}
+                            type="button"
+                            onMouseDown={() => {
+                              if (typeBlurTimerRef.current) clearTimeout(typeBlurTimerRef.current);
+                              setTypeValue(itemType);
+                            }}
+                            className="block w-full px-3 py-2 text-left font-lector text-sm text-zinc-300 transition-colors hover:bg-zinc-900 hover:text-zinc-100"
+                          >
+                            {itemType}
+                          </button>
+                        ))}
+                        {shouldShowCreateType && (
+                          <button
+                            type="button"
+                            onMouseDown={() => {
+                              if (typeBlurTimerRef.current) clearTimeout(typeBlurTimerRef.current);
+                              setTypeValue(normalizedDraftType);
+                            }}
+                            className="block w-full border-t border-zinc-800 px-3 py-2 text-left font-lector text-sm text-zinc-100 transition-colors hover:bg-zinc-900"
+                          >
+                            Create &quot;{normalizedDraftType}&quot;
+                          </button>
+                        )}
+                        {!shouldShowCreateType && filteredItemTypes.length === 0 && (
+                          <p className="px-3 py-2 text-xs text-zinc-600">No matching types</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-zinc-600">
+                    Start typing to choose an existing type or create a new one.
+                  </p>
+                </div>
+              </Field>
+              <Field label="Original media date" required>
+                <div className="grid grid-cols-[1fr_auto] gap-2">
                   <input
                     type="text"
-                    value={draft.type}
-                    onFocus={() => setIsTypeMenuOpen(true)}
-                    onChange={(e) => {
-                      patch({ type: e.target.value.toLowerCase() });
-                      setIsTypeMenuOpen(true);
-                    }}
-                    onBlur={() => {
-                      if (typeBlurTimerRef.current) clearTimeout(typeBlurTimerRef.current);
-                      typeBlurTimerRef.current = setTimeout(() => setIsTypeMenuOpen(false), 120);
-                      if (!user?.email || !draft.type.trim()) return;
-                      void ensureItemTypeExists(draft.type, user.email).catch(() => {
-                        // Best-effort type creation.
-                      });
-                    }}
-                    placeholder="Type to choose or create"
+                    value={draft.mediaDate}
+                    onChange={(e) => patch({ mediaDate: e.target.value })}
+                    placeholder="e.g. 1998, Mar 2020, Mar 12 2020"
                     className={inputCx}
                   />
-                  {isTypeMenuOpen && (
-                    <div className="absolute left-0 right-0 top-[calc(100%+6px)] z-20 overflow-hidden rounded-md border border-zinc-800 bg-zinc-950 shadow-[0_10px_28px_rgba(0,0,0,0.45)]">
-                      {filteredItemTypes.map((itemType) => (
-                        <button
-                          key={itemType}
-                          type="button"
-                          onMouseDown={() => {
-                            if (typeBlurTimerRef.current) clearTimeout(typeBlurTimerRef.current);
-                            setTypeValue(itemType);
-                          }}
-                          className="block w-full px-3 py-2 text-left font-lector text-sm text-zinc-300 transition-colors hover:bg-zinc-900 hover:text-zinc-100"
-                        >
-                          {itemType}
-                        </button>
-                      ))}
-                      {shouldShowCreateType && (
-                        <button
-                          type="button"
-                          onMouseDown={() => {
-                            if (typeBlurTimerRef.current) clearTimeout(typeBlurTimerRef.current);
-                            setTypeValue(normalizedDraftType);
-                          }}
-                          className="block w-full border-t border-zinc-800 px-3 py-2 text-left font-lector text-sm text-zinc-100 transition-colors hover:bg-zinc-900"
-                        >
-                          Create &quot;{normalizedDraftType}&quot;
-                        </button>
-                      )}
-                      {!shouldShowCreateType && filteredItemTypes.length === 0 && (
-                        <p className="px-3 py-2 text-xs text-zinc-600">No matching types</p>
-                      )}
-                    </div>
-                  )}
+                  <input
+                    type="date"
+                    value={toDateInputValue(draft.mediaDate)}
+                    onChange={(e) => patch({ mediaDate: fromDateInputValue(e.target.value) })}
+                    className="rounded-md border border-zinc-800 bg-zinc-950 px-2 py-2 text-xs text-zinc-300 outline-none transition-colors duration-150 ease-[ease] focus:border-zinc-600"
+                  />
                 </div>
                 <p className="text-[11px] text-zinc-600">
-                  Start typing to choose an existing type or create a new one.
+                  All levels of detail are accepted.
                 </p>
-              </div>
-            </Field>
-            <Field label="Author / Creator" required>
-              <input
-                type="text"
-                value={draft.creator}
-                onChange={(e) => patch({ creator: e.target.value })}
-                placeholder="e.g. Toni Morrison"
-                className={inputCx}
-              />
-            </Field>
-            {!isMusicSource && (
-              <Field label="External link">
-                <input
-                  type="url"
-                  value={draft.link}
-                  onChange={(e) => patch({ link: e.target.value })}
-                  placeholder="https://…"
+                {canResetMediaDate && (
+                  <button
+                    type="button"
+                    onClick={() => patch({ mediaDate: fetchedMediaDate })}
+                    className="font-lector text-xs text-zinc-400 transition-colors duration-150 ease-[ease] hover:text-zinc-100"
+                  >
+                    Reset to fetched date
+                  </button>
+                )}
+              </Field>
+              {isMusicSource && (
+                <Field label="Album">
+                  <input
+                    type="text"
+                    value={draft.sourceMetadata?.album ?? ""}
+                    onChange={(e) => patchSourceMetadata({ album: e.target.value })}
+                    placeholder="Album title"
+                    className={inputCx}
+                  />
+                </Field>
+              )}
+              {!isMusicSource && (
+                <Field label="External link">
+                  <input
+                    type="url"
+                    value={draft.link}
+                    onChange={(e) => patch({ link: e.target.value })}
+                    placeholder="https://…"
+                    className={inputCx}
+                  />
+                </Field>
+              )}
+            </div>
+            <div className="space-y-3 pt-1">
+              <Field label="Description">
+                <textarea
+                  rows={2}
+                  value={draft.description}
+                  onChange={(e) => patch({ description: e.target.value })}
+                  placeholder="A few words of context"
                   className={inputCx}
                 />
               </Field>
-            )}
+              <Field label="Where did you first encounter this?">
+                <input
+                  type="text"
+                  value={draft.encounteredSource}
+                  onChange={(e) => patch({ encounteredSource: e.target.value })}
+                  placeholder="e.g. Friend recommendation, class reading list, social feed"
+                  className={inputCx}
+                />
+              </Field>
+            </div>
             <Field label="Destination" required>
               <div className="grid grid-cols-2 overflow-hidden rounded-md border border-zinc-800 bg-zinc-950">
-                <button
-                  type="button"
-                  onClick={() => setDestination("library")}
-                  className={`px-3 py-2 text-sm transition-colors ${
-                    destination === "library"
-                      ? "bg-zinc-800 font-sans text-zinc-100"
-                      : "font-sans text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200"
-                  }`}
-                >
-                  Publish to library
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setDestination("holding")}
-                  className={`border-l border-zinc-800 px-3 py-2 text-sm transition-colors ${
-                    destination === "holding"
-                      ? "bg-zinc-800 font-sans text-zinc-100"
-                      : "font-sans text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200"
-                  }`}
-                >
-                  Hold only
-                </button>
+                <div className="group relative">
+                  <button
+                    type="button"
+                    onClick={() => setDestination("library")}
+                    className={`w-full px-3 py-2 text-sm transition-colors ${
+                      destination === "library"
+                        ? "bg-zinc-800 font-sans text-zinc-100"
+                        : "font-sans text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200"
+                    }`}
+                  >
+                    Publish to library
+                  </button>
+                  <div className="pointer-events-none absolute left-2 right-2 top-[calc(100%+8px)] z-20 rounded-md border border-zinc-800 bg-zinc-900/95 p-2 text-[11px] text-zinc-300 opacity-0 shadow-[0_8px_20px_rgba(0,0,0,0.45)] transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100">
+                    Becomes a full part of the library. You are required to record an audio narrative now.
+                  </div>
+                </div>
+                <div className="group relative border-l border-zinc-800">
+                  <button
+                    type="button"
+                    onClick={() => setDestination("holding")}
+                    className={`w-full px-3 py-2 text-sm transition-colors ${
+                      destination === "holding"
+                        ? "bg-zinc-800 font-sans text-zinc-100"
+                        : "font-sans text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200"
+                    }`}
+                  >
+                    Hold only
+                  </button>
+                  <div className="pointer-events-none absolute left-2 right-2 top-[calc(100%+8px)] z-20 rounded-md border border-zinc-800 bg-zinc-900/95 p-2 text-[11px] text-zinc-300 opacity-0 shadow-[0_8px_20px_rgba(0,0,0,0.45)] transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100">
+                    Save for later. Other users can still see it in the library, but connections cannot be made until a first audio narrative is recorded by you or another user.
+                  </div>
+                </div>
               </div>
             </Field>
 
-            {saveError && <p className="text-xs text-red-500">{saveError}</p>}
             <div className="flex items-center gap-3">
               <button
                 onClick={() => {
@@ -2207,7 +2281,6 @@ function AddItemPageInner({
               prompt="Why does this matter?"
             />
 
-            {saveError && <p className="text-xs text-red-500">{saveError}</p>}
             <div className="flex items-center gap-3">
               {destination === "holding" && (
                 <button

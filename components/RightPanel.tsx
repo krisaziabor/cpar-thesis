@@ -9,6 +9,8 @@ interface RightPanelProps {
   progressPercent?: number;
   headerActions?: React.ReactNode;
   onBack?: () => void;
+  /** Label shown as a tooltip on the back arrow (e.g. the previous panel's title). */
+  backLabel?: string;
   onClose: () => void;
   children: React.ReactNode;
   /** When true the body area will not scroll; the child is responsible for its own overflow. */
@@ -20,6 +22,7 @@ export default function RightPanel({
   progressPercent,
   headerActions,
   onBack,
+  backLabel,
   onClose,
   children,
   disableBodyScroll,
@@ -54,18 +57,27 @@ export default function RightPanel({
         <div className="flex min-w-0 items-center gap-3">
           <AnimatePresence initial={false}>
             {onBack && (
-              <motion.button
+              <motion.div
                 key="panel-back-arrow"
-                onClick={onBack}
-                aria-label="Go back"
                 initial={{ opacity: 0, x: -6 }}
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -6 }}
                 transition={{ duration: shouldReduceMotion ? 0 : MOTION_DURATION.fast, ease: EASE_OUT }}
-                className="shrink-0 text-base leading-none text-zinc-500 transition-colors hover:text-zinc-200"
+                className="group/back relative shrink-0"
               >
-                ←
-              </motion.button>
+                <button
+                  onClick={onBack}
+                  aria-label={backLabel ? `Back to ${backLabel}` : "Go back"}
+                  className="text-base leading-none text-zinc-500 transition-colors hover:text-zinc-200"
+                >
+                  ←
+                </button>
+                {backLabel && (
+                  <div className="pointer-events-none absolute left-1/2 top-[calc(100%+8px)] z-20 hidden -translate-x-1/2 whitespace-nowrap rounded-md border border-zinc-700 bg-zinc-900 px-2.5 py-1.5 font-sans text-[11px] text-zinc-300 shadow-[0_8px_20px_rgba(0,0,0,0.5)] group-hover/back:block">
+                    {backLabel}
+                  </div>
+                )}
+              </motion.div>
             )}
           </AnimatePresence>
           <button

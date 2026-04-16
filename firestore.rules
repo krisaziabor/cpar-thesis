@@ -15,11 +15,14 @@ service cloud.firestore {
 
     // Whitelist: anyone may look up a specific document by ID (needed for the
     // pre-login email check), but listing the collection is blocked.
-    // Write access is intentionally blocked — manage entries in the Firebase Console.
+    // Authenticated users may create their own entry (self-registration).
+    // Only admins (or Firebase Console) can update/delete entries.
     match /whitelist/{email} {
       allow get: if true;
-      allow list: if false;
-      allow write: if false;
+      allow list: if request.auth != null && isAdmin();
+      allow create: if request.auth != null
+        && request.auth.token.email == email;
+      allow update, delete: if false;
     }
 
     // Placeholder: allow read/write for authenticated users only.

@@ -1,4 +1,4 @@
-import { doc, getDoc } from "firebase/firestore";
+import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "./firebase";
 import type { User } from "./types";
 
@@ -11,4 +11,16 @@ export async function getUserProfile(email: string): Promise<User | null> {
   } catch {
     return null;
   }
+}
+
+export async function ensureUserProfile(
+  email: string,
+  name: string
+): Promise<void> {
+  if (!db) return;
+  await setDoc(
+    doc(db, "users", email),
+    { email, name, created_at: serverTimestamp() },
+    { merge: true }
+  );
 }

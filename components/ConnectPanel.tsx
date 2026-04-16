@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import AudioRecorder from "@/components/AudioRecorder";
 import { createConnection, findExistingConnectionByItemIds, subscribeToItems } from "@/lib/items";
 import type { Item } from "@/lib/types";
+import { useNavStatus } from "@/lib/nav-status-context";
 
 interface ConnectPanelProps {
   selectedIds: string[];
@@ -24,6 +25,7 @@ export default function ConnectPanel({
   onCreated,
   onOpenExistingResponse,
 }: ConnectPanelProps) {
+  const { startProgress: startNavProgress } = useNavStatus();
   const [items, setItems] = useState<Item[]>([]);
   const [mode, setMode] = useState<"select" | "record">(initialMode);
   const [selected, setSelected] = useState<string[]>(selectedIds);
@@ -74,8 +76,26 @@ export default function ConnectPanel({
           return;
         }
       }
-      const connectionId = await createConnection(selected, audioBlob, createdBy);
-      onCreated(connectionId);
+
+      const thumbs = selectedItems
+        .map((item) => item.thumbnail_url)
+        .filter((u): u is string => !!u);
+      const { resolve, reject } = startNavProgress({
+        id: `conn-${Date.now()}`,
+        text: "Filing connection",
+        thumbnails: thumbs.length > 0 ? thumbs : undefined,
+        showProgress: true,
+        durationMs: 2400,
+      });
+
+      try {
+        const connectionId = await createConnection(selected, audioBlob, createdBy);
+        resolve("Connection filed");
+        onCreated(connectionId);
+      } catch (err) {
+        reject(err instanceof Error ? err.message : "Something went wrong, try again");
+        setSaving(false);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create connection.");
       setSaving(false);
@@ -220,7 +240,7 @@ export default function ConnectPanel({
             disabled={saving || !audioBlob || selected.length < 2}
             className="w-full border border-zinc-700 px-4 py-2.5 text-sm font-medium text-zinc-200 transition-colors hover:border-zinc-500 hover:text-zinc-50 disabled:opacity-40"
           >
-            {saving ? "sending..." : "Send connection"}
+            Send connection
           </button>
         </div>
       )}

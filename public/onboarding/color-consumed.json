@@ -1,0 +1,300 @@
+{
+  "audio_url": "/onboarding/color-consumed.m4a",
+  "words": [
+    {
+      "word": "Okay,",
+      "start": 1.74,
+      "end": 2.159
+    },
+    {
+      "word": "let's",
+      "start": 2.659,
+      "end": 3.199
+    },
+    {
+      "word": "start",
+      "start": 3.579,
+      "end": 3.919
+    },
+    {
+      "word": "with",
+      "start": 4.259,
+      "end": 4.719
+    },
+    {
+      "word": "a",
+      "start": 4.92,
+      "end": 4.94
+    },
+    {
+      "word": "little",
+      "start": 5,
+      "end": 5.119
+    },
+    {
+      "word": "exercise.",
+      "start": 5.219,
+      "end": 5.96
+    },
+    {
+      "word": "I",
+      "start": 6.719,
+      "end": 6.739
+    },
+    {
+      "word": "want",
+      "start": 6.799,
+      "end": 6.96
+    },
+    {
+      "word": "you",
+      "start": 7.039,
+      "end": 7.239
+    },
+    {
+      "word": "to",
+      "start": 7.44,
+      "end": 7.599
+    },
+    {
+      "word": "think",
+      "start": 7.899,
+      "end": 8.079
+    },
+    {
+      "word": "of",
+      "start": 8.119,
+      "end": 8.199
+    },
+    {
+      "word": "something",
+      "start": 8.279,
+      "end": 8.86
+    },
+    {
+      "word": "you've",
+      "start": 9.26,
+      "end": 9.399
+    },
+    {
+      "word": "consumed",
+      "start": 9.42,
+      "end": 9.92
+    },
+    {
+      "word": "recently",
+      "start": 9.979,
+      "end": 10.519
+    },
+    {
+      "word": "that",
+      "start": 11.219,
+      "end": 11.38
+    },
+    {
+      "word": "stuck",
+      "start": 11.42,
+      "end": 11.679
+    },
+    {
+      "word": "with",
+      "start": 11.719,
+      "end": 11.9
+    },
+    {
+      "word": "you.",
+      "start": 11.939,
+      "end": 12.119
+    },
+    {
+      "word": "It",
+      "start": 13.059,
+      "end": 13.139
+    },
+    {
+      "word": "could",
+      "start": 13.179,
+      "end": 13.36
+    },
+    {
+      "word": "be",
+      "start": 13.42,
+      "end": 13.739
+    },
+    {
+      "word": "a",
+      "start": 14.299,
+      "end": 14.359
+    },
+    {
+      "word": "movie,",
+      "start": 14.439,
+      "end": 15
+    },
+    {
+      "word": "a",
+      "start": 15.539,
+      "end": 15.559
+    },
+    {
+      "word": "song,",
+      "start": 15.679,
+      "end": 16.26
+    },
+    {
+      "word": "an",
+      "start": 16.5,
+      "end": 16.619
+    },
+    {
+      "word": "album,",
+      "start": 16.719,
+      "end": 17.26
+    },
+    {
+      "word": "a",
+      "start": 18.059,
+      "end": 18.119
+    },
+    {
+      "word": "photograph,",
+      "start": 18.18,
+      "end": 18.979
+    },
+    {
+      "word": "a",
+      "start": 19.559,
+      "end": 19.639
+    },
+    {
+      "word": "piece",
+      "start": 19.699,
+      "end": 19.879
+    },
+    {
+      "word": "of",
+      "start": 19.92,
+      "end": 20.02
+    },
+    {
+      "word": "writing,",
+      "start": 20.079,
+      "end": 20.619
+    },
+    {
+      "word": "a",
+      "start": 21.559,
+      "end": 21.639
+    },
+    {
+      "word": "TikTok",
+      "start": 21.699,
+      "end": 22.279
+    },
+    {
+      "word": "or",
+      "start": 22.359,
+      "end": 22.479
+    },
+    {
+      "word": "Instagram",
+      "start": 22.539,
+      "end": 23.039
+    },
+    {
+      "word": "Reel.",
+      "start": 23.139,
+      "end": 23.459
+    },
+    {
+      "word": "Really",
+      "start": 24.079,
+      "end": 24.34
+    },
+    {
+      "word": "anything.",
+      "start": 24.399,
+      "end": 24.92
+    },
+    {
+      "word": "And",
+      "start": 26.099,
+      "end": 26.2
+    },
+    {
+      "word": "then...",
+      "start": 26.299,
+      "end": 26.68
+    },
+    {
+      "word": "Close",
+      "start": 28.5,
+      "end": 28.699
+    },
+    {
+      "word": "your",
+      "start": 28.739,
+      "end": 28.819
+    },
+    {
+      "word": "eyes",
+      "start": 28.899,
+      "end": 29.319
+    },
+    {
+      "word": "and",
+      "start": 30.039,
+      "end": 30.139
+    },
+    {
+      "word": "think",
+      "start": 30.26,
+      "end": 30.42
+    },
+    {
+      "word": "of",
+      "start": 30.459,
+      "end": 30.539
+    },
+    {
+      "word": "a",
+      "start": 30.559,
+      "end": 30.659
+    },
+    {
+      "word": "color",
+      "start": 30.739,
+      "end": 31.34
+    },
+    {
+      "word": "that",
+      "start": 31.379,
+      "end": 31.459
+    },
+    {
+      "word": "you",
+      "start": 31.519,
+      "end": 31.579
+    },
+    {
+      "word": "associate",
+      "start": 31.639,
+      "end": 32.559
+    },
+    {
+      "word": "with",
+      "start": 32.639,
+      "end": 32.819
+    },
+    {
+      "word": "that",
+      "start": 32.86,
+      "end": 33.06
+    },
+    {
+      "word": "thing.",
+      "start": 33.099,
+      "end": 33.399
+    }
+  ]
+}

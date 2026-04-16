@@ -13,6 +13,7 @@ import {
   serverTimestamp,
   getDocs,
   limit,
+  Timestamp,
   type Unsubscribe,
 } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
@@ -77,6 +78,7 @@ export async function uploadItemFile(file: File, itemId: string): Promise<string
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type ItemFields = Pick<Item, "title" | "description" | "media_date" | "type" | "creator" | "tags" | "added_by" | "media_url"> & {
+  encountered_source?: string;
   link?: string;
   thumbnail_url?: string;
   source_metadata?: SourceMetadata;
@@ -870,4 +872,27 @@ export async function deleteConnection(connection: Connection): Promise<void> {
   ]);
 
   await deleteDoc(doc(db, "connections", connection.id));
+}
+
+/** Count published items created after a given timestamp. */
+export async function countItemsSince(since: Date): Promise<number> {
+  if (!db) return 0;
+  const q = query(
+    collection(db, "items"),
+    where("is_draft", "==", false),
+    where("created_at", ">", Timestamp.fromDate(since))
+  );
+  const snap = await getDocs(q);
+  return snap.size;
+}
+
+/** Count connections created after a given timestamp. */
+export async function countConnectionsSince(since: Date): Promise<number> {
+  if (!db) return 0;
+  const q = query(
+    collection(db, "connections"),
+    where("created_at", ">", Timestamp.fromDate(since))
+  );
+  const snap = await getDocs(q);
+  return snap.size;
 }

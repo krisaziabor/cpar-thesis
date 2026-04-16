@@ -1,0 +1,515 @@
+{
+  "audio_url": "/onboarding/media-opt-in.m4a",
+  "words": [
+    {
+      "word": "So",
+      "start": 1.039,
+      "end": 1.36
+    },
+    {
+      "word": "in",
+      "start": 1.579,
+      "end": 1.939
+    },
+    {
+      "word": "the",
+      "start": 1.979,
+      "end": 2.059
+    },
+    {
+      "word": "last",
+      "start": 2.119,
+      "end": 2.319
+    },
+    {
+      "word": "week",
+      "start": 2.379,
+      "end": 2.5
+    },
+    {
+      "word": "of",
+      "start": 2.539,
+      "end": 2.619
+    },
+    {
+      "word": "April",
+      "start": 2.74,
+      "end": 3.139
+    },
+    {
+      "word": "and",
+      "start": 3.319,
+      "end": 3.399
+    },
+    {
+      "word": "first",
+      "start": 3.519,
+      "end": 3.699
+    },
+    {
+      "word": "week",
+      "start": 3.759,
+      "end": 3.899
+    },
+    {
+      "word": "of",
+      "start": 3.939,
+      "end": 4
+    },
+    {
+      "word": "May,",
+      "start": 4.099,
+      "end": 4.44
+    },
+    {
+      "word": "I",
+      "start": 5.219,
+      "end": 5.5
+    },
+    {
+      "word": "am",
+      "start": 5.539,
+      "end": 5.659
+    },
+    {
+      "word": "going",
+      "start": 5.699,
+      "end": 5.92
+    },
+    {
+      "word": "to",
+      "start": 5.96,
+      "end": 6.019
+    },
+    {
+      "word": "be",
+      "start": 6.059,
+      "end": 6.219
+    },
+    {
+      "word": "showing",
+      "start": 6.279,
+      "end": 6.799
+    },
+    {
+      "word": "Kanon",
+      "start": 7.359,
+      "end": 7.819
+    },
+    {
+      "word": "as",
+      "start": 8.559,
+      "end": 9.019
+    },
+    {
+      "word": "an",
+      "start": 9.179,
+      "end": 9.26
+    },
+    {
+      "word": "installation",
+      "start": 9.359,
+      "end": 10.139
+    },
+    {
+      "word": "for",
+      "start": 10.38,
+      "end": 10.859
+    },
+    {
+      "word": "the",
+      "start": 10.939,
+      "end": 11.219
+    },
+    {
+      "word": "art",
+      "start": 11.539,
+      "end": 12.019
+    },
+    {
+      "word": "thesis",
+      "start": 12.059,
+      "end": 12.659
+    },
+    {
+      "word": "exhibition.",
+      "start": 13.299,
+      "end": 13.939
+    },
+    {
+      "word": "Now,",
+      "start": 14.92,
+      "end": 15.219
+    },
+    {
+      "word": "my",
+      "start": 15.42,
+      "end": 15.5
+    },
+    {
+      "word": "idea",
+      "start": 15.599,
+      "end": 16.18
+    },
+    {
+      "word": "is",
+      "start": 16.299,
+      "end": 16.52
+    },
+    {
+      "word": "to",
+      "start": 16.659,
+      "end": 16.799
+    },
+    {
+      "word": "take",
+      "start": 16.879,
+      "end": 17.219
+    },
+    {
+      "word": "the",
+      "start": 17.559,
+      "end": 17.84
+    },
+    {
+      "word": "content",
+      "start": 18.119,
+      "end": 18.659
+    },
+    {
+      "word": "that",
+      "start": 18.879,
+      "end": 19.1
+    },
+    {
+      "word": "you",
+      "start": 19.479,
+      "end": 19.599
+    },
+    {
+      "word": "add",
+      "start": 19.76,
+      "end": 20.079
+    },
+    {
+      "word": "in",
+      "start": 21.279,
+      "end": 21.359
+    },
+    {
+      "word": "your",
+      "start": 21.439,
+      "end": 21.539
+    },
+    {
+      "word": "time",
+      "start": 21.619,
+      "end": 22.059
+    },
+    {
+      "word": "using",
+      "start": 22.539,
+      "end": 22.76
+    },
+    {
+      "word": "Kanon",
+      "start": 22.859,
+      "end": 23.26
+    },
+    {
+      "word": "into",
+      "start": 23.959,
+      "end": 24.539
+    },
+    {
+      "word": "the",
+      "start": 24.799,
+      "end": 24.899
+    },
+    {
+      "word": "video",
+      "start": 25.019,
+      "end": 25.319
+    },
+    {
+      "word": "and",
+      "start": 25.359,
+      "end": 25.459
+    },
+    {
+      "word": "audio",
+      "start": 25.599,
+      "end": 26.019
+    },
+    {
+      "word": "installation.",
+      "start": 26.459,
+      "end": 27.219
+    },
+    {
+      "word": "And",
+      "start": 28.459,
+      "end": 28.719
+    },
+    {
+      "word": "so",
+      "start": 28.819,
+      "end": 28.879
+    },
+    {
+      "word": "what",
+      "start": 28.939,
+      "end": 29.039
+    },
+    {
+      "word": "that",
+      "start": 29.099,
+      "end": 29.199
+    },
+    {
+      "word": "looks",
+      "start": 29.26,
+      "end": 29.459
+    },
+    {
+      "word": "like",
+      "start": 29.519,
+      "end": 29.719
+    },
+    {
+      "word": "is",
+      "start": 29.819,
+      "end": 30.139
+    },
+    {
+      "word": "the",
+      "start": 30.619,
+      "end": 30.699
+    },
+    {
+      "word": "media",
+      "start": 30.779,
+      "end": 31.34
+    },
+    {
+      "word": "that",
+      "start": 31.399,
+      "end": 31.5
+    },
+    {
+      "word": "you",
+      "start": 31.559,
+      "end": 31.619
+    },
+    {
+      "word": "include,",
+      "start": 31.679,
+      "end": 32.139
+    },
+    {
+      "word": "but",
+      "start": 32.259,
+      "end": 32.34
+    },
+    {
+      "word": "then",
+      "start": 32.38,
+      "end": 32.5
+    },
+    {
+      "word": "also",
+      "start": 32.659,
+      "end": 33.459
+    },
+    {
+      "word": "the",
+      "start": 33.54,
+      "end": 33.859
+    },
+    {
+      "word": "audio",
+      "start": 34.639,
+      "end": 34.899
+    },
+    {
+      "word": "narratives",
+      "start": 35,
+      "end": 35.619
+    },
+    {
+      "word": "that",
+      "start": 35.979,
+      "end": 36.079
+    },
+    {
+      "word": "you",
+      "start": 36.119,
+      "end": 36.18
+    },
+    {
+      "word": "attach",
+      "start": 36.299,
+      "end": 36.84
+    },
+    {
+      "word": "would",
+      "start": 37.579,
+      "end": 37.72
+    },
+    {
+      "word": "be",
+      "start": 37.759,
+      "end": 37.879
+    },
+    {
+      "word": "projected.",
+      "start": 37.939,
+      "end": 38.579
+    },
+    {
+      "word": "If",
+      "start": 39.399,
+      "end": 39.5
+    },
+    {
+      "word": "this",
+      "start": 39.54,
+      "end": 39.659
+    },
+    {
+      "word": "is",
+      "start": 39.7,
+      "end": 39.799
+    },
+    {
+      "word": "something",
+      "start": 39.819,
+      "end": 40.079
+    },
+    {
+      "word": "you're",
+      "start": 40.119,
+      "end": 40.22
+    },
+    {
+      "word": "okay",
+      "start": 40.299,
+      "end": 40.52
+    },
+    {
+      "word": "with,",
+      "start": 40.579,
+      "end": 40.879
+    },
+    {
+      "word": "let",
+      "start": 41.619,
+      "end": 41.739
+    },
+    {
+      "word": "me",
+      "start": 41.799,
+      "end": 41.88
+    },
+    {
+      "word": "know,",
+      "start": 41.979,
+      "end": 42.299
+    },
+    {
+      "word": "but",
+      "start": 42.779,
+      "end": 43.139
+    },
+    {
+      "word": "I",
+      "start": 43.639,
+      "end": 43.7
+    },
+    {
+      "word": "completely",
+      "start": 43.739,
+      "end": 44.159
+    },
+    {
+      "word": "understand",
+      "start": 44.2,
+      "end": 44.84
+    },
+    {
+      "word": "if",
+      "start": 45.459,
+      "end": 45.599
+    },
+    {
+      "word": "you",
+      "start": 45.7,
+      "end": 45.959
+    },
+    {
+      "word": "are",
+      "start": 46.02,
+      "end": 46.119
+    },
+    {
+      "word": "against",
+      "start": 46.239,
+      "end": 46.559
+    },
+    {
+      "word": "this.",
+      "start": 46.619,
+      "end": 47.079
+    },
+    {
+      "word": "And",
+      "start": 47.139,
+      "end": 47.319
+    },
+    {
+      "word": "you",
+      "start": 47.399,
+      "end": 47.54
+    },
+    {
+      "word": "also",
+      "start": 47.599,
+      "end": 47.879
+    },
+    {
+      "word": "have",
+      "start": 48,
+      "end": 48.159
+    },
+    {
+      "word": "the",
+      "start": 48.18,
+      "end": 48.259
+    },
+    {
+      "word": "choice",
+      "start": 48.319,
+      "end": 48.84
+    },
+    {
+      "word": "to",
+      "start": 48.899,
+      "end": 49.259
+    },
+    {
+      "word": "opt",
+      "start": 49.36,
+      "end": 49.599
+    },
+    {
+      "word": "out",
+      "start": 49.68,
+      "end": 50.019
+    },
+    {
+      "word": "below.",
+      "start": 50.079,
+      "end": 50.5
+    }
+  ]
+}

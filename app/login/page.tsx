@@ -11,12 +11,18 @@ import {
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { auth } from "@/lib/firebase";
-import { getWhitelistAccessInfo } from "@/lib/whitelist";
+import {
+  emailHasWhitelistEntry,
+  getWhitelistAccessInfo,
+  REGISTRATION_OPEN,
+} from "@/lib/whitelist";
 import { useAuth } from "@/lib/auth-context";
 
 const googleProvider = new GoogleAuthProvider();
 const EMAIL_STORAGE_KEY = "kanon_signin_email";
-const ACCESS_NOT_GIVEN_MESSAGE = "Access has not been given to this email yet.";
+const REGISTRATION_CLOSED_MESSAGE = "Registration is currently closed.";
+
+const EASE = [0.215, 0.61, 0.355, 1] as const;
 
 type Stage = "gate" | "choice" | "sent" | "verifying";
 
@@ -37,16 +43,15 @@ export default function LoginPage() {
   const [emailInput, setEmailInput] = useState("");
   const [gatedEmail, setGatedEmail] = useState("");
   const [gatedFirstName, setGatedFirstName] = useState<string | null>(null);
+  const [isNewUser, setIsNewUser] = useState(false);
   const [signingIn, setSigningIn] = useState(false);
   const [localError, setLocalError] = useState("");
   const [transientNotice, setTransientNotice] = useState("");
 
-  // Redirect to home if already authenticated
   useEffect(() => {
     if (!loading && user) router.replace("/");
   }, [user, loading, router]);
 
-  // Complete sign-in when user returns from the email link
   useEffect(() => {
     if (!auth || typeof window === "undefined") return;
     if (!isSignInWithEmailLink(auth, window.location.href)) return;
@@ -77,9 +82,6 @@ export default function LoginPage() {
     return () => window.clearTimeout(timeoutId);
   }, [transientNotice]);
 
-  const shouldShowYaleNotice =
-    (stage === "choice" || stage === "sent") &&
-    gatedEmail.trim().toLowerCase().endsWith("@yale.edu");
   const error = localError || authError || "";
 
   async function handleGoogleSignIn(emailHint?: string) {
@@ -99,7 +101,6 @@ export default function LoginPage() {
 
     try {
       await signInWithPopup(auth, googleProvider);
-      // Auth context handles whitelist check, role, and redirect
     } catch (err: unknown) {
       const code = (err as { code?: string }).code;
       if (code !== "auth/popup-closed-by-user" && code !== "auth/cancelled-popup-request") {
@@ -117,19 +118,29 @@ export default function LoginPage() {
 
     const normalizedEmail = emailInput.trim().toLowerCase();
 
-    // Gate both auth methods behind whitelist check for clear access feedback.
-    const accessInfo = await getWhitelistAccessInfo(normalizedEmail).catch(() => ({
-      role: null,
-      firstName: null,
-    }));
-    if (!accessInfo.role) {
+    const exists = await emailHasWhitelistEntry(normalizedEmail).catch(() => false);
+
+    if (exists) {
+      const accessInfo = await getWhitelistAccessInfo(normalizedEmail).catch(() => ({
+        role: null,
+        firstName: null,
+      }));
+      setGatedEmail(normalizedEmail);
+      setGatedFirstName(accessInfo.firstName);
+      setIsNewUser(false);
+      setStage("choice");
+      return;
+    }
+
+    if (!REGISTRATION_OPEN) {
       setStage("gate");
-      setTransientNotice(ACCESS_NOT_GIVEN_MESSAGE);
+      setTransientNotice(REGISTRATION_CLOSED_MESSAGE);
       return;
     }
 
     setGatedEmail(normalizedEmail);
-    setGatedFirstName(accessInfo.firstName);
+    setGatedFirstName(null);
+    setIsNewUser(true);
     setStage("choice");
   }
 
@@ -143,8 +154,6 @@ export default function LoginPage() {
       return;
     }
 
-    // actionCodeSettings.url must be an authorized domain in Firebase Console:
-    // Authentication > Sign-in method > Email/Password > Email link (passwordless sign-in)
     try {
       await sendSignInLinkToEmail(auth, gatedEmail, {
         url: `${window.location.origin}/login`,
@@ -163,158 +172,151 @@ export default function LoginPage() {
 
   const isAuthTransitioning = loading || signingIn || stage === "verifying";
 
+  const animProps = {
+    initial: shouldReduceMotion ? false : ({ opacity: 0, y: 6 } as const),
+    animate: { opacity: 1, y: 0 } as const,
+    exit: shouldReduceMotion ? ({ opacity: 1 } as const) : ({ opacity: 0, y: -6 } as const),
+    transition: shouldReduceMotion ? { duration: 0 } : ({ duration: 0.2, ease: EASE } as const),
+  };
+
   return (
     <div className="min-h-screen bg-black">
-      <div className="fixed left-6 top-6 z-20 flex flex-col gap-2">
+      {/* ── Header — fixed top center like onboarding ────────────────────── */}
+      <div className="fixed left-0 right-0 top-6 z-20 flex flex-col items-center">
         <h1 className="font-lector text-2xl tracking-tight text-white/90">Kanon</h1>
-        <p className="whitespace-pre-line text-xs text-zinc-400">
-          {"A social network, library, installation, book, and practice.\nThesis for Computing and the Arts at Yale University.\nWork of Kristopher Aziabor."}
-        </p>
       </div>
 
-      <div className="fixed bottom-6 left-6 z-20 flex w-[min(560px,calc(100vw-3rem))] flex-col gap-2">
-        <motion.div
-          layout
-          transition={
-            shouldReduceMotion
-              ? { duration: 0 }
-              : { duration: 0.22, ease: [0.215, 0.61, 0.355, 1] }
-          }
-          className="overflow-hidden rounded-lg border border-zinc-800 bg-zinc-950 shadow-[0_4px_24px_rgba(0,0,0,0.5)]"
-        >
-          {isAuthTransitioning ? (
-            <div className="px-4 py-2.5 text-xs text-zinc-400 font-sans">
-              {stage === "verifying" ? "Signing you in..." : "Loading..."}
-            </div>
-          ) : (
-            <AnimatePresence initial={false} mode="wait">
-              {stage === "gate" && (
-                <motion.form
-                  key="gate"
-                  onSubmit={handleEmailGateSubmit}
-                  initial={shouldReduceMotion ? false : { opacity: 0, y: 6 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={shouldReduceMotion ? { opacity: 1 } : { opacity: 0, y: -6 }}
-                  transition={
-                    shouldReduceMotion
-                      ? { duration: 0 }
-                      : { duration: 0.18, ease: [0.215, 0.61, 0.355, 1] }
-                  }
-                  className="flex items-stretch divide-x divide-zinc-800"
-                >
-                  <input
-                    type="email"
-                    value={emailInput}
-                    onChange={(e) => {
-                      setEmailInput(e.target.value);
-                      if (transientNotice === ACCESS_NOT_GIVEN_MESSAGE) {
-                        setTransientNotice("");
-                      }
-                    }}
-                    placeholder="Enter your email"
-                    required
-                    className="min-w-0 flex-1 bg-transparent px-4 py-2.5 text-xs text-zinc-300 placeholder:text-zinc-500 focus:outline-none"
-                  />
-                  <button
-                    type="submit"
-                    className="font-lector px-4 py-2.5 text-xs text-zinc-300 transition-colors hover:bg-zinc-900 hover:text-zinc-50"
-                  >
-                    Continue
-                  </button>
-                </motion.form>
-              )}
-
-              {stage === "choice" && (
-                <motion.div
-                  key="choice"
-                  initial={shouldReduceMotion ? false : { opacity: 0, y: 6 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={shouldReduceMotion ? { opacity: 1 } : { opacity: 0, y: -6 }}
-                  transition={
-                    shouldReduceMotion
-                      ? { duration: 0 }
-                      : { duration: 0.2, ease: [0.215, 0.61, 0.355, 1] }
-                  }
-                  className="flex flex-col font-lector"
-                >
-                  <div className="border-b border-zinc-800 px-4 py-2 text-[11px] text-zinc-500 font-sans">
-                    {gatedFirstName ? `Hey ${gatedFirstName}!` : gatedEmail}
-                  </div>
-                  <div className="flex items-stretch divide-x divide-zinc-800">
-                    <button
-                      onClick={() => void handleGoogleSignIn(gatedEmail)}
-                      className="flex flex-1 items-center justify-center gap-2 px-4 py-2.5 text-xs text-zinc-300 transition-colors hover:bg-zinc-900 hover:text-zinc-50"
-                    >
-                      <GoogleIcon />
-                      Continue with Google
-                    </button>
-                    <button
-                      onClick={() => void handleSendMagicLink()}
-                      className="px-4 py-2.5 text-xs text-zinc-300 transition-colors hover:bg-zinc-900 hover:text-zinc-50"
-                    >
-                      Send magic link
-                    </button>
-                  </div>
-                </motion.div>
-              )}
-
-              {stage === "sent" && (
-                <motion.div
-                  key="sent"
-                  initial={shouldReduceMotion ? false : { opacity: 0, y: 6 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={shouldReduceMotion ? { opacity: 1 } : { opacity: 0, y: -6 }}
-                  transition={
-                    shouldReduceMotion
-                      ? { duration: 0 }
-                      : { duration: 0.2, ease: [0.215, 0.61, 0.355, 1] }
-                  }
-                  className="flex flex-col"
-                >
-                  <div className="border-b border-zinc-800 px-4 py-2 text-[11px] text-zinc-500 font-sans">
-                    Check your email (spam included)
-                  </div>
-                  <div className="px-4 py-2.5 text-xs text-zinc-300 font-sans">
-                    Magic link sent to {gatedEmail}.
-                  </div>
-                  <div className="flex items-stretch divide-x divide-zinc-800 border-t border-zinc-800">
-                    <button
-                      onClick={() => void handleGoogleSignIn(gatedEmail)}
-                      className="flex-1 px-4 py-2.5 text-left text-xs text-zinc-400 font-lector transition-colors hover:bg-zinc-900 hover:text-zinc-50"
-                    >
-                      Switch to Google Sign-In
-                    </button>
-                    <button
-                      onClick={() => {
-                        setStage("gate");
-                        setEmailInput("");
-                        setGatedEmail("");
-                        setGatedFirstName(null);
-                      }}
-                      className="flex-1 px-4 py-2.5 text-left text-xs text-zinc-400 font-lector transition-colors hover:bg-zinc-900 hover:text-zinc-50"
-                    >
-                      Use a different email
-                    </button>
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          )}
-        </motion.div>
-
-        {shouldShowYaleNotice && (
-          <p className="px-1 text-xs text-zinc-400">
-            Google Sign-In is recommended for yale.edu email addresses.
+      {/* ── Centered content area ────────────────────────────────────────── */}
+      <div className="flex min-h-screen flex-col items-center justify-center px-6">
+        <div className="flex w-[min(380px,calc(100vw-3rem))] flex-col items-start gap-2">
+          <p className="whitespace-pre-line font-lector text-sm leading-relaxed text-zinc-400">
+            {"A social network, library, installation, book, and practice.\nThesis for Computing and the Arts at Yale University.\nWork of Kristopher Aziabor."}
           </p>
+        </div>
+
+        {/* ── Form area ─────────────────────────────────────────────────── */}
+        <div className="mt-6 flex w-[min(380px,calc(100vw-3rem))] flex-col items-start gap-3">
+        {isAuthTransitioning ? (
+          <p className="font-sans text-xs text-zinc-400">
+            {stage === "verifying" ? "Signing you in\u2026" : "Loading\u2026"}
+          </p>
+        ) : (
+          <AnimatePresence initial={false} mode="wait">
+            {stage === "gate" && (
+              <motion.form
+                key="gate"
+                onSubmit={handleEmailGateSubmit}
+                {...animProps}
+                className="flex w-full flex-col items-start gap-3"
+              >
+                <input
+                  type="email"
+                  value={emailInput}
+                  onChange={(e) => {
+                    setEmailInput(e.target.value);
+                    if (transientNotice) setTransientNotice("");
+                  }}
+                  placeholder="Enter your email"
+                  required
+                  className="w-full bg-transparent font-sans text-xs text-zinc-300 placeholder:text-zinc-500 focus:outline-none border-b border-zinc-800 pb-2"
+                />
+                <button
+                  type="submit"
+                  className="font-sans text-xs text-zinc-300 transition-colors hover:text-zinc-50"
+                >
+                  Continue
+                </button>
+              </motion.form>
+            )}
+
+            {stage === "choice" && (
+              <motion.div
+                key="choice"
+                {...animProps}
+                className="flex w-full flex-col items-start gap-4"
+              >
+                <p className="font-lector text-sm" style={{ color: "lab(65.6464 1.53497 -5.42429)" }}>
+                  {isNewUser
+                    ? "Create your account"
+                    : gatedFirstName
+                      ? `Hey ${gatedFirstName}!`
+                      : "Welcome back! Glad you are here :)"}
+                </p>
+                <button
+                  onClick={() => void handleGoogleSignIn(gatedEmail)}
+                  className="flex items-center gap-2 font-sans text-xs text-zinc-300 transition-colors hover:text-zinc-50"
+                >
+                  <GoogleIcon />
+                  {isNewUser ? "Sign up with Google" : "Continue with Google"}
+                </button>
+                <div className="flex items-center gap-4">
+                  <button
+                    onClick={() => void handleSendMagicLink()}
+                    className="font-sans text-xs text-zinc-500 transition-colors hover:text-zinc-300"
+                  >
+                    {isNewUser ? "Send sign-up link" : "Send magic link"}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setStage("gate");
+                      setEmailInput("");
+                      setGatedEmail("");
+                      setGatedFirstName(null);
+                      setIsNewUser(false);
+                    }}
+                    className="font-sans text-xs text-zinc-500 transition-colors hover:text-zinc-300"
+                  >
+                    Use a different email
+                  </button>
+                </div>
+              </motion.div>
+            )}
+
+            {stage === "sent" && (
+              <motion.div
+                key="sent"
+                {...animProps}
+                className="flex w-full flex-col items-start gap-4"
+              >
+                <p className="font-sans text-xs text-zinc-300">
+                  Magic link sent to {gatedEmail}.
+                </p>
+                <p className="font-sans text-[11px] text-zinc-500">
+                  Check your email (spam included)
+                </p>
+                <div className="flex items-center gap-4">
+                  <button
+                    onClick={() => void handleGoogleSignIn(gatedEmail)}
+                    className="font-sans text-xs text-zinc-400 transition-colors hover:text-zinc-50"
+                  >
+                    Switch to Google Sign-In
+                  </button>
+                  <button
+                    onClick={() => {
+                      setStage("gate");
+                      setEmailInput("");
+                      setGatedEmail("");
+                      setGatedFirstName(null);
+                      setIsNewUser(false);
+                    }}
+                    className="font-sans text-xs text-zinc-400 transition-colors hover:text-zinc-50"
+                  >
+                    Use a different email
+                  </button>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         )}
 
         {transientNotice && (
-          <p className="px-1 text-xs text-red-400">{transientNotice}</p>
+          <p className="text-xs text-red-400">{transientNotice}</p>
         )}
 
         {error && (
-          <p className="px-1 text-xs text-red-400">{error}</p>
+          <p className="text-xs text-red-400">{error}</p>
         )}
+      </div>
       </div>
     </div>
   );

@@ -1,0 +1,645 @@
+{
+  "audio_url": "/onboarding/book-text.m4a",
+  "words": [
+    {
+      "word": "I'm",
+      "start": 1.579,
+      "end": 1.74
+    },
+    {
+      "word": "also",
+      "start": 1.819,
+      "end": 2.18
+    },
+    {
+      "word": "designing",
+      "start": 2.339,
+      "end": 3.059
+    },
+    {
+      "word": "and",
+      "start": 3.359,
+      "end": 3.659
+    },
+    {
+      "word": "printing",
+      "start": 3.879,
+      "end": 4.48
+    },
+    {
+      "word": "a",
+      "start": 4.559,
+      "end": 4.639
+    },
+    {
+      "word": "book",
+      "start": 4.699,
+      "end": 5.039
+    },
+    {
+      "word": "which",
+      "start": 5.659,
+      "end": 5.9
+    },
+    {
+      "word": "will",
+      "start": 6,
+      "end": 6.339
+    },
+    {
+      "word": "cover",
+      "start": 7.079,
+      "end": 7.559
+    },
+    {
+      "word": "a",
+      "start": 7.879,
+      "end": 7.94
+    },
+    {
+      "word": "few",
+      "start": 8,
+      "end": 8.119
+    },
+    {
+      "word": "things.",
+      "start": 8.239,
+      "end": 8.699
+    },
+    {
+      "word": "It",
+      "start": 8.96,
+      "end": 9.079
+    },
+    {
+      "word": "will",
+      "start": 9.179,
+      "end": 9.46
+    },
+    {
+      "word": "cover",
+      "start": 10.119,
+      "end": 10.46
+    },
+    {
+      "word": "the",
+      "start": 10.579,
+      "end": 10.84
+    },
+    {
+      "word": "design",
+      "start": 11.679,
+      "end": 12.079
+    },
+    {
+      "word": "philosophy",
+      "start": 12.199,
+      "end": 12.779
+    },
+    {
+      "word": "of",
+      "start": 12.84,
+      "end": 12.9
+    },
+    {
+      "word": "Kanon,",
+      "start": 12.979,
+      "end": 13.439
+    },
+    {
+      "word": "which",
+      "start": 13.579,
+      "end": 13.699
+    },
+    {
+      "word": "is",
+      "start": 13.739,
+      "end": 13.819
+    },
+    {
+      "word": "informed",
+      "start": 13.899,
+      "end": 14.5
+    },
+    {
+      "word": "by",
+      "start": 14.599,
+      "end": 14.92
+    },
+    {
+      "word": "a",
+      "start": 15.559,
+      "end": 15.599
+    },
+    {
+      "word": "lot",
+      "start": 15.659,
+      "end": 15.979
+    },
+    {
+      "word": "of",
+      "start": 16.039,
+      "end": 16.159
+    },
+    {
+      "word": "theory",
+      "start": 16.34,
+      "end": 16.899
+    },
+    {
+      "word": "in",
+      "start": 17.219,
+      "end": 17.479
+    },
+    {
+      "word": "art,",
+      "start": 18.26,
+      "end": 18.699
+    },
+    {
+      "word": "in",
+      "start": 18.879,
+      "end": 18.959
+    },
+    {
+      "word": "technology,",
+      "start": 19.039,
+      "end": 19.84
+    },
+    {
+      "word": "in",
+      "start": 20.079,
+      "end": 20.139
+    },
+    {
+      "word": "design.",
+      "start": 20.239,
+      "end": 20.899
+    },
+    {
+      "word": "It",
+      "start": 21.659,
+      "end": 21.84
+    },
+    {
+      "word": "will",
+      "start": 21.979,
+      "end": 22.359
+    },
+    {
+      "word": "cover",
+      "start": 23.479,
+      "end": 23.859
+    },
+    {
+      "word": "my",
+      "start": 24.139,
+      "end": 24.439
+    },
+    {
+      "word": "musings",
+      "start": 24.76,
+      "end": 25.659
+    },
+    {
+      "word": "and",
+      "start": 26.039,
+      "end": 26.299
+    },
+    {
+      "word": "transcribed",
+      "start": 26.719,
+      "end": 27.279
+    },
+    {
+      "word": "voice",
+      "start": 27.379,
+      "end": 27.599
+    },
+    {
+      "word": "recordings",
+      "start": 27.659,
+      "end": 28.18
+    },
+    {
+      "word": "to",
+      "start": 28.239,
+      "end": 28.299
+    },
+    {
+      "word": "myself",
+      "start": 28.359,
+      "end": 29.099
+    },
+    {
+      "word": "as",
+      "start": 29.179,
+      "end": 29.26
+    },
+    {
+      "word": "I",
+      "start": 29.359,
+      "end": 29.42
+    },
+    {
+      "word": "try",
+      "start": 29.479,
+      "end": 29.719
+    },
+    {
+      "word": "to",
+      "start": 29.779,
+      "end": 29.959
+    },
+    {
+      "word": "make",
+      "start": 30.459,
+      "end": 30.599
+    },
+    {
+      "word": "sense",
+      "start": 30.719,
+      "end": 31.579
+    },
+    {
+      "word": "of",
+      "start": 31.659,
+      "end": 31.779
+    },
+    {
+      "word": "this",
+      "start": 31.879,
+      "end": 32.059
+    },
+    {
+      "word": "design",
+      "start": 32.219,
+      "end": 32.619
+    },
+    {
+      "word": "and",
+      "start": 32.659,
+      "end": 32.72
+    },
+    {
+      "word": "development",
+      "start": 32.779,
+      "end": 33.239
+    },
+    {
+      "word": "process.",
+      "start": 33.319,
+      "end": 34.039
+    },
+    {
+      "word": "But",
+      "start": 34.54,
+      "end": 34.599
+    },
+    {
+      "word": "I",
+      "start": 34.659,
+      "end": 34.7
+    },
+    {
+      "word": "also",
+      "start": 34.779,
+      "end": 35.219
+    },
+    {
+      "word": "wanted",
+      "start": 35.279,
+      "end": 35.679
+    },
+    {
+      "word": "to",
+      "start": 35.779,
+      "end": 36.099
+    },
+    {
+      "word": "showcase",
+      "start": 36.38,
+      "end": 37.5
+    },
+    {
+      "word": "the",
+      "start": 37.599,
+      "end": 37.899
+    },
+    {
+      "word": "work",
+      "start": 38.02,
+      "end": 38.379
+    },
+    {
+      "word": "and",
+      "start": 38.439,
+      "end": 38.579
+    },
+    {
+      "word": "thoughts",
+      "start": 38.659,
+      "end": 39.239
+    },
+    {
+      "word": "of",
+      "start": 39.36,
+      "end": 39.639
+    },
+    {
+      "word": "the",
+      "start": 39.7,
+      "end": 39.799
+    },
+    {
+      "word": "users",
+      "start": 39.919,
+      "end": 40.299
+    },
+    {
+      "word": "who",
+      "start": 40.399,
+      "end": 41.079
+    },
+    {
+      "word": "have",
+      "start": 41.159,
+      "end": 41.319
+    },
+    {
+      "word": "made",
+      "start": 41.419,
+      "end": 42.18
+    },
+    {
+      "word": "this",
+      "start": 42.259,
+      "end": 42.54
+    },
+    {
+      "word": "whole",
+      "start": 42.759,
+      "end": 42.939
+    },
+    {
+      "word": "thing",
+      "start": 43.079,
+      "end": 43.239
+    },
+    {
+      "word": "possible.",
+      "start": 43.299,
+      "end": 43.979
+    },
+    {
+      "word": "And",
+      "start": 44.659,
+      "end": 44.779
+    },
+    {
+      "word": "so,",
+      "start": 44.899,
+      "end": 45.099
+    },
+    {
+      "word": "I",
+      "start": 45.659,
+      "end": 45.819
+    },
+    {
+      "word": "would",
+      "start": 45.86,
+      "end": 45.979
+    },
+    {
+      "word": "like",
+      "start": 46.02,
+      "end": 46.139
+    },
+    {
+      "word": "to",
+      "start": 46.18,
+      "end": 46.239
+    },
+    {
+      "word": "invite",
+      "start": 46.279,
+      "end": 46.659
+    },
+    {
+      "word": "you",
+      "start": 46.739,
+      "end": 46.979
+    },
+    {
+      "word": "to",
+      "start": 47.059,
+      "end": 47.36
+    },
+    {
+      "word": "submit",
+      "start": 47.899,
+      "end": 48.739
+    },
+    {
+      "word": "any",
+      "start": 48.84,
+      "end": 49.059
+    },
+    {
+      "word": "sort",
+      "start": 49.2,
+      "end": 49.479
+    },
+    {
+      "word": "of",
+      "start": 49.559,
+      "end": 49.84
+    },
+    {
+      "word": "written",
+      "start": 50.099,
+      "end": 50.379
+    },
+    {
+      "word": "text",
+      "start": 50.459,
+      "end": 51.159
+    },
+    {
+      "word": "that",
+      "start": 51.219,
+      "end": 51.36
+    },
+    {
+      "word": "you",
+      "start": 51.419,
+      "end": 51.479
+    },
+    {
+      "word": "have",
+      "start": 51.5,
+      "end": 51.639
+    },
+    {
+      "word": "made",
+      "start": 51.699,
+      "end": 53.039
+    },
+    {
+      "word": "that",
+      "start": 53.139,
+      "end": 53.799
+    },
+    {
+      "word": "you",
+      "start": 53.959,
+      "end": 54.2
+    },
+    {
+      "word": "would",
+      "start": 54.5,
+      "end": 54.639
+    },
+    {
+      "word": "like",
+      "start": 54.699,
+      "end": 54.88
+    },
+    {
+      "word": "highlighted",
+      "start": 54.959,
+      "end": 55.539
+    },
+    {
+      "word": "in",
+      "start": 56.139,
+      "end": 56.439
+    },
+    {
+      "word": "this",
+      "start": 56.52,
+      "end": 56.639
+    },
+    {
+      "word": "book.",
+      "start": 56.759,
+      "end": 57.119
+    },
+    {
+      "word": "It",
+      "start": 57.319,
+      "end": 57.399
+    },
+    {
+      "word": "could",
+      "start": 57.419,
+      "end": 57.52
+    },
+    {
+      "word": "be",
+      "start": 57.559,
+      "end": 57.599
+    },
+    {
+      "word": "anything",
+      "start": 57.659,
+      "end": 57.939
+    },
+    {
+      "word": "from",
+      "start": 58,
+      "end": 58.119
+    },
+    {
+      "word": "a",
+      "start": 58.159,
+      "end": 58.18
+    },
+    {
+      "word": "song,",
+      "start": 58.319,
+      "end": 58.84
+    },
+    {
+      "word": "to",
+      "start": 59.779,
+      "end": 60.219
+    },
+    {
+      "word": "an",
+      "start": 60.539,
+      "end": 60.659
+    },
+    {
+      "word": "essay,",
+      "start": 60.739,
+      "end": 61.5
+    },
+    {
+      "word": "to",
+      "start": 61.599,
+      "end": 62.019
+    },
+    {
+      "word": "things",
+      "start": 63.199,
+      "end": 63.54
+    },
+    {
+      "word": "that",
+      "start": 63.579,
+      "end": 63.719
+    },
+    {
+      "word": "you've",
+      "start": 63.759,
+      "end": 64
+    },
+    {
+      "word": "written",
+      "start": 64.04,
+      "end": 64.359
+    },
+    {
+      "word": "in",
+      "start": 64.439,
+      "end": 64.539
+    },
+    {
+      "word": "your",
+      "start": 64.599,
+      "end": 64.699
+    },
+    {
+      "word": "notes",
+      "start": 64.76,
+      "end": 65.019
+    },
+    {
+      "word": "app,",
+      "start": 65.139,
+      "end": 66.099
+    },
+    {
+      "word": "or",
+      "start": 66.279,
+      "end": 66.799
+    },
+    {
+      "word": "a",
+      "start": 66.939,
+      "end": 67.279
+    },
+    {
+      "word": "Substack",
+      "start": 67.379,
+      "end": 67.959
+    },
+    {
+      "word": "piece.",
+      "start": 68.04,
+      "end": 68.5
+    }
+  ]
+}

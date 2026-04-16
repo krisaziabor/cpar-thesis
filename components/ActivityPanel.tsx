@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
+import { usePanelHistory } from "@/lib/panel-history-context";
 import {
   subscribeToItems,
   subscribeToAllConnections,
@@ -86,6 +87,7 @@ function pluralize(count: number, singular: string, plural: string): string {
 
 export default function ActivityPanel() {
   const { user } = useAuth();
+  const { navigatePanel } = usePanelHistory();
   const [items, setItems] = useState<Item[]>([]);
   const [connections, setConnections] = useState<Connection[]>([]);
   const [connectionItems, setConnectionItems] = useState<ConnectionItem[]>([]);
@@ -273,12 +275,15 @@ export default function ActivityPanel() {
                         <p className="text-xs leading-snug text-zinc-400">
                           <span className="text-zinc-200">{displayPerson(a.person)}</span>
                           <span className="text-zinc-500"> added </span>
-                          <Link
-                            href={`/?item=${a.itemId}`}
+                          <button
+                            type="button"
+                            onClick={() =>
+                              navigatePanel(`/?item=${a.itemId}`, "Activity")
+                            }
                             className="font-lector text-zinc-200 underline-offset-2 transition-colors hover:text-zinc-100 hover:underline"
                           >
                             {a.itemTitle}
-                          </Link>
+                          </button>
                         </p>
                       )}
                       {a.type === "connected" && (
@@ -290,12 +295,15 @@ export default function ActivityPanel() {
                               {a.connectedItems.map((item, idx) => (
                                 <span key={item.id}>
                                   {idx > 0 && <span className="text-zinc-600"> · </span>}
-                                  <Link
-                                    href={`/?item=${item.id}`}
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      navigatePanel(`/?item=${item.id}`, "Activity")
+                                    }
                                     className="font-lector text-zinc-200 underline-offset-2 transition-colors hover:text-zinc-100 hover:underline"
                                   >
                                     {item.title}
-                                  </Link>
+                                  </button>
                                 </span>
                               ))}
                             </>

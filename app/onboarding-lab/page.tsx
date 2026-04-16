@@ -3,23 +3,11 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { useRouter } from "next/navigation";
-import { useAuth } from "@/lib/auth-context";
-import {
-  submitAccessibility,
-  submitProfileSetup,
-  submitMediaOptIn,
-  submitBookText,
-  skipBookText,
-  submitContactAndComplete,
-  submitAvatarColors,
-} from "@/lib/installation-onboarding";
-import { ensureUserProfile } from "@/lib/users";
-import MarkdownEditor from "@/components/MarkdownEditor";
 import SyncedTranscript from "@/components/SyncedTranscript";
+import MarkdownEditor from "@/components/MarkdownEditor";
 import GradientSVG from "@/components/GradientSVG";
 import ColorWheel from "@/components/ColorWheel";
-import type { OnboardingStep, TimedWord } from "@/lib/types";
+import type { TimedWord } from "@/lib/types";
 
 /* ── Shared animation config ─────────────────────────────────────────────── */
 
@@ -48,14 +36,14 @@ interface StepTranscript {
 }
 
 const STEP_AUDIO_MAP: Record<string, string> = {
-  profile_setup: "profile-setup",
-  media_opt_in: "media-opt-in",
-  book_text: "book-text",
-  contact: "contact",
+  profile_setup:  "profile-setup",
+  media_opt_in:   "media-opt-in",
+  book_text:      "book-text",
+  contact:        "contact",
   color_consumed: "color-consumed",
-  color_made: "color-made",
-  color_changed: "color-changed",
-  avatar_reveal: "avatar-reveal",
+  color_made:     "color-made",
+  color_changed:  "color-changed",
+  avatar_reveal:  "avatar-reveal",
 };
 
 function useStepTranscript(stepKey: string | undefined) {
@@ -87,9 +75,7 @@ function useStepTranscript(stepKey: string | undefined) {
       } catch {}
     })();
 
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [stepKey]);
 
   return data;
@@ -120,117 +106,72 @@ function ListenGate({
     timer.current = setTimeout(() => setShowTip(false), 2000);
   }, []);
 
-  useEffect(
-    () => () => {
-      if (timer.current) clearTimeout(timer.current);
-    },
-    [],
-  );
+  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
 
   if (!locked) return <>{children}</>;
 
   return (
     <div ref={containerRef} className="relative h-full self-stretch">
-      <div className="pointer-events-none h-full opacity-30">{children}</div>
+      <div className="pointer-events-none opacity-30 h-full">{children}</div>
       <button
         type="button"
         onClick={flash}
         className="absolute inset-0 z-10 cursor-default"
         aria-label="Listen to the full recording first"
       />
-      {typeof document !== "undefined" &&
-        createPortal(
-          <AnimatePresence>
-            {showTip && (
-              <motion.div
-                key="listen-tip"
-                initial={reduced ? false : { opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.95 }}
-                transition={
-                  reduced
-                    ? { duration: 0 }
-                    : { duration: 0.15, ease: EASE }
-                }
-                style={{ left: tipPos.x, top: tipPos.y }}
-                className="pointer-events-none fixed z-[9999] -translate-x-1/2 -translate-y-1/2 whitespace-nowrap rounded bg-zinc-800 px-3 py-1.5 font-sans text-xs text-zinc-300 shadow-lg"
-              >
-                Listen to the full recording first
-              </motion.div>
-            )}
-          </AnimatePresence>,
-          document.body,
-        )}
+      {typeof document !== "undefined" && createPortal(
+        <AnimatePresence>
+          {showTip && (
+            <motion.div
+              key="listen-tip"
+              initial={reduced ? false : { opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              transition={
+                reduced
+                  ? { duration: 0 }
+                  : { duration: 0.15, ease: [0.215, 0.61, 0.355, 1] as const }
+              }
+              style={{ left: tipPos.x, top: tipPos.y }}
+              className="pointer-events-none fixed z-[9999] -translate-x-1/2 -translate-y-1/2 whitespace-nowrap rounded bg-zinc-800 px-3 py-1.5 font-sans text-xs text-zinc-300 shadow-lg"
+            >
+              Listen to the full recording first
+            </motion.div>
+          )}
+        </AnimatePresence>,
+        document.body
+      )}
     </div>
   );
 }
 
 /* ── Step definitions ────────────────────────────────────────────────────── */
 
-const FORM_STEPS: { key: OnboardingStep; fallbackText: string }[] = [
-  {
-    key: "profile_setup",
-    fallbackText:
-      "Hi. Welcome to Kanon. I\u2019m super excited that you\u2019re here. To start things off, please enter your name.",
-  },
-  {
-    key: "media_opt_in",
-    fallbackText:
-      "Your voice recordings and media can be projected across the installation\u2019s three panels during the exhibition. This is entirely optional \u2014 your contributions to the library remain regardless.",
-  },
-  {
-    key: "book_text",
-    fallbackText:
-      "The installation includes a physical book \u2014 a collection of texts that resonate deeply with each contributor. Write or paste a piece of text you\u2019d like included.",
-  },
-  {
-    key: "contact",
-    fallbackText:
-      "Kris may reach out about the installation and will email you when Kanon goes live. How would you prefer to be contacted?",
-  },
+type LabStep = "accessibility" | "profile_setup" | "media_opt_in" | "book_text" | "contact" | "avatar_colors" | "complete";
+
+const FORM_STEPS: { key: LabStep; label: string; fallbackText: string }[] = [
+  { key: "profile_setup", label: "Profile Setup",  fallbackText: "Hi. Welcome to Kanon. I\u2019m super excited that you\u2019re here. To start things off, please enter your name." },
+  { key: "media_opt_in",  label: "Media Opt-in",   fallbackText: "Your voice recordings and media can be projected across the installation\u2019s three panels during the exhibition. This is entirely optional \u2014 your contributions to the library remain regardless." },
+  { key: "book_text",     label: "Book Text",      fallbackText: "The installation includes a physical book \u2014 a collection of texts that resonate deeply with each contributor. Write or paste a piece of text you\u2019d like included." },
+  { key: "contact",       label: "Contact",        fallbackText: "Kris may reach out about the installation and will email you when Kanon goes live. How would you prefer to be contacted?" },
 ];
 
 const COLOR_STEPS = [
-  {
-    key: "color_consumed",
-    prompt:
-      "Think of something you\u2019ve consumed recently that stuck with you \u2014 a film, an album, a piece of writing, anything. Pick a color.",
-  },
-  {
-    key: "color_made",
-    prompt:
-      "Now something you\u2019ve made \u2014 however small, however unfinished. Pick a color.",
-  },
-  {
-    key: "color_changed",
-    prompt:
-      "Finally, something that changed the way you think. An idea, a theory, a conversation. Pick a color.",
-  },
+  { key: "color_consumed", prompt: "Think of something you\u2019ve consumed recently that stuck with you \u2014 a film, an album, a piece of writing, anything. Pick a color." },
+  { key: "color_made",     prompt: "Now something you\u2019ve made \u2014 however small, however unfinished. Pick a color." },
+  { key: "color_changed",  prompt: "Finally, something that changed the way you think. An idea, a theory, a conversation. Pick a color." },
 ] as const;
 
 /* ── Configs ─────────────────────────────────────────────────────────────── */
 
 const AMBIENT = {
-  svgSize: 80,
-  blurInternal: 12,
-  blurCSS: 120,
-  saturation: 1.4,
-  opacity: 0.8,
-  driftDuration: 30,
-  growDuration: 14,
-  growEase: [0.05, 0.5, 0.12, 1] as const,
-  startHeight: 3,
-  endHeight: 120,
-  startWidth: 75,
-  endWidth: 100,
-  fadeInDuration: 4,
+  svgSize: 80, blurInternal: 12, blurCSS: 120, saturation: 1.4, opacity: 0.8,
+  driftDuration: 30, growDuration: 14, growEase: [0.05, 0.5, 0.12, 1] as const,
+  startHeight: 3, endHeight: 120, startWidth: 75, endWidth: 100, fadeInDuration: 4,
 };
 
 const REVEAL = { textFade: { duration: 0.4 } };
-const CARD = {
-  yOffset: 6,
-  spring: { duration: 0.2, ease: [0.215, 0.61, 0.355, 1] as const },
-};
+const CARD = { yOffset: 6, spring: { duration: 0.2, ease: [0.215, 0.61, 0.355, 1] as const } };
 const TIMING = { pickAdvance: 400 };
 
 const driftKeyframes = `
@@ -243,28 +184,16 @@ const driftKeyframes = `
 }
 `;
 
-const ALL_STEPS: OnboardingStep[] = [
-  "accessibility",
-  "profile_setup",
-  "media_opt_in",
-  "book_text",
-  "contact",
-  "avatar_colors",
-  "complete",
-];
+const ALL_STEPS: LabStep[] = ["accessibility", "profile_setup", "media_opt_in", "book_text", "contact", "avatar_colors", "complete"];
 
 /* ── Page ─────────────────────────────────────────────────────────────────── */
 
-export default function OnboardingPage() {
-  const {
-    user,
-    loading,
-    onboardingStep: activeStep,
-    refreshOnboarding,
-    signOut,
-  } = useAuth();
-  const router = useRouter();
+export default function OnboardingLabPage() {
   const shouldReduceMotion = useReducedMotion();
+
+  const [step, setStep] = useState<LabStep>("accessibility");
+  const formStepIndex = FORM_STEPS.findIndex((s) => s.key === step);
+  const isFormStep = formStepIndex >= 0;
 
   /* ── Per-step form state ───────────────────────────────────────────────── */
   const profileInputRef = useRef<HTMLInputElement>(null);
@@ -275,50 +204,31 @@ export default function OnboardingPage() {
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [contactMethod, setContactMethod] = useState<"email" | "text">("email");
   const [phoneNumber, setPhoneNumber] = useState("");
-  const [submitting, setSubmitting] = useState(false);
 
   /* ── Color picking state ───────────────────────────────────────────────── */
   const [colorStep, setColorStep] = useState(0);
-  const [picked, setPicked] = useState<
-    [string | null, string | null, string | null]
-  >([null, null, null]);
+  const [picked, setPicked] = useState<[string | null, string | null, string | null]>([null, null, null]);
   const [revealStage, setRevealStage] = useState(0);
   const revealTimers = useRef<NodeJS.Timeout[]>([]);
   const [seed] = useState("Kanon");
 
   const allPicked = picked.every((c) => c !== null);
-  const colors = (allPicked ? picked : ["#000", "#000", "#000"]) as [
-    string,
-    string,
-    string,
-  ];
-
-  const activeEmail = user?.email ?? "";
-  const activeName = user?.displayName ?? "";
+  const colors = (allPicked ? picked : ["#000", "#000", "#000"]) as [string, string, string];
 
   /* ── Transcript loading ────────────────────────────────────────────────── */
-  const currentTranscriptKey =
-    activeStep === "avatar_colors"
-      ? colorStep === 3
-        ? undefined
-        : COLOR_STEPS[colorStep]?.key
-      : activeStep !== "accessibility" && activeStep !== "complete"
-        ? activeStep
-        : undefined;
+  const currentTranscriptKey = step === "avatar_colors"
+    ? (colorStep === 3 ? undefined : COLOR_STEPS[colorStep]?.key)
+    : (isFormStep ? step : undefined);
 
   const transcript = useStepTranscript(currentTranscriptKey);
   const revealTranscript = useStepTranscript(
-    activeStep === "avatar_colors" && colorStep === 3
-      ? "avatar_reveal"
-      : undefined,
+    step === "avatar_colors" && colorStep === 3 ? "avatar_reveal" : undefined
   );
 
   /* ── Audio listening gate ──────────────────────────────────────────────── */
   const [listenedSteps, setListenedSteps] = useState<Set<string>>(new Set());
   const [revealListened, setRevealListened] = useState(false);
-  const hasListened =
-    !transcript ||
-    (currentTranscriptKey ? listenedSteps.has(currentTranscriptKey) : true);
+  const hasListened = !transcript || (currentTranscriptKey ? listenedSteps.has(currentTranscriptKey) : true);
 
   const markListened = useCallback(() => {
     if (currentTranscriptKey) {
@@ -327,88 +237,56 @@ export default function OnboardingPage() {
   }, [currentTranscriptKey]);
 
   useEffect(() => {
-    if (hasListened && activeStep === "profile_setup") {
+    if (hasListened && step === "profile_setup") {
       profileInputRef.current?.focus();
     }
-  }, [hasListened, activeStep]);
+  }, [hasListened, step]);
 
-  /* ── Form step handlers ────────────────────────────────────────────────── */
+  /* ── Navigation ────────────────────────────────────────────────────────── */
+  const advanceFormStep = useCallback(() => {
+    const idx = FORM_STEPS.findIndex((s) => s.key === step);
+    if (idx < FORM_STEPS.length - 1) {
+      setStep(FORM_STEPS[idx + 1].key);
+    } else {
+      setStep("avatar_colors");
+    }
+  }, [step]);
 
-  async function handleAccessibility(prefersTextMode: boolean) {
-    setSubmitting(true);
-    await submitAccessibility(activeEmail, activeName, prefersTextMode);
-    await refreshOnboarding();
-    setSubmitting(false);
-  }
+  const skipToNext = useCallback(() => {
+    const currentIdx = ALL_STEPS.indexOf(step);
+    if (currentIdx < ALL_STEPS.length - 1) {
+      const nextStep = ALL_STEPS[currentIdx + 1];
+      setStep(nextStep);
+      if (nextStep === "avatar_colors") {
+        setColorStep(0);
+        setPicked([null, null, null]);
+        setRevealStage(0);
+        setRevealListened(false);
+      }
+    }
+  }, [step]);
 
-  async function handleProfileSetup() {
-    if (!profileName.trim()) return;
-    setSubmitting(true);
-    await submitProfileSetup(activeEmail, profileName.trim());
-    await ensureUserProfile(activeEmail, profileName.trim());
-    await refreshOnboarding();
-    setSubmitting(false);
-  }
+  const handleColorPick = useCallback((hex: string) => {
+    const next = [...picked] as [string | null, string | null, string | null];
+    next[colorStep] = hex;
+    setPicked(next);
+    const delay = shouldReduceMotion ? 0 : TIMING.pickAdvance;
+    setTimeout(() => setColorStep((s) => s + 1), delay);
+  }, [colorStep, picked, shouldReduceMotion]);
 
-  async function handleMediaOptIn(optIn: boolean) {
-    setSubmitting(true);
-    await submitMediaOptIn(activeEmail, activeName, optIn);
-    await refreshOnboarding();
-    setSubmitting(false);
-  }
+  const handleColorDotClick = useCallback((targetStep: number) => {
+    if (targetStep < colorStep && targetStep < 3) setColorStep(targetStep);
+  }, [colorStep]);
 
-  async function handleBookTextSubmit() {
-    if (!bookTitle.trim() || !bookText.trim()) return;
-    setSubmitting(true);
-    await submitBookText(
-      activeEmail,
-      bookTitle.trim(),
-      bookDate.trim() || undefined,
-      bookText,
-      pdfFile,
-    );
-    await refreshOnboarding();
-    setSubmitting(false);
-  }
-
-  async function handleBookSkip() {
-    setSubmitting(true);
-    await skipBookText(activeEmail);
-    await refreshOnboarding();
-    setSubmitting(false);
-  }
-
-  async function handleContactSubmit() {
-    if (contactMethod === "text" && !phoneNumber.trim()) return;
-    setSubmitting(true);
-    await submitContactAndComplete(
-      activeEmail,
-      contactMethod,
-      phoneNumber.trim() || undefined,
-    );
-    await refreshOnboarding();
-    setSubmitting(false);
-  }
-
-  /* ── Color handlers ────────────────────────────────────────────────────── */
-
-  const handleColorPick = useCallback(
-    (hex: string) => {
-      const next = [...picked] as [string | null, string | null, string | null];
-      next[colorStep] = hex;
-      setPicked(next);
-      const delay = shouldReduceMotion ? 0 : TIMING.pickAdvance;
-      setTimeout(() => setColorStep((s) => s + 1), delay);
-    },
-    [colorStep, picked, shouldReduceMotion],
-  );
-
-  const handleColorDotClick = useCallback(
-    (targetStep: number) => {
-      if (targetStep < colorStep && targetStep < 3) setColorStep(targetStep);
-    },
-    [colorStep],
-  );
+  const handleReset = useCallback(() => {
+    revealTimers.current.forEach(clearTimeout);
+    setStep("accessibility");
+    setColorStep(0);
+    setRevealStage(0);
+    setPicked([null, null, null]);
+    setListenedSteps(new Set());
+    setRevealListened(false);
+  }, []);
 
   const handleRevealPlayStart = useCallback(() => {
     if (revealStage >= 3) return;
@@ -420,48 +298,32 @@ export default function OnboardingPage() {
 
   useEffect(() => {
     revealTimers.current.forEach(clearTimeout);
-    if (activeStep === "avatar_colors" && colorStep === 3) {
+    if (step === "avatar_colors" && colorStep === 3) {
       setRevealStage(2);
       setRevealListened(false);
     } else {
       setRevealStage(0);
     }
     return () => revealTimers.current.forEach(clearTimeout);
-  }, [activeStep, colorStep]);
-
-  async function handleAvatarComplete() {
-    if (!allPicked) return;
-    setSubmitting(true);
-    await submitAvatarColors(activeEmail, colors);
-    await refreshOnboarding();
-    setSubmitting(false);
-  }
+  }, [step, colorStep]);
 
   /* ── Derived state ─────────────────────────────────────────────────────── */
-
-  const isLoading = loading;
-  const isColorPromptStep = activeStep === "avatar_colors" && colorStep < 3;
-  const isColorReveal = activeStep === "avatar_colors" && colorStep === 3;
-  const isFormStep =
-    activeStep !== "accessibility" &&
-    activeStep !== "avatar_colors" &&
-    activeStep !== "complete";
+  const isColorPromptStep = step === "avatar_colors" && colorStep < 3;
+  const isColorReveal = step === "avatar_colors" && colorStep === 3;
   const m = anim(shouldReduceMotion);
-  const stepIdx = ALL_STEPS.indexOf(activeStep ?? "accessibility");
+
+  const stepIdx = ALL_STEPS.indexOf(step);
+  const stepLabel = step === "accessibility" ? "Accessibility" : step === "avatar_colors" ? "Colors" : step === "complete" ? "Complete" : FORM_STEPS[formStepIndex]?.label ?? step;
 
   const colorStepAnim = {
-    initial: shouldReduceMotion
-      ? false
-      : ({ opacity: 0, y: CARD.yOffset } as const),
+    initial: shouldReduceMotion ? false : ({ opacity: 0, y: CARD.yOffset } as const),
     animate: { opacity: 1, y: 0 } as const,
-    exit: shouldReduceMotion
-      ? ({ opacity: 1 } as const)
-      : ({ opacity: 0, y: -CARD.yOffset } as const),
+    exit: shouldReduceMotion ? ({ opacity: 1 } as const) : ({ opacity: 0, y: -CARD.yOffset } as const),
     transition: shouldReduceMotion ? { duration: 0 } : CARD.spring,
   };
 
   return (
-    <div className="min-h-screen overflow-hidden bg-black">
+    <div className="min-h-screen bg-black overflow-hidden">
       <style>{driftKeyframes}</style>
 
       {/* ── Ambient gradient ──────────────────────────────────────────────── */}
@@ -477,70 +339,43 @@ export default function OnboardingPage() {
                 ? { duration: 0 }
                 : { duration: AMBIENT.fadeInDuration, ease: EASE }
             }
-            className="pointer-events-none fixed inset-0 z-0"
+            className="fixed inset-0 pointer-events-none z-0"
           >
             <motion.div
               initial={false}
               animate={{
-                scaleY:
-                  revealStage >= 3
-                    ? AMBIENT.endHeight / 100
-                    : AMBIENT.startHeight / 100,
-                scaleX:
-                  revealStage >= 3
-                    ? AMBIENT.endWidth / 100
-                    : AMBIENT.startWidth / 100,
+                scaleY: revealStage >= 3 ? AMBIENT.endHeight / 100 : AMBIENT.startHeight / 100,
+                scaleX: revealStage >= 3 ? AMBIENT.endWidth / 100 : AMBIENT.startWidth / 100,
               }}
               transition={
                 shouldReduceMotion
                   ? { duration: 0 }
                   : {
-                      scaleY: {
-                        duration: AMBIENT.growDuration,
-                        ease: AMBIENT.growEase,
-                      },
-                      scaleX: {
-                        duration: AMBIENT.growDuration * 0.55,
-                        ease: [0.215, 0.61, 0.355, 1],
-                      },
+                      scaleY: { duration: AMBIENT.growDuration, ease: AMBIENT.growEase },
+                      scaleX: { duration: AMBIENT.growDuration * 0.55, ease: [0.215, 0.61, 0.355, 1] },
                     }
               }
               style={{
-                position: "absolute",
-                bottom: 0,
-                left: "-50vw",
-                width: "200vw",
-                height: "100vh",
-                transformOrigin: "center bottom",
-                willChange: "transform",
+                position: "absolute", bottom: 0, left: "-50vw",
+                width: "200vw", height: "100vh",
+                transformOrigin: "center bottom", willChange: "transform",
               }}
             >
               <div
                 style={{
-                  position: "absolute",
-                  inset: 0,
+                  position: "absolute", inset: 0,
                   filter: `blur(${AMBIENT.blurCSS}px) saturate(${AMBIENT.saturation})`,
                   opacity: AMBIENT.opacity,
-                  animation: shouldReduceMotion
-                    ? "none"
-                    : `ambientDrift ${AMBIENT.driftDuration}s ease-in-out infinite`,
+                  animation: shouldReduceMotion ? "none" : `ambientDrift ${AMBIENT.driftDuration}s ease-in-out infinite`,
                   willChange: "transform",
                 }}
               >
-                <GradientSVG
-                  colors={colors}
-                  seed={seed}
-                  size={AMBIENT.svgSize}
-                  blurDeviation={AMBIENT.blurInternal}
-                />
+                <GradientSVG colors={colors} seed={seed} size={AMBIENT.svgSize} blurDeviation={AMBIENT.blurInternal} />
               </div>
             </motion.div>
             <div
               className="absolute inset-0"
-              style={{
-                background:
-                  "linear-gradient(to bottom, black 0%, rgba(0,0,0,0.6) 20%, rgba(0,0,0,0.2) 35%, transparent 55%)",
-              }}
+              style={{ background: "linear-gradient(to bottom, black 0%, rgba(0,0,0,0.6) 20%, rgba(0,0,0,0.2) 35%, transparent 55%)" }}
             />
           </motion.div>
         )}
@@ -548,12 +383,10 @@ export default function OnboardingPage() {
 
       {/* ── Header — centered ──────────────────────────────────────────────── */}
       <div className="fixed left-0 right-0 top-6 z-20 flex flex-col items-center">
-        <h1 className="font-lector text-2xl tracking-tight text-white/90">
-          Kanon
-        </h1>
+        <h1 className="font-lector text-2xl tracking-tight text-white/90">Kanon</h1>
       </div>
 
-      {/* ── Avatar reveal — centered transcript + enter button ────────────── */}
+      {/* ── Avatar reveal — centered transcript + enter button ────────── */}
       <AnimatePresence>
         {isColorReveal && (
           <motion.div
@@ -567,9 +400,7 @@ export default function OnboardingPage() {
               <motion.div
                 initial={shouldReduceMotion ? false : { opacity: 0 }}
                 animate={{ opacity: 1 }}
-                transition={
-                  shouldReduceMotion ? { duration: 0 } : REVEAL.textFade
-                }
+                transition={shouldReduceMotion ? { duration: 0 } : REVEAL.textFade}
               >
                 {revealTranscript ? (
                   <SyncedTranscript
@@ -579,32 +410,23 @@ export default function OnboardingPage() {
                     onFinished={() => setRevealListened(true)}
                   />
                 ) : (
-                  <p className="font-sans text-xs text-white/50">
-                    This is yours.
-                  </p>
+                  <p className="font-sans text-xs text-white/50">This is yours.</p>
                 )}
               </motion.div>
 
               <AnimatePresence>
                 {revealListened && (
                   <motion.div
-                    initial={
-                      shouldReduceMotion ? false : { opacity: 0, y: 4 }
-                    }
+                    initial={shouldReduceMotion ? false : { opacity: 0, y: 4 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={
-                      shouldReduceMotion
-                        ? { duration: 0 }
-                        : { duration: 0.4, ease: EASE }
-                    }
+                    transition={shouldReduceMotion ? { duration: 0 } : { duration: 0.4, ease: EASE }}
                     className="mt-4"
                   >
                     <button
-                      disabled={submitting}
-                      onClick={() => void handleAvatarComplete()}
-                      className="font-sans text-xs text-white/70 transition-opacity hover:text-white/90 disabled:opacity-30"
+                      onClick={() => setStep("complete")}
+                      className="font-sans text-xs text-white/70 transition-opacity hover:text-white/90"
                     >
-                      {submitting ? "Saving\u2026" : "Enter Kanon"}
+                      Enter Kanon
                     </button>
                   </motion.div>
                 )}
@@ -615,13 +437,13 @@ export default function OnboardingPage() {
       </AnimatePresence>
 
       {/* ── Top-right: step index + sign out ────────────────────────────────── */}
-      {!isLoading && user && activeStep !== "complete" && !isColorReveal && (
+      {step !== "complete" && !isColorReveal && (
         <div className="fixed right-6 top-6 z-20 flex items-center gap-4">
           <span className="font-sans text-xs text-zinc-500">
             {stepIdx + 1} of {ALL_STEPS.length}
           </span>
           <button
-            onClick={signOut}
+            onClick={handleReset}
             className="font-sans text-xs text-zinc-600 transition-colors hover:text-zinc-300"
           >
             Sign out
@@ -639,11 +461,7 @@ export default function OnboardingPage() {
             exit={
               shouldReduceMotion
                 ? { opacity: 0 }
-                : {
-                    opacity: 0,
-                    y: -30,
-                    transition: { duration: 0.25, ease: EASE },
-                  }
+                : { opacity: 0, y: -30, transition: { duration: 0.25, ease: EASE } }
             }
             transition={{ duration: 0.2 }}
             className="fixed inset-0 z-10 flex items-center justify-center"
@@ -663,21 +481,10 @@ export default function OnboardingPage() {
                         animate={{
                           width: colorStep > i ? 24 : 6,
                           backgroundColor:
-                            picked[i] ??
-                            (colorStep === i
-                              ? "rgba(255,255,255,0.4)"
-                              : "rgba(255,255,255,0.1)"),
+                            picked[i] ?? (colorStep === i ? "rgba(255,255,255,0.4)" : "rgba(255,255,255,0.1)"),
                         }}
-                        whileHover={
-                          canGoBack && !shouldReduceMotion
-                            ? { opacity: 0.7 }
-                            : {}
-                        }
-                        transition={
-                          shouldReduceMotion
-                            ? { duration: 0 }
-                            : { duration: 0.3, ease: EASE }
-                        }
+                        whileHover={canGoBack && !shouldReduceMotion ? { opacity: 0.7 } : {}}
+                        transition={shouldReduceMotion ? { duration: 0 } : { duration: 0.3, ease: EASE }}
                       />
                     );
                   })}
@@ -685,9 +492,7 @@ export default function OnboardingPage() {
 
                 <motion.div
                   layout
-                  transition={
-                    shouldReduceMotion ? { duration: 0 } : CARD.spring
-                  }
+                  transition={shouldReduceMotion ? { duration: 0 } : CARD.spring}
                   className="w-full"
                 >
                   <AnimatePresence initial={false} mode="wait">
@@ -733,39 +538,37 @@ export default function OnboardingPage() {
 
       {/* ── Form steps — no card chrome ───────────────────────────────────── */}
       <AnimatePresence mode="wait">
-        {(activeStep === "accessibility" || isFormStep) && !isLoading && (
+        {(step === "accessibility" || isFormStep) && (
           <div className="fixed inset-0 z-10 flex items-center justify-center px-6">
             <AnimatePresence initial={false} mode="wait">
               {/* ── Accessibility ────────────────────────────────────────── */}
-              {activeStep === "accessibility" && (
+              {step === "accessibility" && (
                 <motion.div
                   key="accessibility"
                   {...m}
                   className="w-[min(480px,calc(100vw-3rem))]"
                 >
                   <p className="font-lector text-sm leading-relaxed text-zinc-300">
-                    Kanon uses audio recording and listening as the primary ways
-                    to share and experience content. Most interactions involve
-                    speaking and hearing rather than reading and typing.
+                    Kanon uses audio recording and listening as the primary ways to
+                    share and experience content. Most interactions involve speaking
+                    and hearing rather than reading and typing.
                   </p>
                   <p className="mt-3 font-sans text-xs leading-relaxed text-zinc-500">
                     If you need accessibility features such as text input and
-                    screen-reader-friendly content, you can enable text mode
-                    below. You can always change this later in settings.
+                    screen-reader-friendly content, you can enable text mode below.
+                    You can always change this later in settings.
                   </p>
 
                   <div className="mt-5 flex items-center gap-4">
                     <button
-                      disabled={submitting}
-                      onClick={() => void handleAccessibility(false)}
-                      className="font-sans text-xs text-zinc-300 transition-colors hover:text-zinc-50 disabled:opacity-40"
+                      onClick={() => setStep("profile_setup")}
+                      className="font-sans text-xs text-zinc-300 transition-colors hover:text-zinc-50"
                     >
                       Continue with audio
                     </button>
                     <button
-                      disabled={submitting}
-                      onClick={() => void handleAccessibility(true)}
-                      className="font-sans text-xs text-zinc-500 transition-colors hover:text-zinc-300 disabled:opacity-40"
+                      onClick={() => setStep("profile_setup")}
+                      className="font-sans text-xs text-zinc-500 transition-colors hover:text-zinc-300"
                     >
                       Enable text mode
                     </button>
@@ -774,19 +577,11 @@ export default function OnboardingPage() {
               )}
 
               {/* ── Profile setup — side-by-side ────────────────────────── */}
-              {activeStep === "profile_setup" && (
-                <motion.div
-                  key="profile_setup"
-                  {...m}
-                  className="flex w-[min(680px,calc(100vw-3rem))] items-end gap-14"
-                >
+              {step === "profile_setup" && (
+                <motion.div key="profile_setup" {...m} className="flex w-[min(680px,calc(100vw-3rem))] items-end gap-14">
                   <div className="flex-[3]">
                     {transcript ? (
-                      <SyncedTranscript
-                        audioUrl={transcript.audio_url}
-                        words={transcript.words}
-                        onFinished={markListened}
-                      />
+                      <SyncedTranscript audioUrl={transcript.audio_url} words={transcript.words} onFinished={markListened} />
                     ) : (
                       <p className="font-sans text-xs leading-relaxed text-zinc-400">
                         {FORM_STEPS[0].fallbackText}
@@ -794,7 +589,7 @@ export default function OnboardingPage() {
                     )}
                   </div>
                   <ListenGate locked={!hasListened}>
-                    <div className="flex min-w-[220px] flex-[2] flex-col items-start gap-1.5">
+                    <div className="flex flex-[2] flex-col items-start gap-1.5 min-w-[220px]">
                       <input
                         ref={profileInputRef}
                         type="text"
@@ -802,18 +597,15 @@ export default function OnboardingPage() {
                         onChange={(e) => setProfileName(e.target.value)}
                         placeholder="First and last name"
                         tabIndex={hasListened ? 0 : -1}
-                        className="w-full border-b border-zinc-800 bg-transparent pb-2 font-sans text-xs text-zinc-300 placeholder:text-zinc-500 focus:outline-none"
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter" && profileName.trim())
-                            void handleProfileSetup();
-                        }}
+                        className="w-full bg-transparent font-sans text-xs text-zinc-300 placeholder:text-zinc-500 focus:outline-none border-b border-zinc-800 pb-2"
+                        onKeyDown={(e) => { if (e.key === "Enter" && profileName.trim()) advanceFormStep(); }}
                       />
                       <button
-                        disabled={!profileName.trim() || submitting}
-                        onClick={() => void handleProfileSetup()}
-                        className="pt-1 font-sans text-xs text-zinc-300 transition-colors hover:text-zinc-50 disabled:cursor-not-allowed disabled:opacity-30"
+                        disabled={!profileName.trim()}
+                        onClick={advanceFormStep}
+                        className="font-sans text-xs text-zinc-300 transition-colors hover:text-zinc-50 disabled:cursor-not-allowed disabled:opacity-30 pt-1"
                       >
-                        {submitting ? "Setting up\u2026" : "Continue"}
+                        Continue
                       </button>
                     </div>
                   </ListenGate>
@@ -821,18 +613,10 @@ export default function OnboardingPage() {
               )}
 
               {/* ── Media opt-in — vertical ─────────────────────────────── */}
-              {activeStep === "media_opt_in" && (
-                <motion.div
-                  key="media_opt_in"
-                  {...m}
-                  className="w-[min(520px,calc(100vw-3rem))]"
-                >
+              {step === "media_opt_in" && (
+                <motion.div key="media_opt_in" {...m} className="w-[min(520px,calc(100vw-3rem))]">
                   {transcript ? (
-                    <SyncedTranscript
-                      audioUrl={transcript.audio_url}
-                      words={transcript.words}
-                      onFinished={markListened}
-                    />
+                    <SyncedTranscript audioUrl={transcript.audio_url} words={transcript.words} onFinished={markListened} />
                   ) : (
                     <p className="font-sans text-xs leading-relaxed text-zinc-400">
                       {FORM_STEPS[1].fallbackText}
@@ -841,16 +625,14 @@ export default function OnboardingPage() {
                   <ListenGate locked={!hasListened}>
                     <div className="mt-5 flex items-center gap-4">
                       <button
-                        disabled={submitting}
-                        onClick={() => void handleMediaOptIn(true)}
-                        className="font-sans text-xs text-zinc-300 transition-colors hover:text-zinc-50 disabled:opacity-40"
+                        onClick={advanceFormStep}
+                        className="font-sans text-xs text-zinc-300 transition-colors hover:text-zinc-50"
                       >
                         Include my contributions
                       </button>
                       <button
-                        disabled={submitting}
-                        onClick={() => void handleMediaOptIn(false)}
-                        className="font-sans text-xs text-zinc-500 transition-colors hover:text-zinc-300 disabled:opacity-40"
+                        onClick={advanceFormStep}
+                        className="font-sans text-xs text-zinc-500 transition-colors hover:text-zinc-300"
                       >
                         No thanks
                       </button>
@@ -860,19 +642,11 @@ export default function OnboardingPage() {
               )}
 
               {/* ── Book text — side-by-side with large editor ──────────── */}
-              {activeStep === "book_text" && (
-                <motion.div
-                  key="book_text"
-                  {...m}
-                  className="flex max-w-[calc(100vw-3rem)] items-start gap-20"
-                >
+              {step === "book_text" && (
+                <motion.div key="book_text" {...m} className="flex max-w-[calc(100vw-3rem)] items-start gap-20">
                   <div className="w-[340px] shrink-0 pt-1">
                     {transcript ? (
-                      <SyncedTranscript
-                        audioUrl={transcript.audio_url}
-                        words={transcript.words}
-                        onFinished={markListened}
-                      />
+                      <SyncedTranscript audioUrl={transcript.audio_url} words={transcript.words} onFinished={markListened} />
                     ) : (
                       <p className="font-sans text-xs leading-relaxed text-zinc-400">
                         {FORM_STEPS[2].fallbackText}
@@ -887,14 +661,14 @@ export default function OnboardingPage() {
                           value={bookTitle}
                           onChange={(e) => setBookTitle(e.target.value)}
                           placeholder="Title of the piece"
-                          className="min-w-0 flex-1 border-b border-zinc-800 bg-transparent pb-1.5 font-sans text-xs text-zinc-300 placeholder:text-zinc-500 focus:outline-none"
+                          className="min-w-0 flex-1 bg-transparent font-sans text-xs text-zinc-300 placeholder:text-zinc-500 focus:outline-none border-b border-zinc-800 pb-1.5"
                         />
                         <input
                           type="text"
                           value={bookDate}
                           onChange={(e) => setBookDate(e.target.value)}
                           placeholder="Date (optional)"
-                          className="w-[130px] border-b border-zinc-800 bg-transparent pb-1.5 font-sans text-xs text-zinc-300 placeholder:text-zinc-500 focus:outline-none"
+                          className="w-[130px] bg-transparent font-sans text-xs text-zinc-300 placeholder:text-zinc-500 focus:outline-none border-b border-zinc-800 pb-1.5"
                         />
                       </div>
 
@@ -910,19 +684,12 @@ export default function OnboardingPage() {
                             type="file"
                             accept=".pdf"
                             className="hidden"
-                            onChange={(e) =>
-                              setPdfFile(e.target.files?.[0] ?? null)
-                            }
+                            onChange={(e) => setPdfFile(e.target.files?.[0] ?? null)}
                           />
-                          {pdfFile
-                            ? pdfFile.name
-                            : "Attach a formatted PDF (optional)"}
+                          {pdfFile ? pdfFile.name : "Attach a formatted PDF (optional)"}
                         </label>
                         {pdfFile && (
-                          <button
-                            onClick={() => setPdfFile(null)}
-                            className="text-[11px] text-zinc-600 transition-colors hover:text-zinc-400"
-                          >
+                          <button onClick={() => setPdfFile(null)} className="text-[11px] text-zinc-600 transition-colors hover:text-zinc-400">
                             ✕
                           </button>
                         )}
@@ -930,18 +697,15 @@ export default function OnboardingPage() {
 
                       <div className="flex items-center gap-4">
                         <button
-                          disabled={
-                            !bookTitle.trim() || !bookText.trim() || submitting
-                          }
-                          onClick={() => void handleBookTextSubmit()}
+                          disabled={!bookTitle.trim() || !bookText.trim()}
+                          onClick={advanceFormStep}
                           className="font-sans text-xs text-zinc-300 transition-colors hover:text-zinc-50 disabled:cursor-not-allowed disabled:opacity-30"
                         >
-                          {submitting ? "Submitting\u2026" : "Submit text"}
+                          Submit text
                         </button>
                         <button
-                          disabled={submitting}
-                          onClick={() => void handleBookSkip()}
-                          className="font-sans text-xs text-zinc-500 transition-colors hover:text-zinc-300 disabled:opacity-40"
+                          onClick={advanceFormStep}
+                          className="font-sans text-xs text-zinc-500 transition-colors hover:text-zinc-300"
                         >
                           Skip for now
                         </button>
@@ -952,18 +716,10 @@ export default function OnboardingPage() {
               )}
 
               {/* ── Contact — vertical ──────────────────────────────────── */}
-              {activeStep === "contact" && (
-                <motion.div
-                  key="contact"
-                  {...m}
-                  className="w-[min(520px,calc(100vw-3rem))]"
-                >
+              {step === "contact" && (
+                <motion.div key="contact" {...m} className="w-[min(520px,calc(100vw-3rem))]">
                   {transcript ? (
-                    <SyncedTranscript
-                      audioUrl={transcript.audio_url}
-                      words={transcript.words}
-                      onFinished={markListened}
-                    />
+                    <SyncedTranscript audioUrl={transcript.audio_url} words={transcript.words} onFinished={markListened} />
                   ) : (
                     <p className="font-sans text-xs leading-relaxed text-zinc-400">
                       {FORM_STEPS[3].fallbackText}
@@ -1000,22 +756,17 @@ export default function OnboardingPage() {
                           value={phoneNumber}
                           onChange={(e) => setPhoneNumber(e.target.value)}
                           placeholder="Phone number"
-                          className="w-full border-b border-zinc-800 bg-transparent pb-1.5 font-sans text-xs text-zinc-300 placeholder:text-zinc-500 focus:outline-none"
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") void handleContactSubmit();
-                          }}
+                          className="w-full bg-transparent font-sans text-xs text-zinc-300 placeholder:text-zinc-500 focus:outline-none border-b border-zinc-800 pb-1.5"
+                          onKeyDown={(e) => { if (e.key === "Enter") advanceFormStep(); }}
                         />
                       )}
 
                       <button
-                        disabled={
-                          submitting ||
-                          (contactMethod === "text" && !phoneNumber.trim())
-                        }
-                        onClick={() => void handleContactSubmit()}
+                        disabled={contactMethod === "text" && !phoneNumber.trim()}
+                        onClick={advanceFormStep}
                         className="self-start font-sans text-xs text-zinc-300 transition-colors hover:text-zinc-50 disabled:cursor-not-allowed disabled:opacity-30"
                       >
-                        {submitting ? "Saving\u2026" : "Continue"}
+                        Continue
                       </button>
                     </div>
                   </ListenGate>
@@ -1026,21 +777,16 @@ export default function OnboardingPage() {
         )}
       </AnimatePresence>
 
-      {/* ── Complete — enter app ─────────────────────────────────────────── */}
+      {/* ── Complete ─────────────────────────────────────────────────────── */}
       <AnimatePresence>
-        {activeStep === "complete" && !isLoading && (
+        {step === "complete" && (
           <div className="fixed inset-0 z-10 flex items-center justify-center">
             <motion.div {...m}>
               <button
-                onClick={() => {
-                  try {
-                    sessionStorage.setItem("kanon-just-onboarded", "1");
-                  } catch {}
-                  router.replace("/");
-                }}
+                onClick={handleReset}
                 className="font-sans text-xs text-zinc-300 transition-colors hover:text-zinc-50"
               >
-                Done
+                Restart from beginning
               </button>
             </motion.div>
           </div>

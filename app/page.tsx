@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { PanOnScrollMode, ReactFlow, type Node, type NodeTypes } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { useAuth } from "@/lib/auth-context";
-import { deleteItem, subscribeToItem, subscribeToItemConnections, subscribeToItems } from "@/lib/items";
+import { deleteItem, subscribeToItem, subscribeToItemConnections, subscribeToItems, countItemsSince, countConnectionsSince } from "@/lib/items";
 import type { Item } from "@/lib/types";
 import { COLS, NODE_W, NODE_H, GAP_X, GAP_Y } from "@/lib/graph-constants";
 import ItemThumbnailNode from "@/components/ItemThumbnailNode";
@@ -19,6 +19,8 @@ import { AddItemPageInnerWithSuspense } from "@/app/add/page";
 import ConnectPanel from "@/components/ConnectPanel";
 import NewUserChecklistCard from "@/components/NewUserChecklistCard";
 import { useNavGuard } from "@/lib/nav-guard-context";
+import { useNavStatus } from "@/lib/nav-status-context";
+import { usePanelHistory } from "@/lib/panel-history-context";
 import { useSequenceReplayNonce, useSequenceTimings } from "@/lib/sequence-dialkit";
 
 const NODE_TYPES: NodeTypes = {
@@ -34,11 +36,13 @@ export default function Home() {
 }
 
 function HomeInner() {
-  const { user, loading: authLoading } = useAuth();
+  const { user, firstName, loading: authLoading } = useAuth();
   const shouldReduceMotion = useReducedMotion();
   const timings = useSequenceTimings();
   const replayNonce = useSequenceReplayNonce();
   const { registerGuard, unregisterGuard, navigateWithGuard } = useNavGuard();
+  const { enqueue: enqueueStatus } = useNavStatus();
+  const { goBack: panelGoBack, backEntry: panelBackEntry, clearHistory: clearPanelHistory } = usePanelHistory();
   const [items, setItems] = useState<Item[]>(() => {
     if (typeof window === "undefined") return [];
     try {
@@ -59,6 +63,7 @@ function HomeInner() {
   const [addPanelBackSignal, setAddPanelBackSignal] = useState(0);
   const [addPanelCloseSignal, setAddPanelCloseSignal] = useState(0);
   const [addPanelCanGoBack, setAddPanelCanGoBack] = useState(false);
+  const [addPanelSourceScrollLocked, setAddPanelSourceScrollLocked] = useState(true);
   const [addPanelHasUnsaved, setAddPanelHasUnsaved] = useState(false);
   const [pendingNavAfterAddClose, setPendingNavAfterAddClose] = useState<string | null>(null);
   const [{ isFirst, shuffleSeed }] = useState<{
@@ -83,10 +88,11 @@ function HomeInner() {
   const holdUser = searchParams.get("holdUser");
   const connectPanelOpen = searchParams.get("connectPanel") === "1";
   const connectSelectMode = searchParams.get("connectSelect") === "1";
-  const connectIds = (searchParams.get("connectIds") ?? "")
-    .split(",")
-    .map((v) => v.trim())
-    .filter(Boolean);
+  const connectIdsRaw = searchParams.get("connectIds") ?? "";
+  const connectIds = useMemo(
+    () => connectIdsRaw.split(",").map((v) => v.trim()).filter(Boolean),
+    [connectIdsRaw]
+  );
   const isConnectSelecting = panelMode === "connect";
 
   useEffect(() => {
@@ -103,6 +109,10 @@ function HomeInner() {
   }, [panelMode, addPanelHasUnsaved, registerGuard, unregisterGuard]);
 
   useEffect(() => {
+    if (panelMode !== "add") setAddPanelSourceScrollLocked(true);
+  }, [panelMode]);
+
+  useEffect(() => {
     return subscribeToItems(
       (fetched) => {
         setItems(fetched);
@@ -114,11 +124,119 @@ function HomeInner() {
         }
       },
       () => {
-        // Never keep the graph stuck in a loading-black state.
         setDataLoading(false);
       }
     );
   }, []);
+
+  // Welcome-back / post-onboarding messages on session start
+  useEffect(() => {
+    if (authLoading || !user) return;
+    const KEY = "kanon-last-visit";
+    const justOnboarded = sessionStorage.getItem("kanon-just-onboarded");
+    const alreadyGreeted = sessionStorage.getItem("kanon-greeted");
+
+    if (justOnboarded) {
+      sessionStorage.removeItem("kanon-just-onboarded");
+      sessionStorage.setItem("kanon-greeted", "1");
+      try { localStorage.setItem(KEY, Date.now().toString()); } catch {}
+
+      const name = firstName ?? user.displayName?.split(/\s+/)[0] ?? null;
+      const introDelay = timings.bottomStartMs + timings.navDelayMs + (timings.bottomEnterMs * 2);
+
+      setTimeout(() => {
+        void (async () => {
+          try {
+            const [totalItems, totalConnections] = await Promise.all([
+              countItemsSince(new Date(0)),
+              countConnectionsSince(new Date(0)),
+            ]);
+
+            const messages: Parameters<typeof enqueueStatus> = [];
+            const parts: string[] = [];
+            if (totalItems > 0) parts.push(`${totalItems} record${totalItems === 1 ? "" : "s"}`);
+            if (totalConnections > 0) parts.push(`${totalConnections} connection${totalConnections === 1 ? "" : "s"}`);
+
+            if (parts.length > 0) {
+              messages.push({
+                id: `onb-counts-${Date.now()}`,
+                text: `${parts.join(" & ")} to explore`,
+                durationMs: 2400,
+              });
+            }
+
+            if (name) {
+              messages.push({
+                id: `onb-welcome-${Date.now()}`,
+                text: `Welcome to Kanon, ${name}`,
+                durationMs: 2600,
+              });
+            }
+
+            if (messages.length > 0) enqueueStatus(...messages);
+          } catch {
+            // Non-fatal
+          }
+        })();
+      }, introDelay);
+      return;
+    }
+
+    if (alreadyGreeted) {
+      try { localStorage.setItem(KEY, Date.now().toString()); } catch {}
+      return;
+    }
+    sessionStorage.setItem("kanon-greeted", "1");
+
+    const lastVisitRaw = localStorage.getItem(KEY);
+    const name = firstName ?? user.displayName?.split(/\s+/)[0] ?? null;
+    const lastVisit = lastVisitRaw ? new Date(Number(lastVisitRaw)) : null;
+    try { localStorage.setItem(KEY, Date.now().toString()); } catch {}
+
+    const introDelay = timings.bottomStartMs + timings.navDelayMs + (timings.bottomEnterMs * 2);
+
+    setTimeout(() => {
+      void (async () => {
+        const messages: Parameters<typeof enqueueStatus> = [];
+
+        if (lastVisit) {
+          try {
+            const [newItems, newConnections] = await Promise.all([
+              countItemsSince(lastVisit),
+              countConnectionsSince(lastVisit),
+            ]);
+
+            if (newItems > 0) {
+              messages.push({
+                id: `wb-items-${Date.now()}`,
+                text: `${newItems} new record${newItems === 1 ? "" : "s"}`,
+                durationMs: 2000,
+              });
+            }
+            if (newConnections > 0) {
+              messages.push({
+                id: `wb-conns-${Date.now()}`,
+                text: `${newConnections} new connection${newConnections === 1 ? "" : "s"}`,
+                durationMs: 2000,
+              });
+            }
+          } catch {
+            // Firestore query failed — still show the greeting below
+          }
+        }
+
+        messages.push({
+          id: `wb-name-${Date.now()}`,
+          text: name
+            ? `Welcome back to Kanon, ${name}`
+            : "Welcome back to Kanon",
+          durationMs: 2600,
+        });
+
+        enqueueStatus(...messages);
+      })();
+    }, introDelay);
+  }, [authLoading, user, firstName, enqueueStatus, timings]);
 
   useEffect(() => {
     if (!panelItemId) {
@@ -196,6 +314,7 @@ function HomeInner() {
   }, [items, isFirst, shuffleSeed, connectIds, isConnectSelecting, connectPanelOpen]);
 
   function closePanel() {
+    clearPanelHistory();
     if (isConnectSelecting) {
       const params = new URLSearchParams(searchParams.toString());
       params.delete("connectPanel");
@@ -312,7 +431,7 @@ function HomeInner() {
             panOnScroll={true}
             panOnScrollMode={PanOnScrollMode.Vertical}
             fitView={true}
-            fitViewOptions={{ padding: 0.1 }}
+            fitViewOptions={{ padding: 0.6, minZoom: 0.95 }}
             onNodeClick={(_, node) => {
               if (isConnectSelecting && !connectPanelOpen) {
                 toggleConnectSelection(node.id);
@@ -332,6 +451,8 @@ function HomeInner() {
           <RightPanel
             key="item-panel"
             onClose={closePanel}
+            onBack={panelBackEntry ? panelGoBack : undefined}
+            backLabel={panelBackEntry?.label}
             headerActions={
               canEditPanelItem ? (
                 <div className="flex items-center gap-3 font-lector text-sm">
@@ -392,7 +513,7 @@ function HomeInner() {
             onBack={addPanelCanGoBack ? () => setAddPanelBackSignal((prev) => prev + 1) : undefined}
             onClose={() => setAddPanelCloseSignal((prev) => prev + 1)}
             progressPercent={addProgressPercent}
-            disableBodyScroll
+            disableBodyScroll={addPanelSourceScrollLocked}
           >
             <AddItemPageInnerWithSuspense
               onProgressChange={setAddProgressPercent}
@@ -406,21 +527,39 @@ function HomeInner() {
               }}
               onCanGoBackChange={setAddPanelCanGoBack}
               onHasUnsavedProgressChange={setAddPanelHasUnsaved}
+              onSourceStepScrollLockChange={setAddPanelSourceScrollLocked}
             />
           </RightPanel>
         )}
         {panelMode === "activity" && (
-          <RightPanel key="activity-panel" onClose={closePanel}>
+          <RightPanel
+            key="activity-panel"
+            onClose={closePanel}
+            onBack={panelBackEntry ? panelGoBack : undefined}
+            backLabel={panelBackEntry?.label}
+          >
             <ActivityPanel />
           </RightPanel>
         )}
         {panelMode === "search" && (
-          <RightPanel key="search-panel" title="Search" onClose={closePanel}>
+          <RightPanel
+            key="search-panel"
+            title="Search"
+            onClose={closePanel}
+            onBack={panelBackEntry ? panelGoBack : undefined}
+            backLabel={panelBackEntry?.label}
+          >
             <SearchPanel />
           </RightPanel>
         )}
         {panelMode === "holds" && (
-          <RightPanel key="holds-panel" title="Holds" onClose={closePanel}>
+          <RightPanel
+            key="holds-panel"
+            title="Holds"
+            onClose={closePanel}
+            onBack={panelBackEntry ? panelGoBack : undefined}
+            backLabel={panelBackEntry?.label}
+          >
             <HoldsPanel currentUserEmail={user.email ?? null} initialUserEmail={holdUser} />
           </RightPanel>
         )}

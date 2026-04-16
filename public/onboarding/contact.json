@@ -1,0 +1,410 @@
+{
+  "audio_url": "/onboarding/contact.m4a",
+  "words": [
+    {
+      "word": "Okay.",
+      "start": 1.639,
+      "end": 2.139
+    },
+    {
+      "word": "And",
+      "start": 2.679,
+      "end": 3.279
+    },
+    {
+      "word": "I",
+      "start": 4.159,
+      "end": 4.259
+    },
+    {
+      "word": "have",
+      "start": 4.339,
+      "end": 4.48
+    },
+    {
+      "word": "your",
+      "start": 4.519,
+      "end": 4.639
+    },
+    {
+      "word": "email",
+      "start": 4.719,
+      "end": 5.099
+    },
+    {
+      "word": "on",
+      "start": 5.159,
+      "end": 5.239
+    },
+    {
+      "word": "file,",
+      "start": 5.339,
+      "end": 5.759
+    },
+    {
+      "word": "but",
+      "start": 6.139,
+      "end": 6.579
+    },
+    {
+      "word": "if",
+      "start": 7.319,
+      "end": 7.699
+    },
+    {
+      "word": "you",
+      "start": 8.659,
+      "end": 8.899
+    },
+    {
+      "word": "are",
+      "start": 9.119,
+      "end": 9.319
+    },
+    {
+      "word": "comfortable,",
+      "start": 9.519,
+      "end": 10.239
+    },
+    {
+      "word": "um,",
+      "start": 11.099,
+      "end": 11.399
+    },
+    {
+      "word": "leaving",
+      "start": 11.659,
+      "end": 12.14
+    },
+    {
+      "word": "your",
+      "start": 12.179,
+      "end": 12.3
+    },
+    {
+      "word": "phone",
+      "start": 12.359,
+      "end": 12.519
+    },
+    {
+      "word": "number",
+      "start": 12.579,
+      "end": 12.979
+    },
+    {
+      "word": "so",
+      "start": 13.399,
+      "end": 13.659
+    },
+    {
+      "word": "that",
+      "start": 13.799,
+      "end": 13.92
+    },
+    {
+      "word": "I",
+      "start": 14.039,
+      "end": 14.06
+    },
+    {
+      "word": "could",
+      "start": 14.079,
+      "end": 14.22
+    },
+    {
+      "word": "contact",
+      "start": 14.279,
+      "end": 14.759
+    },
+    {
+      "word": "you",
+      "start": 14.839,
+      "end": 15.039
+    },
+    {
+      "word": "with",
+      "start": 15.099,
+      "end": 15.219
+    },
+    {
+      "word": "any",
+      "start": 15.299,
+      "end": 15.479
+    },
+    {
+      "word": "questions,",
+      "start": 15.559,
+      "end": 16.239
+    },
+    {
+      "word": "um,",
+      "start": 17.199,
+      "end": 17.399
+    },
+    {
+      "word": "feel",
+      "start": 17.559,
+      "end": 17.659
+    },
+    {
+      "word": "free",
+      "start": 17.739,
+      "end": 17.84
+    },
+    {
+      "word": "to",
+      "start": 17.879,
+      "end": 17.979
+    },
+    {
+      "word": "do",
+      "start": 18.02,
+      "end": 18.119
+    },
+    {
+      "word": "that.",
+      "start": 18.199,
+      "end": 18.459
+    },
+    {
+      "word": "If",
+      "start": 18.92,
+      "end": 19.1
+    },
+    {
+      "word": "not,",
+      "start": 19.219,
+      "end": 19.699
+    },
+    {
+      "word": "I",
+      "start": 20.5,
+      "end": 20.559
+    },
+    {
+      "word": "can",
+      "start": 20.6,
+      "end": 20.739
+    },
+    {
+      "word": "also",
+      "start": 20.819,
+      "end": 21.139
+    },
+    {
+      "word": "reach",
+      "start": 21.219,
+      "end": 21.539
+    },
+    {
+      "word": "out",
+      "start": 21.6,
+      "end": 21.799
+    },
+    {
+      "word": "to",
+      "start": 21.859,
+      "end": 21.979
+    },
+    {
+      "word": "you",
+      "start": 22.02,
+      "end": 22.539
+    },
+    {
+      "word": "through",
+      "start": 22.6,
+      "end": 23.199
+    },
+    {
+      "word": "your",
+      "start": 23.299,
+      "end": 23.399
+    },
+    {
+      "word": "email.",
+      "start": 23.5,
+      "end": 24.159
+    },
+    {
+      "word": "And",
+      "start": 24.26,
+      "end": 24.659
+    },
+    {
+      "word": "I",
+      "start": 24.76,
+      "end": 24.819
+    },
+    {
+      "word": "know",
+      "start": 24.859,
+      "end": 25
+    },
+    {
+      "word": "for",
+      "start": 25.119,
+      "end": 25.18
+    },
+    {
+      "word": "some",
+      "start": 25.26,
+      "end": 25.359
+    },
+    {
+      "word": "of",
+      "start": 25.42,
+      "end": 25.52
+    },
+    {
+      "word": "you,",
+      "start": 25.599,
+      "end": 25.699
+    },
+    {
+      "word": "I",
+      "start": 25.84,
+      "end": 25.959
+    },
+    {
+      "word": "have",
+      "start": 26.059,
+      "end": 26.219
+    },
+    {
+      "word": "your",
+      "start": 26.239,
+      "end": 26.34
+    },
+    {
+      "word": "phone",
+      "start": 26.379,
+      "end": 26.539
+    },
+    {
+      "word": "numbers",
+      "start": 26.579,
+      "end": 26.939
+    },
+    {
+      "word": "anyways,",
+      "start": 27,
+      "end": 27.539
+    },
+    {
+      "word": "but",
+      "start": 28.239,
+      "end": 28.939
+    },
+    {
+      "word": "I",
+      "start": 29.119,
+      "end": 29.5
+    },
+    {
+      "word": "just",
+      "start": 29.579,
+      "end": 29.719
+    },
+    {
+      "word": "want",
+      "start": 29.819,
+      "end": 30
+    },
+    {
+      "word": "to",
+      "start": 30.039,
+      "end": 30.34
+    },
+    {
+      "word": "make",
+      "start": 30.399,
+      "end": 30.559
+    },
+    {
+      "word": "sure",
+      "start": 30.619,
+      "end": 30.86
+    },
+    {
+      "word": "if",
+      "start": 31,
+      "end": 31.079
+    },
+    {
+      "word": "I",
+      "start": 31.119,
+      "end": 31.139
+    },
+    {
+      "word": "have",
+      "start": 31.159,
+      "end": 31.28
+    },
+    {
+      "word": "any",
+      "start": 31.34,
+      "end": 31.5
+    },
+    {
+      "word": "questions",
+      "start": 31.559,
+      "end": 32.279
+    },
+    {
+      "word": "about",
+      "start": 32.419,
+      "end": 32.739
+    },
+    {
+      "word": "your",
+      "start": 32.779,
+      "end": 32.919
+    },
+    {
+      "word": "time",
+      "start": 32.959,
+      "end": 33.399
+    },
+    {
+      "word": "using",
+      "start": 33.479,
+      "end": 33.72
+    },
+    {
+      "word": "the",
+      "start": 33.759,
+      "end": 33.86
+    },
+    {
+      "word": "app,",
+      "start": 34,
+      "end": 34.279
+    },
+    {
+      "word": "I",
+      "start": 34.939,
+      "end": 35.399
+    },
+    {
+      "word": "can",
+      "start": 35.5,
+      "end": 35.819
+    },
+    {
+      "word": "let",
+      "start": 36.599,
+      "end": 36.86
+    },
+    {
+      "word": "you",
+      "start": 36.919,
+      "end": 37.02
+    },
+    {
+      "word": "know.",
+      "start": 37.079,
+      "end": 37.339
+    }
+  ]
+}

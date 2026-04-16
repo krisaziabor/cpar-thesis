@@ -21,13 +21,23 @@ function docRef(email: string) {
   return doc(db, COLLECTION, docId(email));
 }
 
-/** Derive which step the user should see next based on saved progress. */
-export function currentStep(data: InstallationOnboarding | null): OnboardingStep {
-  if (!data) return "media_opt_in";
+/**
+ * Derive which step the user should see next based on saved progress.
+ * `needsProfileSetup` is true for self-registered users who haven't
+ * set up their profile yet — pre-existing whitelist users skip it.
+ */
+export function currentStep(
+  data: InstallationOnboarding | null,
+  needsProfileSetup = false
+): OnboardingStep {
+  if (!data) return "accessibility";
   if (data.completed_at) return "complete";
+  if (data.accessibility_acknowledged_at == null) return "accessibility";
+  if (needsProfileSetup && data.profile_setup_at == null) return "profile_setup";
   if (data.media_opt_in_at == null) return "media_opt_in";
   if (data.book_submitted_at == null) return "book_text";
   if (data.contact_submitted_at == null) return "contact";
+  if (data.avatar_colors_at == null) return "avatar_colors";
   return "complete";
 }
 
@@ -57,6 +67,49 @@ export function subscribeToOnboarding(
     }
     cb({ id: snap.id, ...snap.data() } as InstallationOnboarding);
   });
+}
+
+/** Step 0 — acknowledge audio-first design (continue with audio or request text mode). */
+export async function submitAccessibility(
+  email: string,
+  name: string,
+  prefersTextMode: boolean
+): Promise<void> {
+  if (!db) return;
+  await setDoc(
+    docRef(email),
+    {
+      user_email: email,
+      user_name: name,
+      prefers_text_mode: prefersTextMode,
+      accessibility_acknowledged_at: serverTimestamp(),
+      created_at: serverTimestamp(),
+      updated_at: serverTimestamp(),
+    },
+    { merge: true }
+  );
+}
+
+/** Step 1 — save profile setup (name + optional icon) for self-registered users. */
+export async function submitProfileSetup(
+  email: string,
+  name: string,
+  icon?: string
+): Promise<void> {
+  if (!db) return;
+  await setDoc(
+    docRef(email),
+    {
+      user_email: email,
+      user_name: name,
+      profile_name: name,
+      ...(icon ? { profile_icon: icon } : {}),
+      profile_setup_at: serverTimestamp(),
+      created_at: serverTimestamp(),
+      updated_at: serverTimestamp(),
+    },
+    { merge: true }
+  );
 }
 
 /** Step 1 — save media opt-in decision. */
@@ -92,6 +145,20 @@ async function uploadBookPdf(
   return getDownloadURL(storageRef);
 }
 
+/** Step 2 — skip book text (user can complete it later from their checklist). */
+export async function skipBookText(email: string): Promise<void> {
+  if (!db) return;
+  await setDoc(
+    docRef(email),
+    {
+      book_skipped: true,
+      book_submitted_at: serverTimestamp(),
+      updated_at: serverTimestamp(),
+    },
+    { merge: true }
+  );
+}
+
 /** Step 2 — save book text (and optional formatting PDF). */
 export async function submitBookText(
   email: string,
@@ -119,7 +186,7 @@ export async function submitBookText(
   await setDoc(docRef(email), payload, { merge: true });
 }
 
-/** Step 3 — save contact preferences and mark flow complete. */
+/** Step 3 — save contact preferences (no longer marks flow complete). */
 export async function submitContactAndComplete(
   email: string,
   contactMethod: "email" | "text",
@@ -130,10 +197,35 @@ export async function submitContactAndComplete(
   const payload: Record<string, unknown> = {
     preferred_contact_method: contactMethod,
     contact_submitted_at: serverTimestamp(),
-    completed_at: serverTimestamp(),
     updated_at: serverTimestamp(),
   };
   if (phoneNumber) payload.phone_number = phoneNumber;
 
   await setDoc(docRef(email), payload, { merge: true });
+}
+
+/** Step 4 — save avatar gradient colors and mark flow complete. */
+export async function submitAvatarColors(
+  email: string,
+  colors: [string, string, string]
+): Promise<void> {
+  if (!db) return;
+
+  await Promise.all([
+    setDoc(
+      docRef(email),
+      {
+        avatar_colors: colors,
+        avatar_colors_at: serverTimestamp(),
+        completed_at: serverTimestamp(),
+        updated_at: serverTimestamp(),
+      },
+      { merge: true }
+    ),
+    setDoc(
+      doc(db, "users", email),
+      { avatar_colors: colors },
+      { merge: true }
+    ),
+  ]);
 }

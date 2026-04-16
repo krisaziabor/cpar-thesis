@@ -108,10 +108,37 @@
   }
 }
 
+@property --border-angle {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+
+@keyframes nav-border-loop {
+  from { --border-angle: 0deg; }
+  to   { --border-angle: 360deg; }
+}
+
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: "DieGrotesk", sans-serif;
+}
+
+/* ─── Synced Transcript ──────────────────────────────────────────────────── */
+
+.synced-word {
+  opacity: 0.15;
+  transition: opacity 250ms ease-out;
+}
+
+.synced-word[data-state="spoken"] {
+  opacity: 1;
+}
+
+.synced-word[data-state="active"] {
+  opacity: 1;
+  text-shadow: 0 0 12px rgba(255, 255, 255, 0.12);
 }
 
 /* Remove ReactFlow's default node chrome from item thumbnail nodes */

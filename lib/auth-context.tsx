@@ -14,11 +14,17 @@ import {
 } from "firebase/auth";
 import { useRouter, usePathname } from "next/navigation";
 import { auth } from "./firebase";
-import { getWhitelistRole, type UserRole } from "./whitelist";
+import {
+  getWhitelistAccessInfo,
+  createWhitelistEntry,
+  REGISTRATION_OPEN,
+  type UserRole,
+} from "./whitelist";
 import {
   getOnboarding,
   currentStep,
 } from "./installation-onboarding";
+import { getUserProfile } from "./users";
 import type { OnboardingStep } from "./types";
 
 const ONBOARDING_EXEMPT_PATHS = ["/login", "/onboarding", "/admin", "/colophon"];
@@ -26,6 +32,8 @@ const ONBOARDING_EXEMPT_PATHS = ["/login", "/onboarding", "/admin", "/colophon"]
 interface AuthContextValue {
   user: User | null;
   role: UserRole | null;
+  firstName: string | null;
+  avatarColors: [string, string, string] | null;
   loading: boolean;
   authError: string | null;
   onboardingStep: OnboardingStep;
@@ -38,9 +46,11 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue>({
   user: null,
   role: null,
+  firstName: null,
+  avatarColors: null,
   loading: true,
   authError: null,
-  onboardingStep: "media_opt_in",
+  onboardingStep: "profile_setup",
   onboardingComplete: false,
   refreshOnboarding: async () => {},
   signOut: async () => {},
@@ -49,16 +59,18 @@ const AuthContext = createContext<AuthContextValue>({
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [role, setRole] = useState<UserRole | null>(null);
+  const [firstName, setFirstName] = useState<string | null>(null);
+  const [avatarColors, setAvatarColors] = useState<[string, string, string] | null>(null);
   const [loading, setLoading] = useState(true);
   const [authError, setAuthError] = useState<string | null>(null);
   const [onboardingStep, setOnboardingStep] =
-    useState<OnboardingStep>("media_opt_in");
+    useState<OnboardingStep>("profile_setup");
   const router = useRouter();
   const pathname = usePathname();
 
-  async function loadOnboarding(email: string) {
+  async function loadOnboarding(email: string, selfRegistered: boolean) {
     const data = await getOnboarding(email);
-    const step = currentStep(data);
+    const step = currentStep(data, selfRegistered);
     setOnboardingStep(step);
     return step;
   }
@@ -75,27 +87,51 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!firebaseUser?.email) {
         setUser(null);
         setRole(null);
-        setOnboardingStep("media_opt_in");
+        setFirstName(null);
+        setAvatarColors(null);
+        setOnboardingStep("profile_setup");
         setLoading(false);
         return;
       }
 
+      // Keep loading true while resolving whitelist + onboarding.
+      // Critical after sign-in: the initial null callback already set
+      // loading=false, so without this reset the redirect effects would
+      // fire before role/onboardingStep are resolved.
+      setLoading(true);
+
       try {
-        const userRole = await getWhitelistRole(firebaseUser.email);
-        if (!userRole) {
+        let access = await getWhitelistAccessInfo(firebaseUser.email);
+
+        if (!access.role && REGISTRATION_OPEN) {
+          await createWhitelistEntry(firebaseUser.email);
+          access = { role: "member", firstName: null };
+        }
+
+        if (!access.role) {
           await firebaseSignOut(_auth);
           setUser(null);
           setRole(null);
-          setOnboardingStep("media_opt_in");
+          setFirstName(null);
+          setAvatarColors(null);
+          setOnboardingStep("profile_setup");
           setAuthError("This account is not approved for access.");
         } else {
+          const selfRegistered = !access.firstName;
           setUser(firebaseUser);
-          setRole(userRole);
+          setRole(access.role);
+          setFirstName(access.firstName);
           setAuthError(null);
           try {
-            await loadOnboarding(firebaseUser.email);
+            await loadOnboarding(firebaseUser.email, selfRegistered);
           } catch {
             setOnboardingStep("complete");
+          }
+          try {
+            const profile = await getUserProfile(firebaseUser.email);
+            setAvatarColors(profile?.avatar_colors ?? null);
+          } catch {
+            setAvatarColors(null);
           }
         }
       } catch {
@@ -116,27 +152,46 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     router.replace("/login");
   }, [loading, user, pathname, router]);
 
-  // Redirect authenticated users who haven't finished onboarding
+  // Redirect authenticated users based on onboarding status
   useEffect(() => {
     if (loading || !user) return;
+
+    if (onboardingStep === "complete") {
+      if (pathname === "/onboarding") {
+        router.replace("/");
+      }
+      return;
+    }
+
     const exempt = ONBOARDING_EXEMPT_PATHS.some(
       (p) => pathname === p || pathname.startsWith(p + "/")
     );
-    if (!exempt && onboardingStep !== "complete") {
+    if (!exempt) {
       router.replace("/onboarding");
     }
   }, [loading, user, pathname, onboardingStep, router]);
 
   async function refreshOnboarding() {
     if (user?.email) {
-      await loadOnboarding(user.email);
+      await loadOnboarding(user.email, !firstName);
+      try {
+        const profile = await getUserProfile(user.email);
+        if (profile?.avatar_colors) setAvatarColors(profile.avatar_colors);
+      } catch {}
     }
   }
 
   async function signOut() {
     if (auth) {
       await firebaseSignOut(auth);
-      setOnboardingStep("media_opt_in");
+      setFirstName(null);
+      setAvatarColors(null);
+      setOnboardingStep("profile_setup");
+      try {
+        sessionStorage.removeItem("kanon-greeted");
+        sessionStorage.removeItem("kanon-just-onboarded");
+        sessionStorage.removeItem("kanon-cached-items");
+      } catch {}
       router.replace("/login");
     }
   }
@@ -148,6 +203,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       value={{
         user,
         role,
+        firstName,
+        avatarColors,
         loading,
         authError,
         onboardingStep,

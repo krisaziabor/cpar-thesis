@@ -24,6 +24,8 @@ export interface User {
   email: string;
   name: string;
   created_at: Timestamp;
+  /** Three hex colors from the onboarding color wheel, used for the user's gradient avatar. */
+  avatar_colors?: [string, string, string];
   /** Preferred streaming platform for music links. Defaults to "youtube". */
   preferred_music_platform?: MusicPlatform;
 }
@@ -33,6 +35,7 @@ export interface Item {
   id: string;
   title: string;
   description?: string;
+  encountered_source?: string;
   /** Original date of the media/record (free-text: year, month/year, or full date). */
   media_date?: string;
   type: string;
@@ -42,6 +45,8 @@ export interface Item {
   media_url?: string;
   voice_recording_url: string;
   transcript: string;
+  /** Word-level timed transcript for synced playback (optional, generated at upload time). */
+  timed_transcript?: TimedWord[];
   tags: string[];
   added_by: string;
   is_draft: boolean;
@@ -133,12 +138,27 @@ export interface Feedback {
  * pre-launch opt-in flow (media consent → book text → contact info).
  * Each step is persisted independently so users can resume mid-flow.
  */
-export type OnboardingStep = "media_opt_in" | "book_text" | "contact" | "complete";
+export type OnboardingStep = "accessibility" | "profile_setup" | "media_opt_in" | "book_text" | "contact" | "avatar_colors" | "complete";
+
+/** Word-level timestamp for synced audio transcripts. */
+export interface TimedWord {
+  word: string;
+  start: number;
+  end: number;
+}
 
 export interface InstallationOnboarding {
   id: string;
   user_email: string;
   user_name: string;
+
+  /** Step 0 — accessibility: user acknowledges audio-first design */
+  accessibility_acknowledged_at?: Timestamp;
+
+  /** Step 1 — profile setup: name and icon for new sign-ups */
+  profile_name?: string;
+  profile_icon?: string;
+  profile_setup_at?: Timestamp;
 
   /** Step 1 — three pillars: consent to include media in installation */
   media_opt_in?: boolean;
@@ -149,12 +169,17 @@ export interface InstallationOnboarding {
   book_date?: string;
   book_text?: string;
   book_pdf_url?: string;
+  book_skipped?: boolean;
   book_submitted_at?: Timestamp;
 
   /** Step 3 — contact preferences */
   phone_number?: string;
   preferred_contact_method?: "email" | "text";
   contact_submitted_at?: Timestamp;
+
+  /** Step 4 — avatar gradient colors (three hex values from the color wheel) */
+  avatar_colors?: [string, string, string];
+  avatar_colors_at?: Timestamp;
 
   completed_at?: Timestamp;
   created_at: Timestamp;
