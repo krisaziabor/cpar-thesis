@@ -1,0 +1,95 @@
+{
+  "audio_url": "/onboarding/profile-setup.m4a",
+  "words": [
+    {
+      "word": "Hi.",
+      "start": 1.139,
+      "end": 1.939
+    },
+    {
+      "word": "Welcome",
+      "start": 2.059,
+      "end": 2.339
+    },
+    {
+      "word": "to",
+      "start": 2.359,
+      "end": 2.46
+    },
+    {
+      "word": "Kanon.",
+      "start": 2.5,
+      "end": 2.919
+    },
+    {
+      "word": "I'm",
+      "start": 3.539,
+      "end": 4.199
+    },
+    {
+      "word": "super",
+      "start": 4.219,
+      "end": 4.5
+    },
+    {
+      "word": "excited",
+      "start": 4.579,
+      "end": 4.94
+    },
+    {
+      "word": "that",
+      "start": 4.98,
+      "end": 5.099
+    },
+    {
+      "word": "you're",
+      "start": 5.139,
+      "end": 5.319
+    },
+    {
+      "word": "here.",
+      "start": 5.339,
+      "end": 5.659
+    },
+    {
+      "word": "To",
+      "start": 6.579,
+      "end": 6.639
+    },
+    {
+      "word": "start",
+      "start": 6.799,
+      "end": 7.44
+    },
+    {
+      "word": "things",
+      "start": 7.46,
+      "end": 7.759
+    },
+    {
+      "word": "off,",
+      "start": 7.859,
+      "end": 8.24
+    },
+    {
+      "word": "please",
+      "start": 8.559,
+      "end": 9.34
+    },
+    {
+      "word": "enter",
+      "start": 9.399,
+      "end": 9.639
+    },
+    {
+      "word": "your",
+      "start": 9.719,
+      "end": 9.84
+    },
+    {
+      "word": "name.",
+      "start": 9.859,
+      "end": 10.179
+    }
+  ]
+}

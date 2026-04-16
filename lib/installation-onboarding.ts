@@ -36,6 +36,7 @@ export function currentStep(
   if (data.media_opt_in_at == null) return "media_opt_in";
   if (data.book_submitted_at == null) return "book_text";
   if (data.contact_submitted_at == null) return "contact";
+  if (data.avatar_colors_at == null) return "avatar_colors";
   return "complete";
 }
 
@@ -149,7 +150,7 @@ export async function submitBookText(
   await setDoc(docRef(email), payload, { merge: true });
 }
 
-/** Step 3 — save contact preferences and mark flow complete. */
+/** Step 3 — save contact preferences (no longer marks flow complete). */
 export async function submitContactAndComplete(
   email: string,
   contactMethod: "email" | "text",
@@ -160,10 +161,28 @@ export async function submitContactAndComplete(
   const payload: Record<string, unknown> = {
     preferred_contact_method: contactMethod,
     contact_submitted_at: serverTimestamp(),
-    completed_at: serverTimestamp(),
     updated_at: serverTimestamp(),
   };
   if (phoneNumber) payload.phone_number = phoneNumber;
 
   await setDoc(docRef(email), payload, { merge: true });
+}
+
+/** Step 4 — save avatar gradient colors and mark flow complete. */
+export async function submitAvatarColors(
+  email: string,
+  colors: [string, string, string]
+): Promise<void> {
+  if (!db) return;
+
+  await setDoc(
+    docRef(email),
+    {
+      avatar_colors: colors,
+      avatar_colors_at: serverTimestamp(),
+      completed_at: serverTimestamp(),
+      updated_at: serverTimestamp(),
+    },
+    { merge: true }
+  );
 }

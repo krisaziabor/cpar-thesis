@@ -1,0 +1,625 @@
+{
+  "audio_url": "/onboarding/avatar-reveal.m4a",
+  "words": [
+    {
+      "word": "So",
+      "start": 1.12,
+      "end": 1.24
+    },
+    {
+      "word": "those",
+      "start": 1.279,
+      "end": 1.48
+    },
+    {
+      "word": "three",
+      "start": 1.559,
+      "end": 1.679
+    },
+    {
+      "word": "things",
+      "start": 1.799,
+      "end": 2
+    },
+    {
+      "word": "I've",
+      "start": 2.059,
+      "end": 2.179
+    },
+    {
+      "word": "just",
+      "start": 2.22,
+      "end": 2.319
+    },
+    {
+      "word": "asked",
+      "start": 2.44,
+      "end": 2.639
+    },
+    {
+      "word": "you",
+      "start": 2.7,
+      "end": 2.759
+    },
+    {
+      "word": "to",
+      "start": 2.759,
+      "end": 2.819
+    },
+    {
+      "word": "think",
+      "start": 2.879,
+      "end": 3.019
+    },
+    {
+      "word": "about,",
+      "start": 3.079,
+      "end": 3.359
+    },
+    {
+      "word": "that",
+      "start": 4.559,
+      "end": 4.799
+    },
+    {
+      "word": "is",
+      "start": 5.339,
+      "end": 5.759
+    },
+    {
+      "word": "the",
+      "start": 6.679,
+      "end": 6.739
+    },
+    {
+      "word": "heart",
+      "start": 6.799,
+      "end": 7.179
+    },
+    {
+      "word": "of",
+      "start": 7.239,
+      "end": 7.299
+    },
+    {
+      "word": "Kanon.",
+      "start": 7.399,
+      "end": 7.799
+    },
+    {
+      "word": "And",
+      "start": 8.5,
+      "end": 8.579
+    },
+    {
+      "word": "not",
+      "start": 8.639,
+      "end": 8.8
+    },
+    {
+      "word": "only",
+      "start": 8.859,
+      "end": 9.1
+    },
+    {
+      "word": "that,",
+      "start": 9.22,
+      "end": 9.519
+    },
+    {
+      "word": "but",
+      "start": 9.8,
+      "end": 10.3
+    },
+    {
+      "word": "actually,",
+      "start": 11.319,
+      "end": 11.899
+    },
+    {
+      "word": "Kanon",
+      "start": 12.439,
+      "end": 12.859
+    },
+    {
+      "word": "sees",
+      "start": 12.939,
+      "end": 13.38
+    },
+    {
+      "word": "all",
+      "start": 13.639,
+      "end": 13.739
+    },
+    {
+      "word": "of",
+      "start": 13.779,
+      "end": 13.88
+    },
+    {
+      "word": "these",
+      "start": 13.96,
+      "end": 14.139
+    },
+    {
+      "word": "things",
+      "start": 14.239,
+      "end": 14.739
+    },
+    {
+      "word": "as",
+      "start": 15.779,
+      "end": 15.899
+    },
+    {
+      "word": "one.",
+      "start": 16.02,
+      "end": 16.319
+    },
+    {
+      "word": "You",
+      "start": 18.039,
+      "end": 18.1
+    },
+    {
+      "word": "know,",
+      "start": 18.159,
+      "end": 18.42
+    },
+    {
+      "word": "a",
+      "start": 18.959,
+      "end": 19
+    },
+    {
+      "word": "song",
+      "start": 19.119,
+      "end": 19.42
+    },
+    {
+      "word": "that",
+      "start": 19.479,
+      "end": 19.6
+    },
+    {
+      "word": "you've",
+      "start": 19.699,
+      "end": 20.039
+    },
+    {
+      "word": "written",
+      "start": 21.119,
+      "end": 21.539
+    },
+    {
+      "word": "and",
+      "start": 21.619,
+      "end": 21.719
+    },
+    {
+      "word": "recorded",
+      "start": 21.779,
+      "end": 22.359
+    },
+    {
+      "word": "is",
+      "start": 22.779,
+      "end": 22.92
+    },
+    {
+      "word": "not",
+      "start": 22.979,
+      "end": 23.119
+    },
+    {
+      "word": "only",
+      "start": 23.219,
+      "end": 23.52
+    },
+    {
+      "word": "work",
+      "start": 23.879,
+      "end": 24.059
+    },
+    {
+      "word": "that",
+      "start": 24.119,
+      "end": 24.18
+    },
+    {
+      "word": "you've",
+      "start": 24.219,
+      "end": 24.359
+    },
+    {
+      "word": "created,",
+      "start": 24.459,
+      "end": 24.76
+    },
+    {
+      "word": "but",
+      "start": 24.859,
+      "end": 25
+    },
+    {
+      "word": "media",
+      "start": 25.119,
+      "end": 25.419
+    },
+    {
+      "word": "that",
+      "start": 25.459,
+      "end": 25.599
+    },
+    {
+      "word": "someone",
+      "start": 25.699,
+      "end": 25.899
+    },
+    {
+      "word": "else",
+      "start": 25.939,
+      "end": 26.1
+    },
+    {
+      "word": "consumes.",
+      "start": 26.159,
+      "end": 27.019
+    },
+    {
+      "word": "An",
+      "start": 27.76,
+      "end": 27.84
+    },
+    {
+      "word": "Instagram",
+      "start": 27.939,
+      "end": 28.439
+    },
+    {
+      "word": "reel",
+      "start": 28.639,
+      "end": 29.059
+    },
+    {
+      "word": "that",
+      "start": 29.739,
+      "end": 29.899
+    },
+    {
+      "word": "you",
+      "start": 29.959,
+      "end": 30.079
+    },
+    {
+      "word": "watch",
+      "start": 30.159,
+      "end": 30.599
+    },
+    {
+      "word": "in",
+      "start": 30.939,
+      "end": 31.019
+    },
+    {
+      "word": "your",
+      "start": 31.079,
+      "end": 31.199
+    },
+    {
+      "word": "bed",
+      "start": 31.279,
+      "end": 31.619
+    },
+    {
+      "word": "is",
+      "start": 31.779,
+      "end": 32.179
+    },
+    {
+      "word": "theory",
+      "start": 34.239,
+      "end": 34.739
+    },
+    {
+      "word": "in",
+      "start": 34.88,
+      "end": 34.959
+    },
+    {
+      "word": "the",
+      "start": 35,
+      "end": 35.099
+    },
+    {
+      "word": "same",
+      "start": 35.159,
+      "end": 35.36
+    },
+    {
+      "word": "way",
+      "start": 35.419,
+      "end": 35.68
+    },
+    {
+      "word": "that",
+      "start": 35.86,
+      "end": 36.059
+    },
+    {
+      "word": "an",
+      "start": 36.5,
+      "end": 36.599
+    },
+    {
+      "word": "academic",
+      "start": 36.739,
+      "end": 37.139
+    },
+    {
+      "word": "paper",
+      "start": 37.259,
+      "end": 37.599
+    },
+    {
+      "word": "can",
+      "start": 37.659,
+      "end": 37.819
+    },
+    {
+      "word": "be.",
+      "start": 37.879,
+      "end": 38.119
+    },
+    {
+      "word": "This",
+      "start": 39.399,
+      "end": 39.559
+    },
+    {
+      "word": "is",
+      "start": 39.639,
+      "end": 39.759
+    },
+    {
+      "word": "not",
+      "start": 39.899,
+      "end": 40.119
+    },
+    {
+      "word": "to",
+      "start": 40.5,
+      "end": 41.18
+    },
+    {
+      "word": "take",
+      "start": 41.259,
+      "end": 41.5
+    },
+    {
+      "word": "some",
+      "start": 41.599,
+      "end": 41.859
+    },
+    {
+      "word": "anti-intellectual",
+      "start": 41.959,
+      "end": 43.419
+    },
+    {
+      "word": "stance,",
+      "start": 43.52,
+      "end": 43.959
+    },
+    {
+      "word": "but",
+      "start": 44.059,
+      "end": 44.259
+    },
+    {
+      "word": "to",
+      "start": 44.34,
+      "end": 44.639
+    },
+    {
+      "word": "really",
+      "start": 45.879,
+      "end": 46.219
+    },
+    {
+      "word": "see",
+      "start": 46.439,
+      "end": 46.839
+    },
+    {
+      "word": "that",
+      "start": 48.02,
+      "end": 48.559
+    },
+    {
+      "word": "the",
+      "start": 49.399,
+      "end": 49.459
+    },
+    {
+      "word": "work",
+      "start": 49.559,
+      "end": 49.799
+    },
+    {
+      "word": "we",
+      "start": 49.86,
+      "end": 49.959
+    },
+    {
+      "word": "create,",
+      "start": 50.039,
+      "end": 50.679
+    },
+    {
+      "word": "the",
+      "start": 51.139,
+      "end": 51.219
+    },
+    {
+      "word": "media",
+      "start": 51.299,
+      "end": 51.599
+    },
+    {
+      "word": "we",
+      "start": 51.739,
+      "end": 51.84
+    },
+    {
+      "word": "consume,",
+      "start": 51.879,
+      "end": 52.52
+    },
+    {
+      "word": "and",
+      "start": 52.759,
+      "end": 52.959
+    },
+    {
+      "word": "the",
+      "start": 53.559,
+      "end": 53.639
+    },
+    {
+      "word": "theory",
+      "start": 53.779,
+      "end": 54.34
+    },
+    {
+      "word": "that",
+      "start": 54.399,
+      "end": 54.479
+    },
+    {
+      "word": "is",
+      "start": 54.539,
+      "end": 54.68
+    },
+    {
+      "word": "so",
+      "start": 54.719,
+      "end": 54.86
+    },
+    {
+      "word": "central",
+      "start": 54.979,
+      "end": 55.379
+    },
+    {
+      "word": "to",
+      "start": 55.599,
+      "end": 55.739
+    },
+    {
+      "word": "how",
+      "start": 55.84,
+      "end": 55.959
+    },
+    {
+      "word": "we",
+      "start": 56.02,
+      "end": 56.159
+    },
+    {
+      "word": "see",
+      "start": 56.219,
+      "end": 56.36
+    },
+    {
+      "word": "the",
+      "start": 56.399,
+      "end": 56.52
+    },
+    {
+      "word": "world",
+      "start": 56.599,
+      "end": 57.659
+    },
+    {
+      "word": "takes",
+      "start": 58.439,
+      "end": 59.099
+    },
+    {
+      "word": "so",
+      "start": 59.18,
+      "end": 59.279
+    },
+    {
+      "word": "many",
+      "start": 59.359,
+      "end": 59.5
+    },
+    {
+      "word": "different",
+      "start": 59.559,
+      "end": 59.819
+    },
+    {
+      "word": "forms,",
+      "start": 59.879,
+      "end": 60.439
+    },
+    {
+      "word": "and",
+      "start": 61.199,
+      "end": 61.279
+    },
+    {
+      "word": "Kanon",
+      "start": 61.419,
+      "end": 62.559
+    },
+    {
+      "word": "is",
+      "start": 62.719,
+      "end": 63.119
+    },
+    {
+      "word": "the",
+      "start": 63.479,
+      "end": 63.599
+    },
+    {
+      "word": "place",
+      "start": 63.68,
+      "end": 64.099
+    },
+    {
+      "word": "where",
+      "start": 64.439,
+      "end": 64.539
+    },
+    {
+      "word": "they",
+      "start": 64.58,
+      "end": 64.68
+    },
+    {
+      "word": "could",
+      "start": 64.72,
+      "end": 64.9
+    },
+    {
+      "word": "all",
+      "start": 64.979,
+      "end": 65.099
+    },
+    {
+      "word": "exist",
+      "start": 65.199,
+      "end": 65.939
+    },
+    {
+      "word": "together.",
+      "start": 66,
+      "end": 66.459
+    }
+  ]
+}

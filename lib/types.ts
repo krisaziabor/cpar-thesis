@@ -134,7 +134,14 @@ export interface Feedback {
  * pre-launch opt-in flow (media consent → book text → contact info).
  * Each step is persisted independently so users can resume mid-flow.
  */
-export type OnboardingStep = "profile_setup" | "media_opt_in" | "book_text" | "contact" | "complete";
+export type OnboardingStep = "profile_setup" | "media_opt_in" | "book_text" | "contact" | "avatar_colors" | "complete";
+
+/** Word-level timestamp for synced audio transcripts. */
+export interface TimedWord {
+  word: string;
+  start: number;
+  end: number;
+}
 
 export interface InstallationOnboarding {
   id: string;
@@ -161,6 +168,10 @@ export interface InstallationOnboarding {
   phone_number?: string;
   preferred_contact_method?: "email" | "text";
   contact_submitted_at?: Timestamp;
+
+  /** Step 4 — avatar gradient colors (three hex values from the color wheel) */
+  avatar_colors?: [string, string, string];
+  avatar_colors_at?: Timestamp;
 
   completed_at?: Timestamp;
   created_at: Timestamp;
