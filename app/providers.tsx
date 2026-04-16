@@ -16,15 +16,15 @@ export function Providers({ children }: { children: React.ReactNode }) {
     <AuthProvider>
       <NavGuardProvider>
         <NavStatusProvider>
-          <PanelHistoryProvider>
-          {children}
           <Suspense fallback={null}>
+            <PanelHistoryProvider>
+            {children}
             <FloatingNav />
             <UtilityDock />
             <GlobalFeedbackPanel />
+            </PanelHistoryProvider>
           </Suspense>
           <DialRoot position="top-right" />
-          </PanelHistoryProvider>
         </NavStatusProvider>
       </NavGuardProvider>
     </AuthProvider>
