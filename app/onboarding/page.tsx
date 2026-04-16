@@ -100,9 +100,11 @@ function useStepTranscript(stepKey: string | undefined) {
 function ListenGate({
   locked,
   children,
+  className,
 }: {
   locked: boolean;
   children: React.ReactNode;
+  className?: string;
 }) {
   const [showTip, setShowTip] = useState(false);
   const [tipPos, setTipPos] = useState({ x: 0, y: 0 });
@@ -127,18 +129,27 @@ function ListenGate({
     [],
   );
 
-  if (!locked) return <>{children}</>;
-
   return (
-    <div ref={containerRef} className="relative h-full self-stretch">
-      <div className="pointer-events-none h-full opacity-30">{children}</div>
-      <button
-        type="button"
-        onClick={flash}
-        className="absolute inset-0 z-10 cursor-default"
-        aria-label="Listen to the full recording first"
-      />
-      {typeof document !== "undefined" &&
+    <div ref={containerRef} className={`relative ${className ?? ""}`}>
+      <div
+        style={{
+          opacity: locked ? 0.3 : 1,
+          pointerEvents: locked ? "none" : "auto",
+          transition: "opacity 0.3s ease",
+        }}
+      >
+        {children}
+      </div>
+      {locked && (
+        <button
+          type="button"
+          onClick={flash}
+          className="absolute inset-0 z-10 cursor-default"
+          aria-label="Listen to the full recording first"
+        />
+      )}
+      {locked &&
+        typeof document !== "undefined" &&
         createPortal(
           <AnimatePresence>
             {showTip && (
@@ -683,13 +694,7 @@ export default function OnboardingPage() {
                   })}
                 </div>
 
-                <motion.div
-                  layout
-                  transition={
-                    shouldReduceMotion ? { duration: 0 } : CARD.spring
-                  }
-                  className="w-full"
-                >
+                <div className="w-full">
                   <AnimatePresence initial={false} mode="wait">
                     <motion.div
                       key={COLOR_STEPS[colorStep].key}
@@ -708,7 +713,7 @@ export default function OnboardingPage() {
                       )}
                     </motion.div>
                   </AnimatePresence>
-                </motion.div>
+                </div>
               </div>
 
               <div
@@ -793,8 +798,8 @@ export default function OnboardingPage() {
                       </p>
                     )}
                   </div>
-                  <ListenGate locked={!hasListened}>
-                    <div className="flex min-w-[220px] flex-[2] flex-col items-start gap-1.5">
+                  <ListenGate locked={!hasListened} className="flex-[2] min-w-[220px]">
+                    <div className="flex flex-col items-start gap-1.5">
                       <input
                         ref={profileInputRef}
                         type="text"
