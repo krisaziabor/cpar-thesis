@@ -26,6 +26,7 @@ import type { MetadataResult, SourceMetadata, SourceType } from "@/lib/metadata/
 import { mirrorPreviewAudio, mirrorThumbnail, mirrorVideo, uploadBase64Thumbnail } from "@/lib/media-upload";
 import type { Item } from "@/lib/types";
 import { EASE_OUT, MOTION_DURATION } from "@/lib/motion";
+import { useNavStatus } from "@/lib/nav-status-context";
 
 type Step = "source" | "details" | "record";
 type Destination = "holding" | "library";
@@ -451,6 +452,7 @@ function AddItemPageInner({
   const searchParams = useSearchParams();
   const shouldReduceMotion = useReducedMotion();
   const urlInputControls = useAnimationControls();
+  const { enqueue: enqueueNavStatus, startProgress: startNavProgress } = useNavStatus();
   const urlDraftId = searchParams.get("draft");
   const isPanelAddMode = searchParams.get("panel") === "add";
 
@@ -472,16 +474,13 @@ function AddItemPageInner({
   const [editingSourceError, setEditingSourceError] = useState("");
   const [draftLoading, setDraftLoading] = useState(!!urlDraftId);
   const [sourceError, setSourceError] = useState("");
-  const [saveError, setSaveError] = useState("");
-  const [saveStage, setSaveStage] = useState("");
-  const [saving, setSaving] = useState(false);
+  
   const [itemTypes, setItemTypes] = useState<string[]>([...DEFAULT_ITEM_TYPES]);
   const [isTypeMenuOpen, setIsTypeMenuOpen] = useState(false);
   const [, setFilePreviewUrl] = useState<string | null>(null);
   const [isDragActive, setIsDragActive] = useState(false);
   const [showClosePrompt, setShowClosePrompt] = useState(false);
-  const [draftPromptSaving, setDraftPromptSaving] = useState(false);
-  const [draftPromptError, setDraftPromptError] = useState("");
+  
   const fileInputRef = useRef<HTMLInputElement>(null);
   const editFileInputRef = useRef<HTMLInputElement>(null);
   const cardsScrollRef = useRef<HTMLDivElement>(null);
@@ -1051,82 +1050,120 @@ function AddItemPageInner({
       itemsToDraft.push(toQueueItem(draft));
     }
 
-    const uniqueTypes = [...new Set(itemsToDraft.map((q) => q.type))];
-    await Promise.all(
-      uniqueTypes.map((t) => ensureItemTypeExists(t, userEmail).catch(() => {}))
-    );
+    const thumbs = itemsToDraft
+      .map((q) => q.thumbnailUrl)
+      .filter((u): u is string => !!u);
+    const plural = itemsToDraft.length !== 1;
+    const { resolve, reject } = startNavProgress({
+      id: `draft-${Date.now()}`,
+      text: plural ? "Saving drafts" : "Saving draft",
+      thumbnails: thumbs.length > 0 ? thumbs : undefined,
+      showProgress: true,
+      durationMs: 2400,
+    });
 
-    let lastDraftId = "";
-    await Promise.all(
-      itemsToDraft.map(async (queuedItem) => {
-        const { draftId } = await upsertDraft(userEmail, null, {
-          title: queuedItem.title || "Untitled record",
-          description: queuedItem.description.trim(),
-          encountered_source: queuedItem.encounteredSource.trim(),
-          media_date: queuedItem.mediaDate.trim() || "Unknown",
-          type: queuedItem.type,
-          creator: queuedItem.creator || "Unknown creator",
-          ...(queuedItem.link ? { link: queuedItem.link } : {}),
-          tags: parseTags(queuedItem.tags),
-          added_by: userEmail,
-          ...(queuedItem.thumbnailUrl && !queuedItem.thumbnailUrl.startsWith("data:")
-            ? { thumbnail_url: queuedItem.thumbnailUrl }
-            : {}),
-          ...(queuedItem.sourceMetadata ? { source_metadata: queuedItem.sourceMetadata } : {}),
-        });
-        lastDraftId = draftId;
+    try {
+      const uniqueTypes = [...new Set(itemsToDraft.map((q) => q.type))];
+      await Promise.all(
+        uniqueTypes.map((t) => ensureItemTypeExists(t, userEmail).catch(() => {}))
+      );
 
-        const mediaUploads: Promise<void>[] = [];
+      let lastDraftId = "";
+      await Promise.all(
+        itemsToDraft.map(async (queuedItem) => {
+          const { draftId } = await upsertDraft(userEmail, null, {
+            title: queuedItem.title || "Untitled record",
+            description: queuedItem.description.trim(),
+            encountered_source: queuedItem.encounteredSource.trim(),
+            media_date: queuedItem.mediaDate.trim() || "Unknown",
+            type: queuedItem.type,
+            creator: queuedItem.creator || "Unknown creator",
+            ...(queuedItem.link ? { link: queuedItem.link } : {}),
+            tags: parseTags(queuedItem.tags),
+            added_by: userEmail,
+            ...(queuedItem.thumbnailUrl && !queuedItem.thumbnailUrl.startsWith("data:")
+              ? { thumbnail_url: queuedItem.thumbnailUrl }
+              : {}),
+            ...(queuedItem.sourceMetadata ? { source_metadata: queuedItem.sourceMetadata } : {}),
+          });
+          lastDraftId = draftId;
 
-        if (queuedItem.thumbnailUrl) {
-          mediaUploads.push(
-            (async () => {
-              let persistedUrl = queuedItem.thumbnailUrl!;
-              if (persistedUrl.startsWith("data:")) {
-                persistedUrl = await uploadBase64Thumbnail(persistedUrl, draftId);
-              } else if (
-                persistedUrl.startsWith("http") &&
-                !persistedUrl.includes("firebasestorage.googleapis.com")
-              ) {
-                persistedUrl = await mirrorThumbnail(persistedUrl, draftId);
-              } else {
-                return;
-              }
-              await updateItem(draftId, { thumbnail_url: persistedUrl });
-            })().catch(() => {})
-          );
-        }
+          const mediaUploads: Promise<void>[] = [];
 
-        if (queuedItem.fileFile) {
-          mediaUploads.push(
-            uploadItemFile(queuedItem.fileFile, draftId)
-              .then((fileUrl) => updateItem(draftId, { media_url: fileUrl }))
-              .catch(() => {})
-          );
-        }
+          if (queuedItem.thumbnailUrl) {
+            mediaUploads.push(
+              (async () => {
+                let persistedUrl = queuedItem.thumbnailUrl!;
+                if (persistedUrl.startsWith("data:")) {
+                  persistedUrl = await uploadBase64Thumbnail(persistedUrl, draftId);
+                } else if (
+                  persistedUrl.startsWith("http") &&
+                  !persistedUrl.includes("firebasestorage.googleapis.com")
+                ) {
+                  persistedUrl = await mirrorThumbnail(persistedUrl, draftId);
+                } else {
+                  return;
+                }
+                await updateItem(draftId, { thumbnail_url: persistedUrl });
+              })().catch(() => {})
+            );
+          }
 
-        await Promise.all(mediaUploads);
-      })
-    );
+          if (queuedItem.fileFile) {
+            mediaUploads.push(
+              uploadItemFile(queuedItem.fileFile, draftId)
+                .then((fileUrl) => updateItem(draftId, { media_url: fileUrl }))
+                .catch(() => {})
+            );
+          }
 
-    if (lastDraftId) setCurrentDraftId(lastDraftId);
+          await Promise.all(mediaUploads);
+        })
+      );
+
+      if (lastDraftId) setCurrentDraftId(lastDraftId);
+      resolve(plural ? "Drafts saved" : "Draft saved");
+    } catch (err) {
+      reject(err instanceof Error ? err.message : "Something went wrong, try again");
+    }
   }
 
   async function handleSubmitBatch() {
     const currentUser = user;
     const userEmail = currentUser?.email;
     if (!userEmail || !currentUser) return;
-    setSaveError("");
-    setSaving(true);
+
+    // Snapshot everything we need before closing the panel
+    const itemsToSave = [...recordingQueue];
+    const recordingsSnapshot = [...recordings];
+    const dest = destination;
+
+    const thumbs = itemsToSave
+      .map((q) => q.thumbnailUrl)
+      .filter((u): u is string => !!u);
+    const label = dest === "holding" ? "Adding to Hold" : "Adding to Kanon";
+    const successLabel = dest === "holding" ? "Added to Hold" : "Added to Kanon";
+
+    // Close panel immediately
+    router.push(dest === "holding" ? `/kanon/${encodeURIComponent(userEmail)}` : "/");
+
+    // Start progress in nav
+    const { resolve, reject } = startNavProgress({
+      id: `save-${Date.now()}`,
+      text: label,
+      thumbnails: thumbs.length > 0 ? thumbs : undefined,
+      showProgress: true,
+      durationMs: 2400,
+    });
+
     try {
-      for (let idx = 0; idx < recordingQueue.length; idx++) {
-        const itemData = recordingQueue[idx];
-        const recording = recordings[idx];
-        if (destination === "library" && !recording?.blob && !recording?.existingUrl) {
+      for (let idx = 0; idx < itemsToSave.length; idx++) {
+        const itemData = itemsToSave[idx];
+        const recording = recordingsSnapshot[idx];
+        if (dest === "library" && !recording?.blob && !recording?.existingUrl) {
           throw new Error(`Recording missing for item ${idx + 1}.`);
         }
 
-        setSaveStage(`Saving ${idx + 1} of ${recordingQueue.length}…`);
         const fields = {
           title: itemData.title,
           description: itemData.description,
@@ -1148,10 +1185,10 @@ function AddItemPageInner({
         try {
           await ensureItemTypeExists(itemData.type, userEmail);
         } catch {
-          // Non-fatal: item type sync should not block save flow.
+          // Non-fatal
         }
 
-        if (destination === "holding") {
+        if (dest === "holding") {
           const existingPublished =
             itemData.link?.trim() ? await findPublishedItemByLink(itemData.link.trim()) : null;
           if (existingPublished) {
@@ -1168,20 +1205,18 @@ function AddItemPageInner({
         }
 
         if (itemData.fileFile) {
-          setSaveStage(`Uploading file for ${idx + 1} of ${recordingQueue.length}…`);
           const fileUrl = await uploadItemFile(itemData.fileFile, itemId);
           await updateItem(itemId, { media_url: fileUrl });
         }
 
         if (itemData.thumbnailUrl) {
-          setSaveStage(`Saving thumbnail for ${idx + 1} of ${recordingQueue.length}…`);
           try {
             const savedThumbnail = itemData.thumbnailUrl.startsWith("data:")
               ? await uploadBase64Thumbnail(itemData.thumbnailUrl, itemId)
               : await mirrorThumbnail(itemData.thumbnailUrl, itemId);
             await updateItem(itemId, { thumbnail_url: savedThumbnail });
           } catch {
-            // Non-fatal.
+            // Non-fatal
           }
         }
 
@@ -1192,7 +1227,7 @@ function AddItemPageInner({
               source_metadata: { ...itemData.sourceMetadata, preview_url: previewUrl },
             });
           } catch {
-            // Non-fatal.
+            // Non-fatal
           }
         }
 
@@ -1208,15 +1243,14 @@ function AddItemPageInner({
             const { downloadUrl } = await mirrorVideo(pageUrl, itemId, token);
             await updateItem(itemId, { media_url: downloadUrl });
           } catch {
-            // Non-fatal.
+            // Non-fatal
           }
         }
       }
 
-      router.push(destination === "holding" ? `/kanon/${encodeURIComponent(userEmail)}` : "/");
+      resolve(successLabel);
     } catch (err) {
-      setSaveError(err instanceof Error ? err.message : "Save failed. Please try again.");
-      setSaving(false);
+      reject(err instanceof Error ? err.message : "Something went wrong, try again");
     }
   }
 
@@ -1284,22 +1318,6 @@ function AddItemPageInner({
     setIsTypeMenuOpen(false);
   }
 
-  if (saving) {
-    return (
-      <div className={hideHeader ? "p-6" : "flex min-h-screen items-center justify-center bg-black"}>
-        <motion.div
-          initial={shouldReduceMotion ? false : { opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: shouldReduceMotion ? 0 : MOTION_DURATION.standard, ease: EASE_OUT }}
-          className="space-y-2"
-        >
-          <p className="text-sm text-zinc-300">Submitting…</p>
-          <p className="text-xs text-zinc-500">{saveStage || "Preparing files and audio…"}</p>
-          {saveError && <p className="pt-2 text-xs text-red-500">{saveError}</p>}
-        </motion.div>
-      </div>
-    );
-  }
 
   return (
     <div className={hideHeader ? "relative" : "relative min-h-screen bg-black"}>
@@ -1345,27 +1363,15 @@ function AddItemPageInner({
                 </button>
                 <button
                   type="button"
-                  disabled={draftPromptSaving}
-                  onClick={async () => {
-                    setDraftPromptError("");
-                    setDraftPromptSaving(true);
-                    try {
-                      await saveSessionAsDrafts();
-                      onRequestPanelClose?.();
-                    } catch (error) {
-                      setDraftPromptError(
-                        error instanceof Error ? error.message : "Could not save draft."
-                      );
-                    } finally {
-                      setDraftPromptSaving(false);
-                    }
+                  onClick={() => {
+                    onRequestPanelClose?.();
+                    void saveSessionAsDrafts();
                   }}
-                  className="font-sans text-xs text-zinc-500 transition-colors duration-150 ease-[ease] hover:text-zinc-300 disabled:opacity-40"
+                  className="font-sans text-xs text-zinc-500 transition-colors duration-150 ease-[ease] hover:text-zinc-300"
                 >
-                  {draftPromptSaving ? "Saving..." : "Save drafts and close"}
+                  Save drafts and close
                 </button>
               </div>
-              {draftPromptError && <p className="mt-3 text-xs text-red-400">{draftPromptError}</p>}
             </motion.div>
           </motion.div>
         )}
@@ -1644,6 +1650,18 @@ function AddItemPageInner({
                                 onClick={async () => {
                                   try {
                                     await saveToKanon(user.email!, "item", duplicatePrompt.libraryItemId!);
+
+                                    const targetItem = queuedItems.find(
+                                      (q) => q.id === duplicatePrompt.targetQueueItemId
+                                    );
+                                    enqueueNavStatus({
+                                      id: `hold-dup-${Date.now()}`,
+                                      text: "Added to Hold",
+                                      thumbnails: targetItem?.thumbnailUrl ? [targetItem.thumbnailUrl] : undefined,
+                                      showProgress: true,
+                                      durationMs: 2400,
+                                    });
+
                                     setQueuedItems((prev) =>
                                       prev.filter((queuedItem) => queuedItem.id !== duplicatePrompt.targetQueueItemId)
                                     );
@@ -2176,7 +2194,6 @@ function AddItemPageInner({
               </div>
             </Field>
 
-            {saveError && <p className="text-xs text-red-500">{saveError}</p>}
             <div className="flex items-center gap-3">
               <button
                 onClick={() => {
@@ -2264,7 +2281,6 @@ function AddItemPageInner({
               prompt="Why does this matter?"
             />
 
-            {saveError && <p className="text-xs text-red-500">{saveError}</p>}
             <div className="flex items-center gap-3">
               {destination === "holding" && (
                 <button

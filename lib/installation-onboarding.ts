@@ -21,10 +21,18 @@ function docRef(email: string) {
   return doc(db, COLLECTION, docId(email));
 }
 
-/** Derive which step the user should see next based on saved progress. */
-export function currentStep(data: InstallationOnboarding | null): OnboardingStep {
-  if (!data) return "media_opt_in";
+/**
+ * Derive which step the user should see next based on saved progress.
+ * `needsProfileSetup` is true for self-registered users who haven't
+ * set up their profile yet — pre-existing whitelist users skip it.
+ */
+export function currentStep(
+  data: InstallationOnboarding | null,
+  needsProfileSetup = false
+): OnboardingStep {
+  if (!data) return needsProfileSetup ? "profile_setup" : "media_opt_in";
   if (data.completed_at) return "complete";
+  if (needsProfileSetup && data.profile_setup_at == null) return "profile_setup";
   if (data.media_opt_in_at == null) return "media_opt_in";
   if (data.book_submitted_at == null) return "book_text";
   if (data.contact_submitted_at == null) return "contact";
@@ -57,6 +65,28 @@ export function subscribeToOnboarding(
     }
     cb({ id: snap.id, ...snap.data() } as InstallationOnboarding);
   });
+}
+
+/** Step 0 — save profile setup (name + optional icon) for self-registered users. */
+export async function submitProfileSetup(
+  email: string,
+  name: string,
+  icon?: string
+): Promise<void> {
+  if (!db) return;
+  await setDoc(
+    docRef(email),
+    {
+      user_email: email,
+      user_name: name,
+      profile_name: name,
+      ...(icon ? { profile_icon: icon } : {}),
+      profile_setup_at: serverTimestamp(),
+      created_at: serverTimestamp(),
+      updated_at: serverTimestamp(),
+    },
+    { merge: true }
+  );
 }
 
 /** Step 1 — save media opt-in decision. */

@@ -23,7 +23,7 @@ export default function UtilityDock() {
     "friend";
   const userInitial = displayName.charAt(0).toUpperCase();
 
-  if (!user || pathname === "/login" || pathname === "/onboarding") return null;
+  if (!user || pathname === "/login" || pathname === "/onboarding" || pathname === "/admin") return null;
 
   const enterDelay = pathname === "/" && !shouldReduceMotion
     ? Math.max(0, timings.bottomStartMs + timings.utilityDelayMs) / 1000

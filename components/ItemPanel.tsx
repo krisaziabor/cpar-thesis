@@ -18,12 +18,14 @@ import {
   subscribeToKanonSaveStatus,
   subscribeToItemHolders,
 } from "@/lib/kanon";
+import { useNavStatus } from "@/lib/nav-status-context";
 import type { Item, Connection, ItemResponse, MusicPlatform } from "@/lib/types";
 import MusicPlayer from "@/components/MusicPlayer";
 import AudioPlayer from "@/components/AudioPlayer";
 import AudioRecorder from "@/components/AudioRecorder";
 import MinimalPdfViewer from "@/components/MinimalPdfViewer";
 import { getUserProfile } from "@/lib/users";
+import { usePanelHistory } from "@/lib/panel-history-context";
 
 function formatDate(ts: unknown): string {
   if (!ts) return "—";
@@ -192,6 +194,8 @@ export default function ItemPanel({ itemId }: { itemId: string }) {
   const { user } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { startProgress: startNavProgress } = useNavStatus();
+  const { navigatePanel } = usePanelHistory();
   const [item, setItem] = useState<Item | null | undefined>(undefined);
   const [allItems, setAllItems] = useState<Item[]>([]);
   const [connections, setConnections] = useState<Array<Connection & { itemIds: string[] }>>([]);
@@ -529,11 +533,29 @@ export default function ItemPanel({ itemId }: { itemId: string }) {
                 onClick={async () => {
                   if (!user?.email) return;
                   setSavingKanon(true);
-                  try {
-                    if (kanonSaveId) await removeFromKanon(kanonSaveId);
-                    else await saveToKanon(user.email, "item", itemId);
-                  } finally {
-                    setSavingKanon(false);
+                  if (kanonSaveId) {
+                    try {
+                      await removeFromKanon(kanonSaveId);
+                    } finally {
+                      setSavingKanon(false);
+                    }
+                  } else {
+                    const thumbs = item?.thumbnail_url ? [item.thumbnail_url] : [];
+                    const { resolve, reject } = startNavProgress({
+                      id: `hold-${Date.now()}`,
+                      text: "Adding to Hold",
+                      thumbnails: thumbs.length > 0 ? thumbs : undefined,
+                      showProgress: true,
+                      durationMs: 2000,
+                    });
+                    try {
+                      await saveToKanon(user.email, "item", itemId);
+                      resolve("Added to Hold");
+                    } catch (err) {
+                      reject(err instanceof Error ? err.message : "Something went wrong, try again");
+                    } finally {
+                      setSavingKanon(false);
+                    }
                   }
                 }}
             className={`flex items-center gap-1.5 rounded-full border bg-zinc-950 px-4 py-1.5 font-lector text-xs transition-colors disabled:opacity-60 ${
@@ -542,7 +564,7 @@ export default function ItemPanel({ itemId }: { itemId: string }) {
                     : "border-zinc-700 text-zinc-300 hover:border-zinc-600 hover:text-zinc-100"
                 }`}
               >
-                <span>{kanonSaveId ? "✓" : "+"}</span>
+                <span>{kanonSaveId ? "×" : "+"}</span>
                 {kanonSaveId ? "In Hold" : "Add to Hold"}
               </button>
             </div>
@@ -611,12 +633,18 @@ export default function ItemPanel({ itemId }: { itemId: string }) {
                         {(activeHoldUserName ?? activeHoldUser)?.trim()} added this record to their Hold.
                       </p>
                       {activeHoldUser && (
-                        <Link
-                          href={`/?panel=holds&holdUser=${encodeURIComponent(activeHoldUser)}`}
+                        <button
+                          type="button"
+                          onClick={() =>
+                            navigatePanel(
+                              `/?panel=holds&holdUser=${encodeURIComponent(activeHoldUser)}`,
+                              item?.title ?? "Record"
+                            )
+                          }
                           className="inline-flex font-lector text-xs text-zinc-200 transition-colors hover:text-white"
                         >
                           View this person&apos;s hold
-                        </Link>
+                        </button>
                       )}
                     </div>
                   ) : (

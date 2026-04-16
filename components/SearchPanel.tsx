@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
 import { subscribeToItems } from "@/lib/items";
+import { usePanelHistory } from "@/lib/panel-history-context";
 import type { Item } from "@/lib/types";
 
 function normalized(value: string): string {
@@ -10,7 +10,7 @@ function normalized(value: string): string {
 }
 
 export default function SearchPanel() {
-  const router = useRouter();
+  const { navigatePanel } = usePanelHistory();
   const inputRef = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState("");
   const [items, setItems] = useState<Item[]>([]);
@@ -76,7 +76,7 @@ export default function SearchPanel() {
             <button
               key={item.id}
               type="button"
-              onClick={() => router.push(`/?item=${item.id}`)}
+              onClick={() => navigatePanel(`/?item=${item.id}`, "Search")}
               className="flex items-center justify-between border-b border-zinc-800 py-2.5 text-left transition-colors hover:bg-zinc-900/40 last:border-0"
             >
               <div className="min-w-0">

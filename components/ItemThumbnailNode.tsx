@@ -1,5 +1,6 @@
 "use client";
 
+import { useRef } from "react";
 import { motion } from "framer-motion";
 import type { Node, NodeProps } from "@xyflow/react";
 import type { Item } from "@/lib/types";
@@ -18,6 +19,10 @@ export type ItemThumbnailNodeType = Node<
 
 export default function ItemThumbnailNode({ data }: NodeProps<ItemThumbnailNodeType>) {
   const { item, isFirst, index, isSelected, isConnectSelecting } = data;
+  const hasAnimatedRef = useRef(false);
+
+  const shouldAnimate = !hasAnimatedRef.current;
+  if (shouldAnimate) hasAnimatedRef.current = true;
 
   const delay    = isFirst ? 0.6 + index * 0.06 : index * 0.03;
   const duration = isFirst ? 0.5 : 0.28;
@@ -29,9 +34,9 @@ export default function ItemThumbnailNode({ data }: NodeProps<ItemThumbnailNodeT
     <motion.div
       className="group cursor-pointer"
       style={{ width: NODE_W }}
-      initial={{ opacity: 0, y: yOffset }}
+      initial={shouldAnimate ? { opacity: 0, y: yOffset } : false}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration, ease: [0.215, 0.61, 0.355, 1], delay }}
+      transition={shouldAnimate ? { duration, ease: [0.215, 0.61, 0.355, 1], delay } : { duration: 0 }}
     >
       {/* Thumbnail — natural aspect ratio, capped at NODE_H so row gaps are preserved */}
       <motion.div
@@ -56,7 +61,7 @@ export default function ItemThumbnailNode({ data }: NodeProps<ItemThumbnailNodeT
             }`}
             style={{ height: NODE_H }}
           >
-            <span className="text-[10px] text-zinc-600 uppercase tracking-widest">
+            <span className="text-[11px] text-zinc-600 uppercase tracking-widest">
               {item.type}
             </span>
           </div>
@@ -65,10 +70,10 @@ export default function ItemThumbnailNode({ data }: NodeProps<ItemThumbnailNodeT
 
       {/* Meta/title — always reserves space below, text fades in on hover */}
       <div className="flex flex-col items-start gap-0.5 pt-2.5 px-0.5">
-        <p className="font-sans text-[10px] text-zinc-500 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+        <p className="font-sans text-[11px] text-zinc-500 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
           {createdAtLabel}
         </p>
-        <p className="font-lector text-[10px] text-zinc-300 leading-tight break-words opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+        <p className="font-lector text-[11px] text-zinc-300 leading-tight break-words opacity-0 group-hover:opacity-100 transition-opacity duration-150">
           {item.title}
         </p>
       </div>

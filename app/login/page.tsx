@@ -11,12 +11,16 @@ import {
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { auth } from "@/lib/firebase";
-import { getWhitelistAccessInfo } from "@/lib/whitelist";
+import {
+  emailHasWhitelistEntry,
+  getWhitelistAccessInfo,
+  REGISTRATION_OPEN,
+} from "@/lib/whitelist";
 import { useAuth } from "@/lib/auth-context";
 
 const googleProvider = new GoogleAuthProvider();
 const EMAIL_STORAGE_KEY = "kanon_signin_email";
-const ACCESS_NOT_GIVEN_MESSAGE = "Access has not been given to this email yet.";
+const REGISTRATION_CLOSED_MESSAGE = "Registration is currently closed.";
 
 type Stage = "gate" | "choice" | "sent" | "verifying";
 
@@ -37,6 +41,7 @@ export default function LoginPage() {
   const [emailInput, setEmailInput] = useState("");
   const [gatedEmail, setGatedEmail] = useState("");
   const [gatedFirstName, setGatedFirstName] = useState<string | null>(null);
+  const [isNewUser, setIsNewUser] = useState(false);
   const [signingIn, setSigningIn] = useState(false);
   const [localError, setLocalError] = useState("");
   const [transientNotice, setTransientNotice] = useState("");
@@ -117,19 +122,29 @@ export default function LoginPage() {
 
     const normalizedEmail = emailInput.trim().toLowerCase();
 
-    // Gate both auth methods behind whitelist check for clear access feedback.
-    const accessInfo = await getWhitelistAccessInfo(normalizedEmail).catch(() => ({
-      role: null,
-      firstName: null,
-    }));
-    if (!accessInfo.role) {
+    const exists = await emailHasWhitelistEntry(normalizedEmail).catch(() => false);
+
+    if (exists) {
+      const accessInfo = await getWhitelistAccessInfo(normalizedEmail).catch(() => ({
+        role: null,
+        firstName: null,
+      }));
+      setGatedEmail(normalizedEmail);
+      setGatedFirstName(accessInfo.firstName);
+      setIsNewUser(false);
+      setStage("choice");
+      return;
+    }
+
+    if (!REGISTRATION_OPEN) {
       setStage("gate");
-      setTransientNotice(ACCESS_NOT_GIVEN_MESSAGE);
+      setTransientNotice(REGISTRATION_CLOSED_MESSAGE);
       return;
     }
 
     setGatedEmail(normalizedEmail);
-    setGatedFirstName(accessInfo.firstName);
+    setGatedFirstName(null);
+    setIsNewUser(true);
     setStage("choice");
   }
 
@@ -238,7 +253,11 @@ export default function LoginPage() {
                   className="flex flex-col font-lector"
                 >
                   <div className="border-b border-zinc-800 px-4 py-2 text-[11px] text-zinc-500 font-sans">
-                    {gatedFirstName ? `Hey ${gatedFirstName}!` : gatedEmail}
+                    {isNewUser
+                      ? "Create your account"
+                      : gatedFirstName
+                        ? `Hey ${gatedFirstName}!`
+                        : gatedEmail}
                   </div>
                   <div className="flex items-stretch divide-x divide-zinc-800">
                     <button
@@ -246,13 +265,13 @@ export default function LoginPage() {
                       className="flex flex-1 items-center justify-center gap-2 px-4 py-2.5 text-xs text-zinc-300 transition-colors hover:bg-zinc-900 hover:text-zinc-50"
                     >
                       <GoogleIcon />
-                      Continue with Google
+                      {isNewUser ? "Sign up with Google" : "Continue with Google"}
                     </button>
                     <button
                       onClick={() => void handleSendMagicLink()}
                       className="px-4 py-2.5 text-xs text-zinc-300 transition-colors hover:bg-zinc-900 hover:text-zinc-50"
                     >
-                      Send magic link
+                      {isNewUser ? "Send sign-up link" : "Send magic link"}
                     </button>
                   </div>
                 </motion.div>
@@ -290,6 +309,7 @@ export default function LoginPage() {
                         setEmailInput("");
                         setGatedEmail("");
                         setGatedFirstName(null);
+                        setIsNewUser(false);
                       }}
                       className="flex-1 px-4 py-2.5 text-left text-xs text-zinc-400 font-lector transition-colors hover:bg-zinc-900 hover:text-zinc-50"
                     >

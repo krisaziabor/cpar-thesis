@@ -1,4 +1,4 @@
-import { doc, getDoc } from "firebase/firestore";
+import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "./firebase";
 
 export type UserRole = "admin" | "member";
@@ -45,3 +45,26 @@ export async function getWhitelistAccessInfo(email: string): Promise<WhitelistAc
     firstName: getFirstNameFromRecord(data),
   };
 }
+
+export async function emailHasWhitelistEntry(email: string): Promise<boolean> {
+  if (!db) return false;
+  const snap = await getDoc(doc(db, "whitelist", email.toLowerCase()));
+  return snap.exists();
+}
+
+export async function createWhitelistEntry(
+  email: string,
+  name?: string
+): Promise<void> {
+  if (!db) throw new Error("Firestore not initialised");
+  const normalised = email.toLowerCase();
+  await setDoc(doc(db, "whitelist", normalised), {
+    role: "member",
+    ...(name ? { name } : {}),
+    created_at: serverTimestamp(),
+    self_registered: true,
+  });
+}
+
+export const REGISTRATION_OPEN =
+  process.env.NEXT_PUBLIC_REGISTRATION_OPEN !== "false";

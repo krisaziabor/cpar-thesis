@@ -134,12 +134,17 @@ export interface Feedback {
  * pre-launch opt-in flow (media consent → book text → contact info).
  * Each step is persisted independently so users can resume mid-flow.
  */
-export type OnboardingStep = "media_opt_in" | "book_text" | "contact" | "complete";
+export type OnboardingStep = "profile_setup" | "media_opt_in" | "book_text" | "contact" | "complete";
 
 export interface InstallationOnboarding {
   id: string;
   user_email: string;
   user_name: string;
+
+  /** Step 0 — profile setup: name and icon for new sign-ups */
+  profile_name?: string;
+  profile_icon?: string;
+  profile_setup_at?: Timestamp;
 
   /** Step 1 — three pillars: consent to include media in installation */
   media_opt_in?: boolean;
