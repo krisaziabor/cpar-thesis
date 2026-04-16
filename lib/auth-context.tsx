@@ -24,6 +24,7 @@ import {
   getOnboarding,
   currentStep,
 } from "./installation-onboarding";
+import { getUserProfile } from "./users";
 import type { OnboardingStep } from "./types";
 
 const ONBOARDING_EXEMPT_PATHS = ["/login", "/onboarding", "/admin", "/colophon"];
@@ -32,6 +33,7 @@ interface AuthContextValue {
   user: User | null;
   role: UserRole | null;
   firstName: string | null;
+  avatarColors: [string, string, string] | null;
   loading: boolean;
   authError: string | null;
   onboardingStep: OnboardingStep;
@@ -45,6 +47,7 @@ const AuthContext = createContext<AuthContextValue>({
   user: null,
   role: null,
   firstName: null,
+  avatarColors: null,
   loading: true,
   authError: null,
   onboardingStep: "profile_setup",
@@ -57,6 +60,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [role, setRole] = useState<UserRole | null>(null);
   const [firstName, setFirstName] = useState<string | null>(null);
+  const [avatarColors, setAvatarColors] = useState<[string, string, string] | null>(null);
   const [loading, setLoading] = useState(true);
   const [authError, setAuthError] = useState<string | null>(null);
   const [onboardingStep, setOnboardingStep] =
@@ -84,6 +88,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(null);
         setRole(null);
         setFirstName(null);
+        setAvatarColors(null);
         setOnboardingStep("profile_setup");
         setLoading(false);
         return;
@@ -108,6 +113,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setUser(null);
           setRole(null);
           setFirstName(null);
+          setAvatarColors(null);
           setOnboardingStep("profile_setup");
           setAuthError("This account is not approved for access.");
         } else {
@@ -120,6 +126,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             await loadOnboarding(firebaseUser.email, selfRegistered);
           } catch {
             setOnboardingStep("complete");
+          }
+          try {
+            const profile = await getUserProfile(firebaseUser.email);
+            setAvatarColors(profile?.avatar_colors ?? null);
+          } catch {
+            setAvatarColors(null);
           }
         }
       } catch {
@@ -162,6 +174,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   async function refreshOnboarding() {
     if (user?.email) {
       await loadOnboarding(user.email, !firstName);
+      try {
+        const profile = await getUserProfile(user.email);
+        if (profile?.avatar_colors) setAvatarColors(profile.avatar_colors);
+      } catch {}
     }
   }
 
@@ -169,6 +185,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (auth) {
       await firebaseSignOut(auth);
       setFirstName(null);
+      setAvatarColors(null);
       setOnboardingStep("profile_setup");
       try {
         sessionStorage.removeItem("kanon-greeted");
@@ -187,6 +204,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         user,
         role,
         firstName,
+        avatarColors,
         loading,
         authError,
         onboardingStep,

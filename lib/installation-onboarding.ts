@@ -30,8 +30,9 @@ export function currentStep(
   data: InstallationOnboarding | null,
   needsProfileSetup = false
 ): OnboardingStep {
-  if (!data) return needsProfileSetup ? "profile_setup" : "media_opt_in";
+  if (!data) return "accessibility";
   if (data.completed_at) return "complete";
+  if (data.accessibility_acknowledged_at == null) return "accessibility";
   if (needsProfileSetup && data.profile_setup_at == null) return "profile_setup";
   if (data.media_opt_in_at == null) return "media_opt_in";
   if (data.book_submitted_at == null) return "book_text";
@@ -68,7 +69,28 @@ export function subscribeToOnboarding(
   });
 }
 
-/** Step 0 — save profile setup (name + optional icon) for self-registered users. */
+/** Step 0 — acknowledge audio-first design (continue with audio or request text mode). */
+export async function submitAccessibility(
+  email: string,
+  name: string,
+  prefersTextMode: boolean
+): Promise<void> {
+  if (!db) return;
+  await setDoc(
+    docRef(email),
+    {
+      user_email: email,
+      user_name: name,
+      prefers_text_mode: prefersTextMode,
+      accessibility_acknowledged_at: serverTimestamp(),
+      created_at: serverTimestamp(),
+      updated_at: serverTimestamp(),
+    },
+    { merge: true }
+  );
+}
+
+/** Step 1 — save profile setup (name + optional icon) for self-registered users. */
 export async function submitProfileSetup(
   email: string,
   name: string,
@@ -123,6 +145,20 @@ async function uploadBookPdf(
   return getDownloadURL(storageRef);
 }
 
+/** Step 2 — skip book text (user can complete it later from their checklist). */
+export async function skipBookText(email: string): Promise<void> {
+  if (!db) return;
+  await setDoc(
+    docRef(email),
+    {
+      book_skipped: true,
+      book_submitted_at: serverTimestamp(),
+      updated_at: serverTimestamp(),
+    },
+    { merge: true }
+  );
+}
+
 /** Step 2 — save book text (and optional formatting PDF). */
 export async function submitBookText(
   email: string,
@@ -175,14 +211,21 @@ export async function submitAvatarColors(
 ): Promise<void> {
   if (!db) return;
 
-  await setDoc(
-    docRef(email),
-    {
-      avatar_colors: colors,
-      avatar_colors_at: serverTimestamp(),
-      completed_at: serverTimestamp(),
-      updated_at: serverTimestamp(),
-    },
-    { merge: true }
-  );
+  await Promise.all([
+    setDoc(
+      docRef(email),
+      {
+        avatar_colors: colors,
+        avatar_colors_at: serverTimestamp(),
+        completed_at: serverTimestamp(),
+        updated_at: serverTimestamp(),
+      },
+      { merge: true }
+    ),
+    setDoc(
+      doc(db, "users", email),
+      { avatar_colors: colors },
+      { merge: true }
+    ),
+  ]);
 }

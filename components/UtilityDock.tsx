@@ -7,9 +7,10 @@ import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { useAuth } from "@/lib/auth-context";
 import { useSequenceReplayNonce, useSequenceTimings } from "@/lib/sequence-dialkit";
 import { EASE_OUT, MOTION_DURATION } from "@/lib/motion";
+import GradientSVG from "@/components/GradientSVG";
 
 export default function UtilityDock() {
-  const { user, role, signOut } = useAuth();
+  const { user, role, avatarColors, signOut } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -23,7 +24,7 @@ export default function UtilityDock() {
     "friend";
   const userInitial = displayName.charAt(0).toUpperCase();
 
-  if (!user || pathname === "/login" || pathname === "/onboarding" || pathname === "/admin") return null;
+  if (!user || pathname === "/login" || pathname === "/onboarding" || pathname === "/onboarding-lab" || pathname === "/admin") return null;
 
   const enterDelay = pathname === "/" && !shouldReduceMotion
     ? Math.max(0, timings.bottomStartMs + timings.utilityDelayMs) / 1000
@@ -103,9 +104,15 @@ export default function UtilityDock() {
         type="button"
         onClick={() => setExpanded((prev) => !prev)}
         aria-label={expanded ? "Collapse utility menu" : "Expand utility menu"}
-        className="grid h-9 w-9 place-items-center rounded-full border border-zinc-800 bg-zinc-950 text-xs text-zinc-300 shadow-[0_4px_24px_rgba(0,0,0,0.5)] transition-colors hover:bg-zinc-900 hover:text-zinc-100"
+        className="grid h-9 w-9 place-items-center overflow-hidden rounded-full border border-zinc-800 bg-zinc-950 text-xs text-zinc-300 shadow-[0_4px_24px_rgba(0,0,0,0.5)] transition-colors hover:bg-zinc-900 hover:text-zinc-100"
       >
-        {expanded ? "×" : userInitial}
+        {expanded ? (
+          "×"
+        ) : avatarColors ? (
+          <GradientSVG colors={avatarColors} seed={user?.email ?? "kanon"} size={36} round blurDeviation={5} />
+        ) : (
+          userInitial
+        )}
       </button>
     </motion.div>
   );

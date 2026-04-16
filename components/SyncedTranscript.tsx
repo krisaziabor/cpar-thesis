@@ -7,6 +7,7 @@ interface SyncedTranscriptProps {
   audioUrl: string;
   words: TimedWord[];
   onFinished?: () => void;
+  onPlayStart?: () => void;
   className?: string;
 }
 
@@ -14,6 +15,7 @@ export default function SyncedTranscript({
   audioUrl,
   words,
   onFinished,
+  onPlayStart,
   className,
 }: SyncedTranscriptProps) {
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -83,13 +85,14 @@ export default function SyncedTranscript({
       void audio.play();
       setPlaying(true);
       setHasPlayed(true);
+      onPlayStart?.();
       rafRef.current = requestAnimationFrame(tick);
     } else {
       audio.pause();
       setPlaying(false);
       cancelAnimationFrame(rafRef.current);
     }
-  }, [tick]);
+  }, [tick, onPlayStart]);
 
   /* ── Restart ────────────────────────────────────────────────────────────── */
 
@@ -109,16 +112,17 @@ export default function SyncedTranscript({
 
     void audio.play();
     setPlaying(true);
+    onPlayStart?.();
     rafRef.current = requestAnimationFrame(tick);
   }, [tick]);
 
   /* ── Render ────────────────────────────────────────────────────────────── */
 
   return (
-    <div className={className}>
+    <div className={`flex h-full flex-col${className ? ` ${className}` : ""}`}>
       <audio ref={audioRef} src={audioUrl} preload="auto" />
 
-      <p className="font-lector text-sm leading-relaxed text-zinc-300">
+      <p className="flex-1 font-lector text-sm leading-relaxed text-zinc-300">
         {words.map((w, i) => (
           <span
             key={`${i}-${w.start}`}

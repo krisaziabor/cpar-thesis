@@ -1,8 +1,10 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { createPortal } from "react-dom";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import SyncedTranscript from "@/components/SyncedTranscript";
+import MarkdownEditor from "@/components/MarkdownEditor";
 import GradientSVG from "@/components/GradientSVG";
 import ColorWheel from "@/components/ColorWheel";
 import type { TimedWord } from "@/lib/types";
@@ -13,10 +15,16 @@ const EASE = [0.215, 0.61, 0.355, 1] as const;
 
 function anim(reduced: boolean | null) {
   return {
-    initial: reduced ? false : ({ opacity: 0, y: 6 } as const),
+    initial: reduced ? false : ({ opacity: 0, y: 8 } as const),
     animate: { opacity: 1, y: 0 } as const,
-    exit: reduced ? ({ opacity: 1 } as const) : ({ opacity: 0, y: -6 } as const),
-    transition: reduced ? { duration: 0 } : { duration: 0.2, ease: EASE },
+    exit: reduced ? ({ opacity: 1 } as const) : ({ opacity: 0, y: -4 } as const),
+    transition: reduced
+      ? { duration: 0 }
+      : {
+          duration: 0.3,
+          ease: EASE,
+          exit: { duration: 0.2, ease: EASE },
+        },
   };
 }
 
@@ -73,13 +81,79 @@ function useStepTranscript(stepKey: string | undefined) {
   return data;
 }
 
+/* ── Listen gate — blocks interaction until audio finishes ───────────────── */
+
+function ListenGate({
+  locked,
+  children,
+}: {
+  locked: boolean;
+  children: React.ReactNode;
+}) {
+  const [showTip, setShowTip] = useState(false);
+  const [tipPos, setTipPos] = useState({ x: 0, y: 0 });
+  const containerRef = useRef<HTMLDivElement>(null);
+  const timer = useRef<NodeJS.Timeout | null>(null);
+  const reduced = useReducedMotion();
+
+  const flash = useCallback(() => {
+    if (containerRef.current) {
+      const r = containerRef.current.getBoundingClientRect();
+      setTipPos({ x: r.left + r.width / 2, y: r.top + r.height / 2 });
+    }
+    setShowTip(true);
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => setShowTip(false), 2000);
+  }, []);
+
+  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
+
+  if (!locked) return <>{children}</>;
+
+  return (
+    <div ref={containerRef} className="relative h-full self-stretch">
+      <div className="pointer-events-none opacity-30 h-full">{children}</div>
+      <button
+        type="button"
+        onClick={flash}
+        className="absolute inset-0 z-10 cursor-default"
+        aria-label="Listen to the full recording first"
+      />
+      {typeof document !== "undefined" && createPortal(
+        <AnimatePresence>
+          {showTip && (
+            <motion.div
+              key="listen-tip"
+              initial={reduced ? false : { opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              transition={
+                reduced
+                  ? { duration: 0 }
+                  : {
+                      enter: { duration: 0.15, ease: [0.215, 0.61, 0.355, 1] as const },
+                      exit:  { duration: 0.1,  ease: [0.215, 0.61, 0.355, 1] as const },
+                    }
+              }
+              style={{ left: tipPos.x, top: tipPos.y }}
+              className="pointer-events-none fixed z-[9999] -translate-x-1/2 -translate-y-1/2 whitespace-nowrap rounded bg-zinc-800 px-3 py-1.5 font-sans text-xs text-zinc-300 shadow-lg"
+            >
+              Listen to the full recording first
+            </motion.div>
+          )}
+        </AnimatePresence>,
+        document.body
+      )}
+    </div>
+  );
+}
+
 /* ── Step definitions ────────────────────────────────────────────────────── */
 
-type FormStep = "profile_setup" | "media_opt_in" | "book_text" | "contact";
-type LabStep = FormStep | "avatar_colors" | "complete";
+type LabStep = "accessibility" | "profile_setup" | "media_opt_in" | "book_text" | "contact" | "avatar_colors" | "complete";
 
-const FORM_STEPS: { key: FormStep; label: string; fallbackText: string }[] = [
-  { key: "profile_setup", label: "Profile Setup",  fallbackText: "Welcome to Kanon. Enter your name to get started." },
+const FORM_STEPS: { key: LabStep; label: string; fallbackText: string }[] = [
+  { key: "profile_setup", label: "Profile Setup",  fallbackText: "Hi. Welcome to Kanon. I\u2019m super excited that you\u2019re here. To start things off, please enter your name." },
   { key: "media_opt_in",  label: "Media Opt-in",   fallbackText: "Your voice recordings and media can be projected across the installation\u2019s three panels during the exhibition. This is entirely optional \u2014 your contributions to the library remain regardless." },
   { key: "book_text",     label: "Book Text",      fallbackText: "The installation includes a physical book \u2014 a collection of texts that resonate deeply with each contributor. Write or paste a piece of text you\u2019d like included." },
   { key: "contact",       label: "Contact",        fallbackText: "Kris may reach out about the installation and will email you when Kanon goes live. How would you prefer to be contacted?" },
@@ -95,17 +169,13 @@ const COLOR_STEPS = [
 
 const AMBIENT = {
   svgSize: 80, blurInternal: 12, blurCSS: 120, saturation: 1.4, opacity: 0.8,
-  driftDuration: 30, growDuration: 14, growEase: [0.05, 0.5, 0.12, 1],
+  driftDuration: 30, growDuration: 14, growEase: [0.05, 0.5, 0.12, 1] as const,
   startHeight: 3, endHeight: 120, startWidth: 75, endWidth: 100, fadeInDuration: 4,
 };
 
-const REVEAL = {
-  textFade: { duration: 0.4 },
-};
-
-const CARD = { yOffset: 6, spring: { duration: 0.2, ease: [0.215, 0.61, 0.355, 1] } };
-
-const TIMING = { pickAdvance: 400, avatarAppear: 600, textAppear: 1200, ambientRise: 2000 };
+const REVEAL = { textFade: { duration: 0.4 } };
+const CARD = { yOffset: 6, spring: { duration: 0.2, ease: [0.215, 0.61, 0.355, 1] as const } };
+const TIMING = { pickAdvance: 400 };
 
 const driftKeyframes = `
 @keyframes ambientDrift {
@@ -117,15 +187,26 @@ const driftKeyframes = `
 }
 `;
 
+const ALL_STEPS: LabStep[] = ["accessibility", "profile_setup", "media_opt_in", "book_text", "contact", "avatar_colors", "complete"];
+
 /* ── Page ─────────────────────────────────────────────────────────────────── */
 
 export default function OnboardingLabPage() {
   const shouldReduceMotion = useReducedMotion();
 
-  /* ── Step navigation (no auth — purely local) ──────────────────────────── */
-  const [step, setStep] = useState<LabStep>("profile_setup");
+  const [step, setStep] = useState<LabStep>("accessibility");
   const formStepIndex = FORM_STEPS.findIndex((s) => s.key === step);
   const isFormStep = formStepIndex >= 0;
+
+  /* ── Per-step form state ───────────────────────────────────────────────── */
+  const profileInputRef = useRef<HTMLInputElement>(null);
+  const [profileName, setProfileName] = useState("");
+  const [bookTitle, setBookTitle] = useState("");
+  const [bookDate, setBookDate] = useState("");
+  const [bookText, setBookText] = useState("");
+  const [pdfFile, setPdfFile] = useState<File | null>(null);
+  const [contactMethod, setContactMethod] = useState<"email" | "text">("email");
+  const [phoneNumber, setPhoneNumber] = useState("");
 
   /* ── Color picking state ───────────────────────────────────────────────── */
   const [colorStep, setColorStep] = useState(0);
@@ -158,6 +239,12 @@ export default function OnboardingLabPage() {
     }
   }, [currentTranscriptKey]);
 
+  useEffect(() => {
+    if (hasListened && step === "profile_setup") {
+      profileInputRef.current?.focus();
+    }
+  }, [hasListened, step]);
+
   /* ── Navigation ────────────────────────────────────────────────────────── */
   const advanceFormStep = useCallback(() => {
     const idx = FORM_STEPS.findIndex((s) => s.key === step);
@@ -165,6 +252,20 @@ export default function OnboardingLabPage() {
       setStep(FORM_STEPS[idx + 1].key);
     } else {
       setStep("avatar_colors");
+    }
+  }, [step]);
+
+  const skipToNext = useCallback(() => {
+    const currentIdx = ALL_STEPS.indexOf(step);
+    if (currentIdx < ALL_STEPS.length - 1) {
+      const nextStep = ALL_STEPS[currentIdx + 1];
+      setStep(nextStep);
+      if (nextStep === "avatar_colors") {
+        setColorStep(0);
+        setPicked([null, null, null]);
+        setRevealStage(0);
+        setRevealListened(false);
+      }
     }
   }, [step]);
 
@@ -182,33 +283,40 @@ export default function OnboardingLabPage() {
 
   const handleReset = useCallback(() => {
     revealTimers.current.forEach(clearTimeout);
-    setStep("profile_setup");
+    setStep("accessibility");
     setColorStep(0);
     setRevealStage(0);
     setPicked([null, null, null]);
     setListenedSteps(new Set());
+    setRevealListened(false);
   }, []);
 
-  /* Trigger reveal stages */
-  useEffect(() => {
-    if (step !== "avatar_colors" || colorStep !== 3) return;
+  const handleRevealPlayStart = useCallback(() => {
+    if (revealStage >= 3) return;
     revealTimers.current.forEach(clearTimeout);
-    const t: NodeJS.Timeout[] = [];
-    if (shouldReduceMotion) {
-      setRevealStage(3);
+    const delay = shouldReduceMotion ? 0 : 600;
+    const t = setTimeout(() => setRevealStage(3), delay);
+    revealTimers.current = [t];
+  }, [revealStage, shouldReduceMotion]);
+
+  useEffect(() => {
+    revealTimers.current.forEach(clearTimeout);
+    if (step === "avatar_colors" && colorStep === 3) {
+      setRevealStage(2);
+      setRevealListened(false);
     } else {
-      t.push(setTimeout(() => setRevealStage(1), TIMING.avatarAppear));
-      t.push(setTimeout(() => setRevealStage(2), TIMING.textAppear));
-      t.push(setTimeout(() => setRevealStage(3), TIMING.ambientRise));
+      setRevealStage(0);
     }
-    revealTimers.current = t;
-    return () => t.forEach(clearTimeout);
-  }, [step, colorStep, shouldReduceMotion]);
+    return () => revealTimers.current.forEach(clearTimeout);
+  }, [step, colorStep]);
 
   /* ── Derived state ─────────────────────────────────────────────────────── */
   const isColorPromptStep = step === "avatar_colors" && colorStep < 3;
   const isColorReveal = step === "avatar_colors" && colorStep === 3;
   const m = anim(shouldReduceMotion);
+
+  const stepIdx = ALL_STEPS.indexOf(step);
+  const stepLabel = step === "accessibility" ? "Accessibility" : step === "avatar_colors" ? "Colors" : step === "complete" ? "Complete" : FORM_STEPS[formStepIndex]?.label ?? step;
 
   const colorStepAnim = {
     initial: shouldReduceMotion ? false : ({ opacity: 0, y: CARD.yOffset } as const),
@@ -276,67 +384,77 @@ export default function OnboardingLabPage() {
         )}
       </AnimatePresence>
 
-      {/* ── Header ──────────────────────────────────────────────────────────── */}
-      <div className="fixed left-6 top-6 z-20 flex flex-col gap-3">
+      {/* ── Header — centered ──────────────────────────────────────────────── */}
+      <div className="fixed left-0 right-0 top-6 z-20 flex flex-col items-center">
         <h1 className="font-lector text-2xl tracking-tight text-white/90">Kanon</h1>
+      </div>
 
-        {!isColorReveal && !isColorPromptStep && (
-          <p className="text-xs text-zinc-500">
-            Lab preview &middot; Step {formStepIndex + 1}/{FORM_STEPS.length + 1}
-          </p>
-        )}
-
-        {/* ── Avatar reveal — transcript + enter button, no icon ─────────── */}
-        <AnimatePresence>
-          {isColorReveal && (
-            <motion.div
-              key="reveal-content"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 0.3 }}
-              className="flex flex-col gap-3"
-            >
+      {/* ── Avatar reveal — centered transcript + enter button ────────── */}
+      <AnimatePresence>
+        {isColorReveal && (
+          <motion.div
+            key="reveal-content"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.3 }}
+            className="fixed inset-0 z-20 flex items-center justify-center px-6"
+          >
+            <div className="w-[min(560px,calc(100vw-3rem))]">
               <motion.div
                 initial={shouldReduceMotion ? false : { opacity: 0 }}
-                animate={{ opacity: revealStage >= 2 ? 1 : 0 }}
+                animate={{ opacity: 1 }}
                 transition={shouldReduceMotion ? { duration: 0 } : REVEAL.textFade}
               >
                 {revealTranscript ? (
                   <SyncedTranscript
                     audioUrl={revealTranscript.audio_url}
                     words={revealTranscript.words}
+                    onPlayStart={handleRevealPlayStart}
                     onFinished={() => setRevealListened(true)}
-                    className="max-w-[280px]"
                   />
                 ) : (
-                  <p className="font-sans text-xs text-zinc-400">This is yours.</p>
+                  <p className="font-sans text-xs text-white/50">This is yours.</p>
                 )}
               </motion.div>
 
-              {revealListened && (
-                <div>
-                  <button
-                    onClick={() => setStep("complete")}
-                    className="font-lector text-xs text-zinc-300 transition-colors hover:text-zinc-50"
+              <AnimatePresence>
+                {revealListened && (
+                  <motion.div
+                    initial={shouldReduceMotion ? false : { opacity: 0, y: 4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={shouldReduceMotion ? { duration: 0 } : { duration: 0.4, ease: EASE }}
+                    className="mt-4"
                   >
-                    Enter Kanon
-                  </button>
-                </div>
-              )}
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
+                    <button
+                      onClick={() => setStep("complete")}
+                      className="font-sans text-xs text-white/70 transition-opacity hover:text-white/90"
+                    >
+                      Enter Kanon
+                    </button>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-      {/* ── Start over ──────────────────────────────────────────────────────── */}
-      <button
-        onClick={handleReset}
-        className="fixed right-6 top-6 z-20 font-sans text-xs text-zinc-600 transition-colors hover:text-zinc-300"
-      >
-        Start over
-      </button>
+      {/* ── Top-right: step index + sign out ────────────────────────────────── */}
+      {step !== "complete" && !isColorReveal && (
+        <div className="fixed right-6 top-6 z-20 flex items-center gap-4">
+          <span className="font-sans text-xs text-zinc-500">
+            {stepIdx + 1} of {ALL_STEPS.length}
+          </span>
+          <button
+            onClick={handleReset}
+            className="font-sans text-xs text-zinc-600 transition-colors hover:text-zinc-300"
+          >
+            Sign out
+          </button>
+        </div>
+      )}
 
-      {/* ── Color prompt flow ────────────────────────────────────────────── */}
+      {/* ── Color prompt flow — side-by-side ─────────────────────────────── */}
       <AnimatePresence mode="wait">
         {isColorPromptStep && (
           <motion.div
@@ -349,149 +467,315 @@ export default function OnboardingLabPage() {
                 : { opacity: 0, y: -30, transition: { duration: 0.25, ease: EASE } }
             }
             transition={{ duration: 0.2 }}
-            className="fixed inset-0 z-10 flex flex-col items-center justify-center gap-8"
+            className="fixed inset-0 z-10 flex items-center justify-center"
           >
-            {/* Progress dots */}
-            <div className="flex gap-2">
-              {[0, 1, 2].map((i) => {
-                const canGoBack = i < colorStep;
-                return (
-                  <motion.button
-                    key={i}
-                    onClick={() => handleColorDotClick(i)}
-                    disabled={!canGoBack}
-                    className="h-1.5 rounded-full"
-                    style={{ cursor: canGoBack ? "pointer" : "default" }}
-                    animate={{
-                      width: colorStep > i ? 24 : 6,
-                      backgroundColor:
-                        picked[i] ?? (colorStep === i ? "rgba(255,255,255,0.4)" : "rgba(255,255,255,0.1)"),
-                    }}
-                    whileHover={canGoBack && !shouldReduceMotion ? { opacity: 0.7 } : {}}
-                    transition={shouldReduceMotion ? { duration: 0 } : { duration: 0.3, ease: EASE }}
-                  />
-                );
-              })}
-            </div>
-
-            {/* Prompt card */}
-            <div className="w-[min(440px,calc(100vw-3rem))]">
-              <motion.div
-                layout
-                transition={shouldReduceMotion ? { duration: 0 } : CARD.spring}
-                className="overflow-hidden rounded-lg border border-zinc-800 bg-zinc-950 shadow-[0_4px_24px_rgba(0,0,0,0.5)]"
-              >
-                <AnimatePresence initial={false} mode="wait">
-                  <motion.div
-                    key={COLOR_STEPS[colorStep].key}
-                    {...colorStepAnim}
-                    className="px-5 py-4"
-                  >
-                    {transcript ? (
-                      <SyncedTranscript
-                        audioUrl={transcript.audio_url}
-                        words={transcript.words}
-                        onFinished={markListened}
+            <div className="flex w-[min(860px,calc(100vw-3rem))] items-center gap-20">
+              <div className="flex flex-1 flex-col items-start gap-6">
+                <div className="flex gap-2">
+                  {[0, 1, 2].map((i) => {
+                    const canGoBack = i < colorStep;
+                    return (
+                      <motion.button
+                        key={i}
+                        onClick={() => handleColorDotClick(i)}
+                        disabled={!canGoBack}
+                        className="h-1.5 rounded-full"
+                        style={{ cursor: canGoBack ? "pointer" : "default" }}
+                        animate={{
+                          width: colorStep > i ? 24 : 6,
+                          backgroundColor:
+                            picked[i] ?? (colorStep === i ? "rgba(255,255,255,0.4)" : "rgba(255,255,255,0.1)"),
+                        }}
+                        whileHover={canGoBack && !shouldReduceMotion ? { opacity: 0.7 } : {}}
+                        transition={shouldReduceMotion ? { duration: 0 } : { duration: 0.3, ease: EASE }}
                       />
-                    ) : (
-                      <p className="font-sans text-sm leading-relaxed text-zinc-400">
-                        {COLOR_STEPS[colorStep].prompt}
-                      </p>
-                    )}
-                  </motion.div>
-                </AnimatePresence>
-              </motion.div>
-            </div>
+                    );
+                  })}
+                </div>
 
-            {/* Color wheel */}
-            <div style={{
-              opacity: hasListened ? 1 : 0.3,
-              pointerEvents: hasListened ? "auto" : "none",
-              transition: "opacity 0.3s",
-            }}>
-              <ColorWheel
-                picked={picked}
-                currentStep={colorStep}
-                onPick={handleColorPick}
-                shouldReduceMotion={shouldReduceMotion}
-              />
+                <motion.div
+                  layout
+                  transition={shouldReduceMotion ? { duration: 0 } : CARD.spring}
+                  className="w-full"
+                >
+                  <AnimatePresence initial={false} mode="wait">
+                    <motion.div
+                      key={COLOR_STEPS[colorStep].key}
+                      {...colorStepAnim}
+                    >
+                      {transcript ? (
+                        <SyncedTranscript
+                          audioUrl={transcript.audio_url}
+                          words={transcript.words}
+                          onFinished={markListened}
+                        />
+                      ) : (
+                        <p className="font-sans text-sm leading-relaxed text-zinc-400">
+                          {COLOR_STEPS[colorStep].prompt}
+                        </p>
+                      )}
+                    </motion.div>
+                  </AnimatePresence>
+                </motion.div>
+              </div>
+
+              <div
+                className="shrink-0"
+                style={{
+                  opacity: hasListened ? 1 : 0.3,
+                  pointerEvents: hasListened ? "auto" : "none",
+                  transition: "opacity 0.3s",
+                }}
+              >
+                <ColorWheel
+                  picked={picked}
+                  currentStep={colorStep}
+                  onPick={handleColorPick}
+                  shouldReduceMotion={shouldReduceMotion}
+                />
+              </div>
             </div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* ── Form steps (profile, media, book, contact) ───────────────────── */}
-      <AnimatePresence>
-        {isFormStep && (
-          <div className="fixed bottom-6 left-6 z-20 flex w-[min(560px,calc(100vw-3rem))] flex-col gap-2">
-            <motion.div
-              layout
-              transition={shouldReduceMotion ? { duration: 0 } : { duration: 0.25, ease: EASE }}
-              className="overflow-hidden rounded-lg border border-zinc-800 bg-zinc-950 shadow-[0_4px_24px_rgba(0,0,0,0.5)]"
-            >
-              <AnimatePresence initial={false} mode="wait">
-                <motion.div key={step} {...m} className="flex flex-col">
-                  <div className="border-b border-zinc-800 px-4 py-3">
+      {/* ── Form steps — no card chrome ───────────────────────────────────── */}
+      <AnimatePresence mode="wait">
+        {(step === "accessibility" || isFormStep) && (
+          <div className="fixed inset-0 z-10 flex items-center justify-center px-6">
+            <AnimatePresence initial={false} mode="wait">
+              {/* ── Accessibility ────────────────────────────────────────── */}
+              {step === "accessibility" && (
+                <motion.div
+                  key="accessibility"
+                  {...m}
+                  className="w-[min(480px,calc(100vw-3rem))]"
+                >
+                  <p className="font-lector text-sm leading-relaxed text-zinc-300">
+                    Kanon uses audio recording and listening as the primary ways to
+                    share and experience content. Most interactions involve speaking
+                    and hearing rather than reading and typing.
+                  </p>
+                  <p className="mt-3 font-sans text-xs leading-relaxed text-zinc-500">
+                    If you need accessibility features such as text input and
+                    screen-reader-friendly content, you can enable text mode below.
+                    You can always change this later in settings.
+                  </p>
+
+                  <div className="mt-5 flex items-center gap-4">
+                    <button
+                      onClick={() => setStep("profile_setup")}
+                      className="font-sans text-xs text-zinc-300 transition-colors hover:text-zinc-50"
+                    >
+                      Continue with audio
+                    </button>
+                    <button
+                      onClick={() => setStep("profile_setup")}
+                      className="font-sans text-xs text-zinc-500 transition-colors hover:text-zinc-300"
+                    >
+                      Enable text mode
+                    </button>
+                  </div>
+                </motion.div>
+              )}
+
+              {/* ── Profile setup — side-by-side ────────────────────────── */}
+              {step === "profile_setup" && (
+                <motion.div key="profile_setup" {...m} className="flex w-[min(680px,calc(100vw-3rem))] items-end gap-14">
+                  <div className="flex-[3]">
                     {transcript ? (
-                      <SyncedTranscript
-                        audioUrl={transcript.audio_url}
-                        words={transcript.words}
-                        onFinished={markListened}
-                      />
+                      <SyncedTranscript audioUrl={transcript.audio_url} words={transcript.words} onFinished={markListened} />
                     ) : (
                       <p className="font-sans text-xs leading-relaxed text-zinc-400">
-                        {FORM_STEPS[formStepIndex].fallbackText}
+                        {FORM_STEPS[0].fallbackText}
                       </p>
                     )}
                   </div>
-
-                  {/* Placeholder form content per step */}
-                  {step === "profile_setup" && (
-                    <div className="border-b border-zinc-800">
-                      <div className="px-4 py-2.5 font-lector text-xs text-zinc-500">
-                        [Name input]
-                      </div>
+                  <ListenGate locked={!hasListened}>
+                    <div className="flex flex-[2] flex-col items-start gap-1.5 min-w-[220px]">
+                      <input
+                        ref={profileInputRef}
+                        type="text"
+                        value={profileName}
+                        onChange={(e) => setProfileName(e.target.value)}
+                        placeholder="First and last name"
+                        tabIndex={hasListened ? 0 : -1}
+                        className="w-full bg-transparent font-sans text-xs text-zinc-300 placeholder:text-zinc-500 focus:outline-none border-b border-zinc-800 pb-2"
+                        onKeyDown={(e) => { if (e.key === "Enter" && profileName.trim()) advanceFormStep(); }}
+                      />
+                      <button
+                        disabled={!profileName.trim()}
+                        onClick={advanceFormStep}
+                        className="font-sans text-xs text-zinc-300 transition-colors hover:text-zinc-50 disabled:cursor-not-allowed disabled:opacity-30 pt-1"
+                      >
+                        Continue
+                      </button>
                     </div>
-                  )}
-
-                  {step === "media_opt_in" && (
-                    <div className="flex items-stretch divide-x divide-zinc-800 border-b border-zinc-800">
-                      <div className="flex-1 px-4 py-2.5 font-lector text-xs text-zinc-500">
-                        Include my contributions
-                      </div>
-                      <div className="px-4 py-2.5 font-lector text-xs text-zinc-600">
-                        Not this time
-                      </div>
-                    </div>
-                  )}
-
-                  {step === "book_text" && (
-                    <div className="border-b border-zinc-800 px-4 py-2.5 font-lector text-xs text-zinc-500">
-                      [Text editor]
-                    </div>
-                  )}
-
-                  {step === "contact" && (
-                    <div className="flex items-stretch divide-x divide-zinc-800 border-b border-zinc-800">
-                      <div className="flex-1 px-4 py-2.5 font-lector text-xs text-zinc-500">
-                        Email
-                      </div>
-                      <div className="flex-1 px-4 py-2.5 font-lector text-xs text-zinc-600">
-                        Text
-                      </div>
-                    </div>
-                  )}
-
-                  <button
-                    disabled={!hasListened}
-                    onClick={advanceFormStep}
-                    className="w-full px-4 py-2.5 font-lector text-xs text-zinc-300 transition-colors hover:bg-zinc-900 hover:text-zinc-50 disabled:cursor-not-allowed disabled:opacity-30"
-                  >
-                    Continue
-                  </button>
+                  </ListenGate>
                 </motion.div>
-              </AnimatePresence>
-            </motion.div>
+              )}
+
+              {/* ── Media opt-in — vertical ─────────────────────────────── */}
+              {step === "media_opt_in" && (
+                <motion.div key="media_opt_in" {...m} className="w-[min(520px,calc(100vw-3rem))]">
+                  {transcript ? (
+                    <SyncedTranscript audioUrl={transcript.audio_url} words={transcript.words} onFinished={markListened} />
+                  ) : (
+                    <p className="font-sans text-xs leading-relaxed text-zinc-400">
+                      {FORM_STEPS[1].fallbackText}
+                    </p>
+                  )}
+                  <ListenGate locked={!hasListened}>
+                    <div className="mt-5 flex items-center gap-4">
+                      <button
+                        onClick={advanceFormStep}
+                        className="font-sans text-xs text-zinc-300 transition-colors hover:text-zinc-50"
+                      >
+                        Include my contributions
+                      </button>
+                      <button
+                        onClick={advanceFormStep}
+                        className="font-sans text-xs text-zinc-500 transition-colors hover:text-zinc-300"
+                      >
+                        No thanks
+                      </button>
+                    </div>
+                  </ListenGate>
+                </motion.div>
+              )}
+
+              {/* ── Book text — side-by-side with large editor ──────────── */}
+              {step === "book_text" && (
+                <motion.div key="book_text" {...m} className="flex max-w-[calc(100vw-3rem)] items-start gap-20">
+                  <div className="w-[340px] shrink-0 pt-1">
+                    {transcript ? (
+                      <SyncedTranscript audioUrl={transcript.audio_url} words={transcript.words} onFinished={markListened} />
+                    ) : (
+                      <p className="font-sans text-xs leading-relaxed text-zinc-400">
+                        {FORM_STEPS[2].fallbackText}
+                      </p>
+                    )}
+                  </div>
+                  <ListenGate locked={!hasListened}>
+                    <div className="flex w-[min(520px,calc(100vw-28rem))] flex-col gap-3">
+                      <div className="flex items-center gap-3">
+                        <input
+                          type="text"
+                          value={bookTitle}
+                          onChange={(e) => setBookTitle(e.target.value)}
+                          placeholder="Title of the piece"
+                          className="min-w-0 flex-1 bg-transparent font-sans text-xs text-zinc-300 placeholder:text-zinc-500 focus:outline-none border-b border-zinc-800 pb-1.5"
+                        />
+                        <input
+                          type="text"
+                          value={bookDate}
+                          onChange={(e) => setBookDate(e.target.value)}
+                          placeholder="Date (optional)"
+                          className="w-[130px] bg-transparent font-sans text-xs text-zinc-300 placeholder:text-zinc-500 focus:outline-none border-b border-zinc-800 pb-1.5"
+                        />
+                      </div>
+
+                      <MarkdownEditor
+                        value={bookText}
+                        onChange={setBookText}
+                        placeholder="Paste or write your text here"
+                      />
+
+                      <div className="flex items-center justify-between">
+                        <label className="cursor-pointer font-sans text-[11px] text-zinc-500 transition-colors hover:text-zinc-300">
+                          <input
+                            type="file"
+                            accept=".pdf"
+                            className="hidden"
+                            onChange={(e) => setPdfFile(e.target.files?.[0] ?? null)}
+                          />
+                          {pdfFile ? pdfFile.name : "Attach a formatted PDF (optional)"}
+                        </label>
+                        {pdfFile && (
+                          <button onClick={() => setPdfFile(null)} className="text-[11px] text-zinc-600 transition-colors hover:text-zinc-400">
+                            ✕
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-4">
+                        <button
+                          disabled={!bookTitle.trim() || !bookText.trim()}
+                          onClick={advanceFormStep}
+                          className="font-sans text-xs text-zinc-300 transition-colors hover:text-zinc-50 disabled:cursor-not-allowed disabled:opacity-30"
+                        >
+                          Submit text
+                        </button>
+                        <button
+                          onClick={advanceFormStep}
+                          className="font-sans text-xs text-zinc-500 transition-colors hover:text-zinc-300"
+                        >
+                          Skip for now
+                        </button>
+                      </div>
+                    </div>
+                  </ListenGate>
+                </motion.div>
+              )}
+
+              {/* ── Contact — vertical ──────────────────────────────────── */}
+              {step === "contact" && (
+                <motion.div key="contact" {...m} className="w-[min(520px,calc(100vw-3rem))]">
+                  {transcript ? (
+                    <SyncedTranscript audioUrl={transcript.audio_url} words={transcript.words} onFinished={markListened} />
+                  ) : (
+                    <p className="font-sans text-xs leading-relaxed text-zinc-400">
+                      {FORM_STEPS[3].fallbackText}
+                    </p>
+                  )}
+                  <ListenGate locked={!hasListened}>
+                    <div className="mt-5 flex flex-col gap-3">
+                      <div className="flex items-center gap-4">
+                        <button
+                          onClick={() => setContactMethod("email")}
+                          className={`font-sans text-xs transition-colors ${
+                            contactMethod === "email"
+                              ? "text-zinc-200"
+                              : "text-zinc-500 hover:text-zinc-300"
+                          }`}
+                        >
+                          Email
+                        </button>
+                        <button
+                          onClick={() => setContactMethod("text")}
+                          className={`font-sans text-xs transition-colors ${
+                            contactMethod === "text"
+                              ? "text-zinc-200"
+                              : "text-zinc-500 hover:text-zinc-300"
+                          }`}
+                        >
+                          Text
+                        </button>
+                      </div>
+
+                      {contactMethod === "text" && (
+                        <input
+                          type="tel"
+                          value={phoneNumber}
+                          onChange={(e) => setPhoneNumber(e.target.value)}
+                          placeholder="Phone number"
+                          className="w-full bg-transparent font-sans text-xs text-zinc-300 placeholder:text-zinc-500 focus:outline-none border-b border-zinc-800 pb-1.5"
+                          onKeyDown={(e) => { if (e.key === "Enter") advanceFormStep(); }}
+                        />
+                      )}
+
+                      <button
+                        disabled={contactMethod === "text" && !phoneNumber.trim()}
+                        onClick={advanceFormStep}
+                        className="self-start font-sans text-xs text-zinc-300 transition-colors hover:text-zinc-50 disabled:cursor-not-allowed disabled:opacity-30"
+                      >
+                        Continue
+                      </button>
+                    </div>
+                  </ListenGate>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
         )}
       </AnimatePresence>
@@ -499,11 +783,11 @@ export default function OnboardingLabPage() {
       {/* ── Complete ─────────────────────────────────────────────────────── */}
       <AnimatePresence>
         {step === "complete" && (
-          <div className="fixed bottom-6 left-6 z-20">
-            <motion.div {...m} className="flex gap-3">
+          <div className="fixed inset-0 z-10 flex items-center justify-center">
+            <motion.div {...m}>
               <button
                 onClick={handleReset}
-                className="rounded-lg border border-zinc-800 bg-zinc-950 px-4 py-2.5 font-lector text-xs text-zinc-300 shadow-[0_4px_24px_rgba(0,0,0,0.5)] transition-colors hover:bg-zinc-900 hover:text-zinc-50"
+                className="font-sans text-xs text-zinc-300 transition-colors hover:text-zinc-50"
               >
                 Restart from beginning
               </button>
