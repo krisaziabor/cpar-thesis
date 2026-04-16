@@ -150,10 +150,7 @@ function ListenGate({
                 transition={
                   reduced
                     ? { duration: 0 }
-                    : {
-                        enter: { duration: 0.15, ease: EASE },
-                        exit: { duration: 0.1, ease: EASE },
-                      }
+                    : { duration: 0.15, ease: EASE }
                 }
                 style={{ left: tipPos.x, top: tipPos.y }}
                 className="pointer-events-none fixed z-[9999] -translate-x-1/2 -translate-y-1/2 whitespace-nowrap rounded bg-zinc-800 px-3 py-1.5 font-sans text-xs text-zinc-300 shadow-lg"
