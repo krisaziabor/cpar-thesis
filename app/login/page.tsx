@@ -240,7 +240,7 @@ export default function LoginPage() {
                     ? "Create your account"
                     : gatedFirstName
                       ? `Hey ${gatedFirstName}!`
-                      : gatedEmail}
+                      : "Welcome back! Glad you are here :)"}
                 </p>
                 <button
                   onClick={() => void handleGoogleSignIn(gatedEmail)}
