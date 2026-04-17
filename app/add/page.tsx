@@ -1550,12 +1550,19 @@ function AddItemPageInner({
                       }
                       className="relative overflow-hidden rounded-md border border-zinc-800 bg-zinc-950 p-3"
                     >
-                      <motion.div
+                      <div
                         aria-hidden
-                        className="pointer-events-none absolute inset-0 z-10 bg-[linear-gradient(110deg,transparent,rgba(255,255,255,0.14),transparent)]"
-                        animate={{ x: ["-140%", "140%"] }}
-                        transition={{ duration: 1.2, ease: "linear", repeat: Infinity, repeatType: "loop" }}
-                        style={{ willChange: "transform" }}
+                        className="pointer-events-none absolute inset-0 z-10 rounded-md"
+                        style={{
+                          padding: "1px",
+                          background:
+                            "conic-gradient(from var(--border-angle), transparent 0deg, rgba(255,255,255,0.9) 40deg, transparent 80deg)",
+                          mask: "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
+                          maskComposite: "exclude",
+                          WebkitMask: "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
+                          WebkitMaskComposite: "xor",
+                          animation: shouldReduceMotion ? undefined : "nav-border-loop 1.4s linear infinite",
+                        } as React.CSSProperties}
                       />
                       <div className="relative flex min-h-14 items-center gap-2.5">
                         <div className="flex h-10 w-10 flex-none items-center justify-center rounded-sm bg-zinc-900/35 text-zinc-500">
@@ -1603,12 +1610,19 @@ function AddItemPageInner({
                       className="relative overflow-hidden rounded-md border border-zinc-800 bg-zinc-950 p-3"
                     >
                       {isReplacing && (
-                        <motion.div
+                        <div
                           aria-hidden
-                          className="pointer-events-none absolute inset-0 z-10 bg-[linear-gradient(110deg,transparent,rgba(255,255,255,0.14),transparent)]"
-                          animate={{ x: ["-140%", "140%"] }}
-                          transition={{ duration: 1.2, ease: "linear", repeat: Infinity, repeatType: "loop" }}
-                          style={{ willChange: "transform" }}
+                          className="pointer-events-none absolute inset-0 z-10 rounded-md"
+                          style={{
+                            padding: "1px",
+                            background:
+                              "conic-gradient(from var(--border-angle), transparent 0deg, rgba(255,255,255,0.9) 40deg, transparent 80deg)",
+                            mask: "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
+                            maskComposite: "exclude",
+                            WebkitMask: "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
+                            WebkitMaskComposite: "xor",
+                            animation: shouldReduceMotion ? undefined : "nav-border-loop 1.4s linear infinite",
+                          } as React.CSSProperties}
                         />
                       )}
                       {isDuplicateCard && (
