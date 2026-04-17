@@ -1510,8 +1510,7 @@ function AddItemPageInner({
                 </section>
               )}
 
-              {(pendingSourceCards.length > 0 || queuedItems.length > 0) && (
-                <div className="relative mt-auto flex min-h-0 flex-1 flex-col">
+              <div className="relative mt-auto flex min-h-0 flex-1 flex-col">
                   <div
                     aria-hidden
                     className="pointer-events-none absolute left-0 right-0 top-0 z-20 h-10 bg-gradient-to-b from-black to-transparent transition-opacity duration-200"
@@ -1889,7 +1888,6 @@ function AddItemPageInner({
                 </motion.div>
                   </div>
                 </div>
-              )}
             </div>
 
             <div className="mt-auto space-y-3 border-t border-zinc-900 pb-3 pt-5">
