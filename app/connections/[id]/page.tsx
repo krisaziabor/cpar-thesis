@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, type ReactNode } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
@@ -10,8 +10,10 @@ import {
   subscribeToResponses,
   subscribeToItems,
   deleteConnection,
+  addConnectionResponse,
 } from "@/lib/items";
 import { saveToKanon, removeFromKanon, subscribeToKanonSaveStatus } from "@/lib/kanon";
+import AudioRecorder from "@/components/AudioRecorder";
 import type { Connection, Item, Response } from "@/lib/types";
 
 function formatDate(ts: unknown): string {
@@ -41,6 +43,11 @@ export default function ConnectionDetailPage() {
   const [deleteError, setDeleteError] = useState("");
   const [kanonSaveId, setKanonSaveId] = useState<string | null>(null);
   const [savingKanon, setSavingKanon] = useState(false);
+  /** null = no reply UI open; string = replying to that specific response */
+  const [replyParentId, setReplyParentId] = useState<string | null>(null);
+  const [replyBlob, setReplyBlob] = useState<Blob | null>(null);
+  const [savingReply, setSavingReply] = useState(false);
+  const [replyError, setReplyError] = useState("");
 
   useEffect(() => {
     const unsub = subscribeToConnection(id, setConnection);
@@ -93,6 +100,21 @@ export default function ConnectionDetailPage() {
 
   const canDelete = connection !== null && connection !== undefined &&
     (connection.created_by === user?.email || role === "admin");
+
+  async function handleSubmitReply() {
+    if (!user?.email || !replyBlob || !replyParentId) return;
+    setSavingReply(true);
+    setReplyError("");
+    try {
+      await addConnectionResponse(id, replyBlob, user.email, replyParentId);
+      setReplyBlob(null);
+      setReplyParentId(null);
+    } catch (err) {
+      setReplyError(err instanceof Error ? err.message : "Failed to submit reply.");
+    } finally {
+      setSavingReply(false);
+    }
+  }
 
   async function handleDelete() {
     if (!connection) return;
@@ -203,23 +225,106 @@ export default function ConnectionDetailPage() {
             </p>
           )}
 
-          <div className="flex flex-col divide-y divide-zinc-100 dark:divide-zinc-900">
-            {responses.map((r) => (
-              <div key={r.id} className="flex flex-col gap-2 py-4">
-                <p className="font-mono text-xs text-zinc-500">
-                  {r.created_by} · {formatDate(r.created_at)}
-                </p>
-                {r.audio_url && (
-                  <audio src={r.audio_url} controls className="w-full" />
-                )}
-                {r.transcript && (
-                  <p className="text-sm italic text-zinc-500 dark:text-zinc-400">
-                    "{r.transcript}"
-                  </p>
-                )}
+          {responses.length > 0 && (() => {
+            const byParent = new Map<string | null, Response[]>();
+            responses.forEach((r) => {
+              const key = r.parent_response_id ?? null;
+              if (!byParent.has(key)) byParent.set(key, []);
+              byParent.get(key)!.push(r);
+            });
+            byParent.forEach((list) =>
+              list.sort((a, b) => {
+                const at = a.created_at?.toMillis?.() ?? 0;
+                const bt = b.created_at?.toMillis?.() ?? 0;
+                return at - bt;
+              })
+            );
+            const topLevel = byParent.get(null) ?? [];
+
+            const renderResponseNode = (r: Response, depth: number): ReactNode => {
+              const children = byParent.get(r.id) ?? [];
+              const isReplying = replyParentId === r.id;
+              return (
+                <div
+                  key={r.id}
+                  className={depth > 0 ? "mt-3 border-l border-zinc-200 pl-4 dark:border-zinc-800" : ""}
+                >
+                  <div className="flex flex-col gap-2 py-3">
+                    <p className="font-mono text-xs text-zinc-500">
+                      {r.created_by} · {formatDate(r.created_at)}
+                    </p>
+                    {r.audio_url && (
+                      <audio src={r.audio_url} controls className="w-full" />
+                    )}
+                    {r.transcript && (
+                      <p className="text-sm italic text-zinc-500 dark:text-zinc-400">
+                        &ldquo;{r.transcript}&rdquo;
+                      </p>
+                    )}
+                    <div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setReplyParentId(isReplying ? null : r.id);
+                          setReplyBlob(null);
+                          setReplyError("");
+                        }}
+                        className="text-xs text-zinc-400 underline underline-offset-2 hover:text-zinc-700 dark:hover:text-zinc-200"
+                      >
+                        {isReplying ? "cancel reply" : "reply"}
+                      </button>
+                    </div>
+                    {isReplying && (
+                      <div className="flex flex-col gap-3 rounded border border-zinc-200 p-3 dark:border-zinc-800">
+                        <p className="font-mono text-xs text-zinc-500">
+                          replying to {r.created_by}
+                        </p>
+                        <AudioRecorder
+                          onRecorded={(blob) => setReplyBlob(blob)}
+                          prompt="What do you want to say back?"
+                        />
+                        {replyError && (
+                          <p className="text-xs text-red-500">{replyError}</p>
+                        )}
+                        <div className="flex items-center gap-3">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setReplyParentId(null);
+                              setReplyBlob(null);
+                              setReplyError("");
+                            }}
+                            className="text-xs text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"
+                          >
+                            cancel
+                          </button>
+                          <button
+                            type="button"
+                            disabled={!replyBlob || savingReply}
+                            onClick={() => void handleSubmitReply()}
+                            className="border border-zinc-900 px-3 py-1 text-xs font-medium text-zinc-900 hover:bg-zinc-900 hover:text-white disabled:opacity-40 dark:border-zinc-100 dark:text-zinc-100 dark:hover:bg-zinc-100 dark:hover:text-zinc-900"
+                          >
+                            {savingReply ? "submitting…" : "submit reply"}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  {children.length > 0 && (
+                    <div className="flex flex-col">
+                      {children.map((child) => renderResponseNode(child, depth + 1))}
+                    </div>
+                  )}
+                </div>
+              );
+            };
+
+            return (
+              <div className="flex flex-col divide-y divide-zinc-100 dark:divide-zinc-900">
+                {topLevel.map((r) => renderResponseNode(r, 0))}
               </div>
-            ))}
-          </div>
+            );
+          })()}
         </div>
 
         {/* Delete */}

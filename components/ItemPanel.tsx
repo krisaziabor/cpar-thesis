@@ -210,6 +210,12 @@ export default function ItemPanel({ itemId }: { itemId: string }) {
   const [responseBlob, setResponseBlob] = useState<Blob | null>(null);
   const [savingResponse, setSavingResponse] = useState(false);
   const [responseError, setResponseError] = useState("");
+  /** null = replying to the item itself; string = replying to a specific response */
+  const [replyParentId, setReplyParentId] = useState<string | null>(null);
+  const [replyBlob, setReplyBlob] = useState<Blob | null>(null);
+  const [savingReply, setSavingReply] = useState(false);
+  const [replyError, setReplyError] = useState("");
+  const [responseAuthorNames, setResponseAuthorNames] = useState<Record<string, string>>({});
   const [isEditing, setIsEditing] = useState(false);
   const [editDraft, setEditDraft] = useState({
     title: "",
@@ -250,6 +256,25 @@ export default function ItemPanel({ itemId }: { itemId: string }) {
       setAddedByName(profile?.name ?? null);
     });
   }, [item?.added_by]);
+
+  useEffect(() => {
+    const emails = Array.from(
+      new Set(
+        itemResponses
+          .map((r) => r.created_by)
+          .filter((v): v is string => typeof v === "string" && v.length > 0)
+      )
+    );
+    emails.forEach((email) => {
+      if (responseAuthorNames[email] !== undefined) return;
+      getUserProfile(email).then((profile) => {
+        if (!profile?.name) return;
+        setResponseAuthorNames((prev) =>
+          prev[email] === profile.name ? prev : { ...prev, [email]: profile.name }
+        );
+      });
+    });
+  }, [itemResponses, responseAuthorNames]);
 
   const isEditRequested = searchParams.get("itemEdit") === "1";
   const itemEditAction = searchParams.get("itemEditAction");
@@ -335,6 +360,21 @@ export default function ItemPanel({ itemId }: { itemId: string }) {
       setResponseError(err instanceof Error ? err.message : "Failed to submit response.");
     } finally {
       setSavingResponse(false);
+    }
+  }
+
+  async function handleSubmitReply() {
+    if (!user?.email || !replyBlob || !replyParentId) return;
+    setSavingReply(true);
+    setReplyError("");
+    try {
+      await addItemResponse(itemId, replyBlob, user.email, replyParentId);
+      setReplyBlob(null);
+      setReplyParentId(null);
+    } catch (err) {
+      setReplyError(err instanceof Error ? err.message : "Failed to submit reply.");
+    } finally {
+      setSavingReply(false);
     }
   }
 
@@ -655,6 +695,120 @@ export default function ItemPanel({ itemId }: { itemId: string }) {
               <p className="text-xs text-zinc-600">
                 {addedByName ?? item.added_by} · {formatDate(item.created_at)}
               </p>
+            </div>
+
+            <div className="border-t border-zinc-800" />
+
+            {/* Responses */}
+            <div className="space-y-3">
+              <p className="font-lector text-sm text-zinc-400">
+                Responses {itemResponses.length > 0 && (
+                  <span className="text-zinc-600">({itemResponses.length})</span>
+                )}
+              </p>
+              {itemResponses.length === 0 ? (
+                <p className="text-xs text-zinc-600">No responses yet.</p>
+              ) : (
+                <div className="flex flex-col gap-3">
+                  {(() => {
+                    const byParent = new Map<string | null, ItemResponse[]>();
+                    itemResponses.forEach((r) => {
+                      const key = r.parent_response_id ?? null;
+                      if (!byParent.has(key)) byParent.set(key, []);
+                      byParent.get(key)!.push(r);
+                    });
+                    byParent.forEach((list) =>
+                      list.sort((a, b) => {
+                        const at = a.created_at?.toMillis?.() ?? 0;
+                        const bt = b.created_at?.toMillis?.() ?? 0;
+                        return at - bt;
+                      })
+                    );
+                    const topLevel = byParent.get(null) ?? [];
+
+                    const renderResponseNode = (r: ItemResponse, depth: number) => {
+                      const authorName = responseAuthorNames[r.created_by] ?? r.created_by;
+                      const children = byParent.get(r.id) ?? [];
+                      const isReplying = replyParentId === r.id;
+                      return (
+                        <div
+                          key={r.id}
+                          className={depth > 0 ? "border-l border-zinc-800 pl-3" : ""}
+                        >
+                          <div className="flex flex-col gap-2 border border-zinc-800 px-3 py-2">
+                            <p className="text-xs text-zinc-600">
+                              {authorName} · {formatDate(r.created_at)}
+                            </p>
+                            {r.audio_url && (
+                              <audio src={r.audio_url} controls className="w-full" />
+                            )}
+                            {r.transcript && (
+                              <p className="text-xs italic text-zinc-500">
+                                &ldquo;{r.transcript}&rdquo;
+                              </p>
+                            )}
+                            <div>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setReplyParentId(isReplying ? null : r.id);
+                                  setReplyBlob(null);
+                                  setReplyError("");
+                                }}
+                                className="font-lector text-[11px] text-zinc-400 hover:text-zinc-200"
+                              >
+                                {isReplying ? "Cancel reply" : "Reply"}
+                              </button>
+                            </div>
+                            {isReplying && (
+                              <div className="space-y-2 rounded-md border border-zinc-800 px-2 py-2">
+                                <p className="font-lector text-[11px] text-zinc-500">
+                                  Replying to {authorName}
+                                </p>
+                                <AudioRecorder
+                                  onRecorded={(blob) => setReplyBlob(blob)}
+                                  prompt="What do you want to say back?"
+                                />
+                                {replyError && (
+                                  <p className="text-xs text-red-500">{replyError}</p>
+                                )}
+                                <div className="flex items-center gap-3">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setReplyParentId(null);
+                                      setReplyBlob(null);
+                                      setReplyError("");
+                                    }}
+                                    className="text-xs text-zinc-500 hover:text-zinc-300"
+                                  >
+                                    Cancel
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={!replyBlob || savingReply}
+                                    onClick={() => void handleSubmitReply()}
+                                    className="rounded-full border border-zinc-600 px-3 py-1 text-xs text-zinc-100 transition-colors hover:border-zinc-500 hover:bg-zinc-800 disabled:opacity-50"
+                                  >
+                                    {savingReply ? "Submitting…" : "Submit reply"}
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                          {children.length > 0 && (
+                            <div className="mt-2 flex flex-col gap-2 pl-4">
+                              {children.map((child) => renderResponseNode(child, depth + 1))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    };
+
+                    return topLevel.map((r) => renderResponseNode(r, 0));
+                  })()}
+                </div>
+              )}
             </div>
 
             <div className="border-t border-zinc-800" />

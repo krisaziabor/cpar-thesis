@@ -73,7 +73,7 @@ export interface ConnectionItem {
   item_id: string;
 }
 
-/** Response: voice reply to a connection */
+/** Response: voice reply to a connection (optionally threaded under another response) */
 export interface Response {
   id: string;
   connection_id: string;
@@ -81,9 +81,11 @@ export interface Response {
   transcript: string;
   created_by: string;
   created_at: Timestamp;
+  /** If present, this response is a reply to another response on the same connection. */
+  parent_response_id?: string;
 }
 
-/** ItemResponse: voice reply to an item record */
+/** ItemResponse: voice reply to an item record (optionally threaded under another response) */
 export interface ItemResponse {
   id: string;
   item_id: string;
@@ -91,6 +93,8 @@ export interface ItemResponse {
   transcript: string;
   created_by: string;
   created_at: Timestamp;
+  /** If present, this response is a reply to another response on the same item. */
+  parent_response_id?: string;
 }
 
 /** AudioVersion: a recorded version of an item's testimony */
