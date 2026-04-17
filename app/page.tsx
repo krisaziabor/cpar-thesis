@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo, Suspense } from "react";
+import { useState, useEffect, useMemo, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { PanOnScrollMode, ReactFlow, type Node, type NodeTypes } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
@@ -129,113 +129,133 @@ function HomeInner() {
     );
   }, []);
 
-  // Welcome-back / post-onboarding messages on session start
+  // Welcome-back / post-onboarding messages on session start.
+  //
+  // Design:
+  //  • `kanon-greeted` in sessionStorage is the authoritative "already shown
+  //    this session" marker and is ONLY set *after* messages are enqueued —
+  //    so a transient failure (unmount, thrown error, navigation) won't
+  //    silently suppress the greeting for the rest of the session.
+  //  • The cleanup cancels any in-flight timer so we don't enqueue after a
+  //    StrictMode teardown or route change; re-mounts re-evaluate cleanly.
+  //  • Display name resolves from: whitelist firstName → users/{email}.name
+  //    (patched into firstName in auth-context) → firebase displayName →
+  //    email local-part. This prevents the common case of self-registered
+  //    users falling back to the generic "Welcome back to Kanon".
   useEffect(() => {
     if (authLoading || !user) return;
+    if (typeof window === "undefined") return;
+
     const KEY = "kanon-last-visit";
-    const justOnboarded = sessionStorage.getItem("kanon-just-onboarded");
-    const alreadyGreeted = sessionStorage.getItem("kanon-greeted");
+    const justOnboarded = sessionStorage.getItem("kanon-just-onboarded") === "1";
+    const alreadyGreeted = sessionStorage.getItem("kanon-greeted") === "1";
 
-    if (justOnboarded) {
-      sessionStorage.removeItem("kanon-just-onboarded");
-      sessionStorage.setItem("kanon-greeted", "1");
-      try { localStorage.setItem(KEY, Date.now().toString()); } catch {}
-
-      const name = firstName ?? user.displayName?.split(/\s+/)[0] ?? null;
-      const introDelay = timings.bottomStartMs + timings.navDelayMs + (timings.bottomEnterMs * 2);
-
-      setTimeout(() => {
-        void (async () => {
-          try {
-            const [totalItems, totalConnections] = await Promise.all([
-              countItemsSince(new Date(0)),
-              countConnectionsSince(new Date(0)),
-            ]);
-
-            const messages: Parameters<typeof enqueueStatus> = [];
-            const parts: string[] = [];
-            if (totalItems > 0) parts.push(`${totalItems} record${totalItems === 1 ? "" : "s"}`);
-            if (totalConnections > 0) parts.push(`${totalConnections} connection${totalConnections === 1 ? "" : "s"}`);
-
-            if (parts.length > 0) {
-              messages.push({
-                id: `onb-counts-${Date.now()}`,
-                text: `${parts.join(" & ")} to explore`,
-                durationMs: 2400,
-              });
-            }
-
-            if (name) {
-              messages.push({
-                id: `onb-welcome-${Date.now()}`,
-                text: `Welcome to Kanon, ${name}`,
-                durationMs: 2600,
-              });
-            }
-
-            if (messages.length > 0) enqueueStatus(...messages);
-          } catch {
-            // Non-fatal
-          }
-        })();
-      }, introDelay);
-      return;
-    }
-
-    if (alreadyGreeted) {
+    if (alreadyGreeted && !justOnboarded) {
       try { localStorage.setItem(KEY, Date.now().toString()); } catch {}
       return;
     }
-    sessionStorage.setItem("kanon-greeted", "1");
+
+    const emailPrefix = user.email ? user.email.split("@")[0] ?? null : null;
+    const name =
+      firstName ??
+      (user.displayName ? user.displayName.trim().split(/\s+/)[0] ?? null : null) ??
+      emailPrefix;
 
     const lastVisitRaw = localStorage.getItem(KEY);
-    const name = firstName ?? user.displayName?.split(/\s+/)[0] ?? null;
     const lastVisit = lastVisitRaw ? new Date(Number(lastVisitRaw)) : null;
     try { localStorage.setItem(KEY, Date.now().toString()); } catch {}
 
     const introDelay = timings.bottomStartMs + timings.navDelayMs + (timings.bottomEnterMs * 2);
 
-    setTimeout(() => {
+    let cancelled = false;
+    const timerId = window.setTimeout(() => {
       void (async () => {
-        const messages: Parameters<typeof enqueueStatus> = [];
+        if (cancelled) return;
+        try {
+          const messages: Parameters<typeof enqueueStatus> = [];
 
-        if (lastVisit) {
-          try {
-            const [newItems, newConnections] = await Promise.all([
-              countItemsSince(lastVisit),
-              countConnectionsSince(lastVisit),
-            ]);
+          if (justOnboarded) {
+            try {
+              const [totalItems, totalConnections] = await Promise.all([
+                countItemsSince(new Date(0)),
+                countConnectionsSince(new Date(0)),
+              ]);
+              if (cancelled) return;
 
-            if (newItems > 0) {
-              messages.push({
-                id: `wb-items-${Date.now()}`,
-                text: `${newItems} new record${newItems === 1 ? "" : "s"}`,
-                durationMs: 2000,
-              });
+              const parts: string[] = [];
+              if (totalItems > 0) parts.push(`${totalItems} record${totalItems === 1 ? "" : "s"}`);
+              if (totalConnections > 0) parts.push(`${totalConnections} connection${totalConnections === 1 ? "" : "s"}`);
+
+              if (parts.length > 0) {
+                messages.push({
+                  id: `onb-counts-${Date.now()}`,
+                  text: `${parts.join(" & ")} to explore`,
+                  durationMs: 2400,
+                });
+              }
+            } catch {
+              // Non-fatal — still show the name card below.
             }
-            if (newConnections > 0) {
-              messages.push({
-                id: `wb-conns-${Date.now()}`,
-                text: `${newConnections} new connection${newConnections === 1 ? "" : "s"}`,
-                durationMs: 2000,
-              });
+
+            messages.push({
+              id: `onb-welcome-${Date.now()}`,
+              text: name ? `Welcome to Kanon, ${name}` : "Welcome to Kanon",
+              durationMs: 2600,
+            });
+          } else {
+            if (lastVisit) {
+              try {
+                const [newItems, newConnections] = await Promise.all([
+                  countItemsSince(lastVisit),
+                  countConnectionsSince(lastVisit),
+                ]);
+                if (cancelled) return;
+
+                if (newItems > 0) {
+                  messages.push({
+                    id: `wb-items-${Date.now()}`,
+                    text: `${newItems} new record${newItems === 1 ? "" : "s"}`,
+                    durationMs: 2000,
+                  });
+                }
+                if (newConnections > 0) {
+                  messages.push({
+                    id: `wb-conns-${Date.now()}`,
+                    text: `${newConnections} new connection${newConnections === 1 ? "" : "s"}`,
+                    durationMs: 2000,
+                  });
+                }
+              } catch {
+                // Firestore query failed — still show the greeting below.
+              }
             }
-          } catch {
-            // Firestore query failed — still show the greeting below
+
+            messages.push({
+              id: `wb-name-${Date.now()}`,
+              text: name
+                ? `Welcome back to Kanon, ${name}`
+                : "Welcome back to Kanon",
+              durationMs: 2600,
+            });
           }
+
+          if (cancelled || messages.length === 0) return;
+          enqueueStatus(...messages);
+          try {
+            sessionStorage.setItem("kanon-greeted", "1");
+            if (justOnboarded) sessionStorage.removeItem("kanon-just-onboarded");
+          } catch {}
+        } catch {
+          // Swallow — a transient failure will retry on the next mount
+          // because `kanon-greeted` was never set.
         }
-
-        messages.push({
-          id: `wb-name-${Date.now()}`,
-          text: name
-            ? `Welcome back to Kanon, ${name}`
-            : "Welcome back to Kanon",
-          durationMs: 2600,
-        });
-
-        enqueueStatus(...messages);
       })();
     }, introDelay);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timerId);
+    };
   }, [authLoading, user, firstName, enqueueStatus, timings]);
 
   useEffect(() => {
