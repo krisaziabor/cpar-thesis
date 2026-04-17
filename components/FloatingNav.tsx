@@ -154,7 +154,8 @@ export default function FloatingNav() {
   const isHoldingActive = (pathname === "/" && panel === "holds") || pathname.startsWith("/kanon");
   const holdingHref = "/?panel=holds";
 
-  if (!user || pathname === "/login" || pathname === "/colophon" || pathname === "/onboarding" || pathname === "/onboarding-lab" || pathname === "/admin") return null;
+  const isDevNavStatusLab = process.env.NODE_ENV === "development" && pathname === "/nav-status-lab";
+  if ((!user && !isDevNavStatusLab) || pathname === "/login" || pathname === "/colophon" || pathname === "/onboarding" || pathname === "/onboarding-lab" || pathname === "/admin") return null;
 
   const enterDelay = pathname === "/" && !shouldReduceMotion
     ? Math.max(0, timings.bottomStartMs + timings.navDelayMs) / 1000
