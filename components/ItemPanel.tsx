@@ -409,7 +409,7 @@ export default function ItemPanel({ itemId }: { itemId: string }) {
         <div>
           {!isEditing ? (
             <>
-              <h2 className="font-lector text-xl leading-tight text-zinc-50">
+              <h2 className="font-lector text-xl leading-tight tracking-tight text-zinc-50">
                 {item.title}
               </h2>
               {item.description && (
@@ -514,7 +514,7 @@ export default function ItemPanel({ itemId }: { itemId: string }) {
             <div className="flex items-center gap-2">
               <Link
                 href={`/connect?itemId=${itemId}`}
-            className="flex items-center rounded-full bg-zinc-100 px-4 py-1.5 font-lector text-xs text-zinc-900 transition-colors hover:bg-white"
+            className="flex items-center rounded-full bg-zinc-100 px-4 py-1.5 font-sans text-xs text-zinc-900 transition-colors hover:bg-white"
               >
                 Connect
               </Link>
@@ -524,7 +524,7 @@ export default function ItemPanel({ itemId }: { itemId: string }) {
                   setIsResponding((prev) => !prev);
                   setResponseError("");
                 }}
-            className="flex items-center gap-1.5 rounded-full border border-zinc-600 bg-zinc-900 px-4 py-1.5 font-lector text-xs text-zinc-100 transition-colors hover:border-zinc-500 hover:bg-zinc-800"
+            className="flex items-center gap-1.5 rounded-full border border-zinc-600 bg-zinc-900 px-4 py-1.5 font-sans text-xs text-zinc-100 transition-colors hover:border-zinc-500 hover:bg-zinc-800"
               >
                 Respond
               </button>
@@ -558,7 +558,7 @@ export default function ItemPanel({ itemId }: { itemId: string }) {
                     }
                   }
                 }}
-            className={`flex items-center gap-1.5 rounded-full border bg-zinc-950 px-4 py-1.5 font-lector text-xs transition-colors disabled:opacity-60 ${
+            className={`flex items-center gap-1.5 rounded-full border bg-zinc-950 px-4 py-1.5 font-sans text-xs transition-colors disabled:opacity-60 ${
                   kanonSaveId
                     ? "border-zinc-500 text-zinc-200 hover:border-zinc-400 hover:text-zinc-100"
                     : "border-zinc-700 text-zinc-300 hover:border-zinc-600 hover:text-zinc-100"
@@ -571,7 +571,7 @@ export default function ItemPanel({ itemId }: { itemId: string }) {
 
             {isResponding && (
               <div className="space-y-3 rounded-md border border-zinc-800 px-3 py-3">
-                <p className="font-lector text-sm text-zinc-300">Respond to this record</p>
+                <p className="font-sans text-sm font-medium text-zinc-300">Respond to this record</p>
                 <AudioRecorder
                   onRecorded={(blob) => setResponseBlob(blob)}
                   prompt="What does this record bring up for you?"
@@ -622,7 +622,7 @@ export default function ItemPanel({ itemId }: { itemId: string }) {
           <>
             {/* Narrative */}
             <div className="space-y-3">
-              <p className="font-lector text-sm text-zinc-400">Narrative</p>
+              <p className="font-lector text-sm tracking-tight text-zinc-400">Narrative</p>
               {!showHoldContextNarrative && item.voice_recording_url ? (
                 <AudioPlayer src={item.voice_recording_url} />
               ) : (
@@ -641,7 +641,7 @@ export default function ItemPanel({ itemId }: { itemId: string }) {
                               item?.title ?? "Record"
                             )
                           }
-                          className="inline-flex font-lector text-xs text-zinc-200 transition-colors hover:text-white"
+                          className="inline-flex font-sans text-xs text-zinc-200 transition-colors hover:text-white"
                         >
                           View this person&apos;s hold
                         </button>
@@ -661,11 +661,11 @@ export default function ItemPanel({ itemId }: { itemId: string }) {
 
             {/* Connections */}
             <div className="space-y-3">
-              <p className="font-lector text-sm text-zinc-400">Connections</p>
+              <p className="font-lector text-sm tracking-tight text-zinc-400">Connections</p>
               {connections.length === 0 ? (
                 <div className="space-y-1">
                   <p className="text-xs text-zinc-600">No connections yet.</p>
-                  <Link href={`/connect?itemId=${itemId}`} className="font-lector text-[12px] text-zinc-100 hover:text-white">
+                  <Link href={`/connect?itemId=${itemId}`} className="font-sans text-[12px] text-zinc-100 hover:text-white">
                     Add one
                   </Link>
                 </div>
@@ -683,7 +683,7 @@ export default function ItemPanel({ itemId }: { itemId: string }) {
                         className="flex items-center justify-between border border-zinc-800 px-4 py-3 hover:border-zinc-700 hover:bg-zinc-900"
                       >
                         <div className="min-w-0 flex flex-col gap-0.5">
-                          <p className="truncate text-sm text-zinc-200">
+                          <p className="truncate font-lector text-sm text-zinc-200">
                             {otherTitles.length > 0 ? otherTitles.join(" · ") : "connection"}
                           </p>
                           <p className="text-xs text-zinc-600">

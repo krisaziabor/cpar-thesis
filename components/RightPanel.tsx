@@ -87,7 +87,7 @@ export default function RightPanel({
             ✕
           </button>
           {title && (
-            <span className="truncate text-sm text-zinc-400">
+            <span className="truncate font-lector text-sm tracking-tight text-zinc-400">
               {title}
             </span>
           )}
