@@ -130,6 +130,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           try {
             const profile = await getUserProfile(firebaseUser.email);
             setAvatarColors(profile?.avatar_colors ?? null);
+            // If whitelist had no firstName (typical for self-registered users),
+            // fall back to the name saved during onboarding (users/{email}.name)
+            // so the floating-nav welcome greeting can personalize.
+            if (!access.firstName && profile?.name) {
+              const derived = profile.name.trim().split(/\s+/)[0] ?? null;
+              if (derived) setFirstName(derived);
+            }
           } catch {
             setAvatarColors(null);
           }
@@ -149,6 +156,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (loading || user) return;
     if (pathname === "/login") return;
     if (process.env.NODE_ENV === "development" && pathname === "/onboarding") return;
+    if (process.env.NODE_ENV === "development" && pathname === "/nav-status-lab") return;
     router.replace("/login");
   }, [loading, user, pathname, router]);
 
@@ -177,6 +185,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         const profile = await getUserProfile(user.email);
         if (profile?.avatar_colors) setAvatarColors(profile.avatar_colors);
+        if (!firstName && profile?.name) {
+          const derived = profile.name.trim().split(/\s+/)[0] ?? null;
+          if (derived) setFirstName(derived);
+        }
       } catch {}
     }
   }
