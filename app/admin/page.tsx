@@ -21,36 +21,12 @@ import type {
   Connection,
   KanonSave,
 } from "@/lib/types";
+import {
+  formatFirestoreDate as formatDate,
+  formatFirestoreDateTime as formatDateTime,
+} from "@/lib/format";
 
 type Tab = "overview" | "users" | "pieces" | "feedback" | "requests";
-
-function formatDate(ts: unknown): string {
-  if (!ts) return "—";
-  if (typeof ts === "object" && ts !== null && "toDate" in ts) {
-    return (ts as { toDate: () => Date }).toDate().toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    });
-  }
-  return String(ts);
-}
-
-function formatDateTime(ts: unknown): string {
-  if (!ts) return "—";
-  if (typeof ts === "object" && ts !== null && "toDate" in ts) {
-    const d = (ts as { toDate: () => Date }).toDate();
-    return d.toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    }) + " " + d.toLocaleTimeString("en-US", {
-      hour: "numeric",
-      minute: "2-digit",
-    });
-  }
-  return String(ts);
-}
 
 // ─── Stat card ───────────────────────────────────────────────────────────────
 

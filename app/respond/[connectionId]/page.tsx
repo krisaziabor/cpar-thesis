@@ -6,6 +6,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import AudioRecorder from "@/components/AudioRecorder";
 import { MOCK_CONNECTIONS, MOCK_ITEMS } from "@/lib/mock-data";
+import PageLoading from "@/components/ui/PageLoading";
 
 export default function RespondPage() {
   const { loading, user } = useAuth();
@@ -14,13 +15,7 @@ export default function RespondPage() {
   const connectionId = params.connectionId as string;
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
 
-  if (loading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <span className="font-mono text-xs text-zinc-400">loading…</span>
-      </div>
-    );
-  }
+  if (loading) return <PageLoading />;
   if (!user) return null;
 
   const connection = MOCK_CONNECTIONS.find((c) => c.id === connectionId);

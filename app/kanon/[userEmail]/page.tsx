@@ -7,36 +7,8 @@ import { useAuth } from "@/lib/auth-context";
 import { subscribeToUserKanon } from "@/lib/kanon";
 import { subscribeToAllConnections, subscribeToDrafts, subscribeToItems } from "@/lib/items";
 import type { KanonSave, Item, Connection } from "@/lib/types";
-
-function formatDate(ts: unknown): string {
-  if (!ts) return "—";
-  if (typeof ts === "object" && ts !== null && "toDate" in ts) {
-    return (ts as { toDate: () => Date }).toDate().toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    });
-  }
-  return String(ts);
-}
-
-function relativeDate(ts: unknown): string {
-  if (!ts) return "";
-  let date: Date;
-  if (typeof ts === "object" && ts !== null && "toDate" in ts) {
-    date = (ts as { toDate: () => Date }).toDate();
-  } else {
-    return formatDate(ts);
-  }
-  const now = Date.now();
-  const diff = now - date.getTime();
-  const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-  if (days === 0) return "today";
-  if (days === 1) return "yesterday";
-  if (days < 7) return `${days} days ago`;
-  if (days < 30) return `${Math.floor(days / 7)} week${Math.floor(days / 7) !== 1 ? "s" : ""} ago`;
-  return formatDate(ts);
-}
+import { formatRelativeDate } from "@/lib/format";
+import PageLoading from "@/components/ui/PageLoading";
 
 export default function KanonPage() {
   const { loading: authLoading, user } = useAuth();
@@ -75,13 +47,7 @@ export default function KanonPage() {
     return subscribeToDrafts(decodedEmail, setOwnDraftItems);
   }, [decodedEmail, isOwn]);
 
-  if (authLoading || saves === undefined) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-white dark:bg-black">
-        <span className="font-mono text-xs text-zinc-400">loading…</span>
-      </div>
-    );
-  }
+  if (authLoading || saves === undefined) return <PageLoading />;
   if (!user) return null;
 
   function resolveTitle(save: KanonSave): string {
@@ -167,7 +133,7 @@ export default function KanonPage() {
                       </p>
                     </div>
                     <p className="font-mono text-xs text-zinc-500">
-                      {creator && <>by {creator} · </>}saved {relativeDate(save.created_at)}
+                      {creator && <>by {creator} · </>}saved {formatRelativeDate(save.created_at)}
                     </p>
                   </div>
                   <span className="mt-0.5 font-mono text-xs text-zinc-300 dark:text-zinc-700">→</span>
