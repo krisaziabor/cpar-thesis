@@ -12,6 +12,9 @@ import {
 import type { Item, Connection, ConnectionItem } from "@/lib/types";
 import { getWhitelistAccessInfo } from "@/lib/whitelist";
 import { getUserProfile } from "@/lib/users";
+import { formatFirestoreDate, tsMillis, tsToDate } from "@/lib/format";
+import PanelIntro from "@/components/ui/PanelIntro";
+import FloatingNavClearance from "@/components/ui/FloatingNavClearance";
 
 type ActivityEntry =
   | {
@@ -33,32 +36,8 @@ type ActivityEntry =
 
 type ActivityFilter = "all" | "added" | "connected" | "mine";
 
-function tsMillis(ts: unknown): number {
-  if (ts && typeof ts === "object" && "toDate" in ts) {
-    return (ts as { toDate: () => Date }).toDate().getTime();
-  }
-  return 0;
-}
-
-function toDate(ts: unknown): Date | null {
-  if (ts && typeof ts === "object" && "toDate" in ts) {
-    return (ts as { toDate: () => Date }).toDate();
-  }
-  return null;
-}
-
-function formatDate(ts: unknown): string {
-  const date = toDate(ts);
-  if (!date) return "—";
-  return date.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
-
 function groupLabel(ts: unknown): "Today" | "This week" | "Earlier" {
-  const date = toDate(ts);
+  const date = tsToDate(ts);
   if (!date) return "Earlier";
   const now = new Date();
   const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
@@ -217,14 +196,15 @@ export default function ActivityPanel() {
 
   return (
     <div className="space-y-5 px-6 py-6">
-      <div className="space-y-1">
-        <p className="font-lector text-base text-zinc-300">Activity</p>
-        <p className="text-xs text-zinc-500">
-          {dataLoading
+      <PanelIntro
+        size="base"
+        title="Activity"
+        subtitle={
+          dataLoading
             ? "Loading activity..."
-            : `${pluralize(activityCounts.adds, "add", "adds")} · ${pluralize(activityCounts.connectionsCount, "connection", "connections")} · ${pluralize(activityCounts.mine, "entry", "entries")} by you`}
-        </p>
-      </div>
+            : `${pluralize(activityCounts.adds, "add", "adds")} · ${pluralize(activityCounts.connectionsCount, "connection", "connections")} · ${pluralize(activityCounts.mine, "entry", "entries")} by you`
+        }
+      />
 
       <div className="flex flex-wrap items-center gap-2">
         {(["all", "added", "connected", "mine"] as const).map((option) => {
@@ -314,7 +294,7 @@ export default function ActivityPanel() {
                       )}
                     </div>
                     <span className="shrink-0 text-xs text-zinc-600 transition-colors group-hover:text-zinc-500">
-                      {formatDate(a.created_at)}
+                      {formatFirestoreDate(a.created_at)}
                     </span>
                   </div>
                 ))}
@@ -324,8 +304,7 @@ export default function ActivityPanel() {
         </div>
       )}
 
-      {/* Bottom padding for floating nav clearance */}
-      <div className="h-16" />
+      <FloatingNavClearance />
     </div>
   );
 }

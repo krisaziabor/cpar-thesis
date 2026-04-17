@@ -22,22 +22,6 @@ export interface MockConnection {
   transcript?: string;
 }
 
-export interface MockResponse {
-  id: string;
-  connection_id: string;
-  created_by: string;
-  created_at: string;
-  transcript: string;
-}
-
-export interface MockActivity {
-  id: string;
-  type: "added" | "connected" | "responded";
-  person: string;
-  items: string[];
-  created_at: string;
-}
-
 export const MOCK_ITEMS: MockItem[] = [
   {
     id: "1",
@@ -130,39 +114,3 @@ export const MOCK_CONNECTIONS: MockConnection[] = [
   },
 ];
 
-export const MOCK_RESPONSES: MockResponse[] = [
-  {
-    id: "r1",
-    connection_id: "c1",
-    created_by: "Studio K.",
-    created_at: "Jan 14, 2025",
-    transcript: "I kept thinking about water in both — as memory, as danger, as passage.",
-  },
-  {
-    id: "r2",
-    connection_id: "c1",
-    created_by: "Kris A.",
-    created_at: "Jan 15, 2025",
-    transcript: "Yes — and the way silence becomes protective in both. The thing unsaid is still the wound.",
-  },
-  {
-    id: "r3",
-    connection_id: "c3",
-    created_by: "Kris A.",
-    created_at: "Jan 20, 2025",
-    transcript: "Formation does something Moonlight doesn't quite — it makes that joy communal, public, loud.",
-  },
-];
-
-export const MOCK_ACTIVITY: MockActivity[] = [
-  { id: "a1", type: "added", person: "Kris A.", items: ["The 1619 Project"], created_at: "Jan 20, 2025" },
-  { id: "a2", type: "connected", person: "Studio K.", items: ["The Mis-Education of the Negro", "The 1619 Project"], created_at: "Jan 21, 2025" },
-  { id: "a3", type: "added", person: "Studio K.", items: ["Formation"], created_at: "Jan 18, 2025" },
-  { id: "a4", type: "connected", person: "Studio K.", items: ["Moonlight", "Formation"], created_at: "Jan 19, 2025" },
-  { id: "a5", type: "connected", person: "Kris A.", items: ["Beloved", "Moonlight"], created_at: "Jan 13, 2025" },
-  { id: "a6", type: "added", person: "Kris A.", items: ["The Mis-Education of the Negro"], created_at: "Jan 15, 2025" },
-  { id: "a7", type: "responded", person: "Studio K.", items: ["Beloved", "Moonlight"], created_at: "Jan 14, 2025" },
-  { id: "a8", type: "added", person: "Studio K.", items: ["Moonlight"], created_at: "Jan 12, 2025" },
-  { id: "a9", type: "responded", person: "Kris A.", items: ["Beloved", "Moonlight"], created_at: "Jan 15, 2025" },
-  { id: "a10", type: "added", person: "Kris A.", items: ["Beloved"], created_at: "Jan 10, 2025" },
-];

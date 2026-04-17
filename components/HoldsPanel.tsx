@@ -8,18 +8,7 @@ import { subscribeToItems } from "@/lib/items";
 import type { Item, KanonSave } from "@/lib/types";
 import { getUserProfile } from "@/lib/users";
 import { EASE_OUT, MOTION_DURATION } from "@/lib/motion";
-
-function formatDate(ts: unknown): string {
-  if (!ts) return "";
-  if (typeof ts === "object" && ts !== null && "toDate" in ts) {
-    return (ts as { toDate: () => Date }).toDate().toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    });
-  }
-  return String(ts);
-}
+import PanelIntro from "@/components/ui/PanelIntro";
 
 type HoldsPanelProps = {
   currentUserEmail?: string | null;
@@ -230,12 +219,11 @@ export default function HoldsPanel({ currentUserEmail, initialUserEmail }: Holds
 
   return (
     <div className="space-y-5 px-6 py-6">
-      <div className="space-y-1">
-        <h2 className="font-lector text-lg text-zinc-100">Holds</h2>
-        <p className="text-xs text-zinc-500">
-          Browse records saved by each user.
-        </p>
-      </div>
+      <PanelIntro
+        size="lg"
+        title="Holds"
+        subtitle="Browse records saved by each user."
+      />
 
       <div className="relative">
         <input

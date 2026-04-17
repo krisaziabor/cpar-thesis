@@ -5,6 +5,7 @@ import AudioRecorder from "@/components/AudioRecorder";
 import { createConnection, findExistingConnectionByItemIds, subscribeToItems } from "@/lib/items";
 import type { Item } from "@/lib/types";
 import { useNavStatus } from "@/lib/nav-status-context";
+import TextInput from "@/components/ui/TextInput";
 
 interface ConnectPanelProps {
   selectedIds: string[];
@@ -119,12 +120,11 @@ export default function ConnectPanel({
             </p>
           </div>
 
-          <input
+          <TextInput
             type="search"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search by title, creator, or tag..."
-            className="w-full rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-200 outline-none transition-colors placeholder:text-zinc-600 focus:border-zinc-600"
           />
 
           <div className="border border-zinc-800">

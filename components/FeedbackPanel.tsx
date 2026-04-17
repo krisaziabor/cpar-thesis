@@ -4,6 +4,8 @@ import { FormEvent, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { useAuth } from "@/lib/auth-context";
 import { submitFeedback } from "@/lib/feedback";
+import PanelIntro from "@/components/ui/PanelIntro";
+import FloatingNavClearance from "@/components/ui/FloatingNavClearance";
 
 const MAX_FEEDBACK_LENGTH = 1200;
 
@@ -54,12 +56,10 @@ export default function FeedbackPanel() {
       transition={transitionFast}
       className="space-y-4 px-6 py-6"
     >
-      <div className="space-y-1">
-        <p className="font-lector text-sm text-zinc-300">Share feedback</p>
-        <p className="text-xs text-zinc-500">
-          Let me know what is working, what feels off, or what you want next.
-        </p>
-      </div>
+      <PanelIntro
+        title="Share feedback"
+        subtitle="Let me know what is working, what feels off, or what you want next."
+      />
 
       <AnimatePresence mode="wait" initial={false}>
         {didSubmit ? (
@@ -135,8 +135,7 @@ export default function FeedbackPanel() {
         )}
       </AnimatePresence>
 
-      {/* Bottom padding for floating nav clearance */}
-      <div className="h-16" />
+      <FloatingNavClearance />
     </motion.div>
   );
 }

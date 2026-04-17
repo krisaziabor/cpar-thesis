@@ -26,36 +26,12 @@ import AudioRecorder from "@/components/AudioRecorder";
 import MinimalPdfViewer from "@/components/MinimalPdfViewer";
 import { getUserProfile } from "@/lib/users";
 import { usePanelHistory } from "@/lib/panel-history-context";
-
-function formatDate(ts: unknown): string {
-  if (!ts) return "—";
-  if (typeof ts === "object" && ts !== null && "toDate" in ts) {
-    return (ts as { toDate: () => Date }).toDate().toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    });
-  }
-  return String(ts);
-}
-
-function guessMediaType(url: string): "image" | "pdf" | "video" {
-  try {
-    const path = decodeURIComponent(new URL(url).pathname.split("/o/")[1] ?? "");
-    const ext = path.split(".").pop()?.toLowerCase() ?? "";
-    if (["jpg", "jpeg", "png", "gif", "webp"].includes(ext)) return "image";
-    if (ext === "pdf") return "pdf";
-    if (["mp4", "webm", "mov", "ogg"].includes(ext)) return "video";
-  } catch {}
-  return "image";
-}
-
-function formatMediaTime(totalSeconds: number): string {
-  if (!Number.isFinite(totalSeconds) || totalSeconds < 0) return "00:00";
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = Math.floor(totalSeconds % 60);
-  return `${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
-}
+import {
+  formatFirestoreDate,
+  formatMediaTime,
+  guessMediaType,
+} from "@/lib/format";
+import FloatingNavClearance from "@/components/ui/FloatingNavClearance";
 
 function VideoMediaPlayer({ url, title }: { url: string; title: string }) {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -653,7 +629,7 @@ export default function ItemPanel({ itemId }: { itemId: string }) {
                 </>
               )}
               <p className="text-xs text-zinc-600">
-                {addedByName ?? item.added_by} · {formatDate(item.created_at)}
+                {addedByName ?? item.added_by} · {formatFirestoreDate(item.created_at)}
               </p>
             </div>
 
@@ -687,7 +663,7 @@ export default function ItemPanel({ itemId }: { itemId: string }) {
                             {otherTitles.length > 0 ? otherTitles.join(" · ") : "connection"}
                           </p>
                           <p className="text-xs text-zinc-600">
-                            {conn.created_by} · {formatDate(conn.created_at)}
+                            {conn.created_by} · {formatFirestoreDate(conn.created_at)}
                           </p>
                         </div>
                         {conn.audio_url && (
@@ -702,8 +678,7 @@ export default function ItemPanel({ itemId }: { itemId: string }) {
           </>
         )}
 
-        {/* Bottom padding for floating nav clearance */}
-        <div className="h-16" />
+        <FloatingNavClearance />
       </div>
     </div>
   );

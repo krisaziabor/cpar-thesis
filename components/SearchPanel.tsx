@@ -4,6 +4,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { subscribeToItems } from "@/lib/items";
 import { usePanelHistory } from "@/lib/panel-history-context";
 import type { Item } from "@/lib/types";
+import TextInput from "@/components/ui/TextInput";
+import PanelIntro from "@/components/ui/PanelIntro";
+import FloatingNavClearance from "@/components/ui/FloatingNavClearance";
 
 function normalized(value: string): string {
   return value.trim().toLowerCase();
@@ -49,17 +52,16 @@ export default function SearchPanel() {
 
   return (
     <div className="space-y-4 px-6 py-6">
-      <div className="space-y-1">
-        <p className="font-lector text-sm text-zinc-300">Search</p>
-        <p className="text-xs text-zinc-500">Find texts by title, creator, tag, or transcript.</p>
-      </div>
+      <PanelIntro
+        title="Search"
+        subtitle="Find texts by title, creator, tag, or transcript."
+      />
 
-      <input
+      <TextInput
         ref={inputRef}
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         placeholder="Search the library..."
-        className="w-full rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-200 outline-none transition-colors placeholder:text-zinc-600 focus:border-zinc-600"
       />
 
       {loading && <p className="text-xs text-zinc-600">Loading library...</p>}
@@ -89,8 +91,7 @@ export default function SearchPanel() {
         </div>
       )}
 
-      {/* Bottom padding for floating nav clearance */}
-      <div className="h-16" />
+      <FloatingNavClearance />
     </div>
   );
 }

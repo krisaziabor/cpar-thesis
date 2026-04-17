@@ -9,6 +9,8 @@ import {
   subscribeToAllConnectionItems,
 } from "@/lib/items";
 import type { Item, Connection, ConnectionItem } from "@/lib/types";
+import { formatFirestoreDate, tsMillis } from "@/lib/format";
+import PageLoading from "@/components/ui/PageLoading";
 
 type ActivityEntry =
   | {
@@ -27,25 +29,6 @@ type ActivityEntry =
       connectionId: string;
       connectedItems: Item[];
     };
-
-function tsMillis(ts: unknown): number {
-  if (ts && typeof ts === "object" && "toDate" in ts) {
-    return (ts as { toDate: () => Date }).toDate().getTime();
-  }
-  return 0;
-}
-
-function formatDate(ts: unknown): string {
-  if (!ts) return "—";
-  if (typeof ts === "object" && ts !== null && "toDate" in ts) {
-    return (ts as { toDate: () => Date }).toDate().toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    });
-  }
-  return String(ts);
-}
 
 export default function ActivityPage() {
   const { loading, user, role, signOut } = useAuth();
@@ -104,13 +87,7 @@ export default function ActivityPage() {
     );
   }, [items, connections, connectionItems]);
 
-  if (loading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-white dark:bg-black">
-        <span className="font-mono text-xs text-zinc-400">loading…</span>
-      </div>
-    );
-  }
+  if (loading) return <PageLoading />;
   if (!user) return null;
 
   return (
@@ -222,7 +199,7 @@ export default function ActivityPage() {
                 )}
               </div>
               <span className="ml-4 shrink-0 font-mono text-xs text-zinc-400">
-                {formatDate(a.created_at)}
+                {formatFirestoreDate(a.created_at)}
               </span>
             </div>
           ))}

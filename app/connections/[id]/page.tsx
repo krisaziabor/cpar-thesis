@@ -13,18 +13,8 @@ import {
 } from "@/lib/items";
 import { saveToKanon, removeFromKanon, subscribeToKanonSaveStatus } from "@/lib/kanon";
 import type { Connection, Item, Response } from "@/lib/types";
-
-function formatDate(ts: unknown): string {
-  if (!ts) return "—";
-  if (typeof ts === "object" && ts !== null && "toDate" in ts) {
-    return (ts as { toDate: () => Date }).toDate().toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    });
-  }
-  return String(ts);
-}
+import { formatFirestoreDate } from "@/lib/format";
+import PageLoading from "@/components/ui/PageLoading";
 
 export default function ConnectionDetailPage() {
   const { loading: authLoading, user, role } = useAuth();
@@ -67,13 +57,7 @@ export default function ConnectionDetailPage() {
     return unsub;
   }, [user?.email, id]);
 
-  if (authLoading || connection === undefined) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-white dark:bg-black">
-        <span className="font-mono text-xs text-zinc-400">loading…</span>
-      </div>
-    );
-  }
+  if (authLoading || connection === undefined) return <PageLoading />;
   if (!user) return null;
 
   if (connection === null) {
@@ -165,7 +149,7 @@ export default function ConnectionDetailPage() {
             ))}
           </div>
           <p className="font-mono text-xs text-zinc-400">
-            by {connection.created_by} · {formatDate(connection.created_at)}
+            by {connection.created_by} · {formatFirestoreDate(connection.created_at)}
           </p>
         </div>
 
@@ -207,7 +191,7 @@ export default function ConnectionDetailPage() {
             {responses.map((r) => (
               <div key={r.id} className="flex flex-col gap-2 py-4">
                 <p className="font-mono text-xs text-zinc-500">
-                  {r.created_by} · {formatDate(r.created_at)}
+                  {r.created_by} · {formatFirestoreDate(r.created_at)}
                 </p>
                 {r.audio_url && (
                   <audio src={r.audio_url} controls className="w-full" />
