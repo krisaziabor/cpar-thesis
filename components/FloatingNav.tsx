@@ -56,7 +56,7 @@ function MorphingText({
   className?: string;
 }) {
   return (
-    <span className={`whitespace-nowrap font-sans text-sm ${className ?? ""}`}>
+    <span className={`whitespace-nowrap font-lector text-sm ${className ?? ""}`}>
       <AnimatePresence mode="popLayout" initial={false}>
         {text.split("").map((char, i) => (
           <motion.span
@@ -104,7 +104,7 @@ function StatusMessageCard({ message }: { message: NavStatusMessage }) {
       {hasThumbnails && !isError && <ThumbnailCycler thumbnails={message.thumbnails!} />}
       {shouldReduceMotion ? (
         <span
-          className={`whitespace-nowrap font-sans text-sm ${
+          className={`whitespace-nowrap font-lector text-sm ${
             isError ? "text-amber-300" : "text-zinc-300"
           }`}
         >
@@ -239,7 +239,7 @@ export default function FloatingNav() {
               transition={{ duration: MOTION_DURATION.standard, ease: EASE_OUT }}
               className="overflow-hidden border-b border-zinc-800"
             >
-              <div className="flex flex-col gap-2 px-4 py-3">
+              <div className="flex flex-col gap-2 px-4 py-3 font-lector">
                 <p className="text-xs text-zinc-400">
                   Select thumbnails in the graph to connect them.
                 </p>
@@ -284,7 +284,7 @@ export default function FloatingNav() {
               initial={{ opacity: 0, y: 4 }}
               animate={{ opacity: 1, y: 0, transition: { duration: MOTION_DURATION.standard, ease: EASE_OUT } }}
               exit={{ opacity: 0, transition: { duration: MOTION_DURATION.fast, ease: EASE_OUT } }}
-              className="flex items-stretch divide-x divide-zinc-800 font-sans"
+              className="flex items-stretch divide-x divide-zinc-800 font-lector"
             >
               <button
                 onClick={() => handleTabPress(isAddActive, "/?panel=add")}
@@ -342,7 +342,7 @@ export default function FloatingNav() {
               initial={{ opacity: 0, y: 4 }}
               animate={{ opacity: 1, y: 0, transition: { duration: MOTION_DURATION.standard, ease: EASE_OUT } }}
               exit={{ opacity: 0, transition: { duration: MOTION_DURATION.fast, ease: EASE_OUT } }}
-              className="w-full px-5 py-2.5 text-center font-sans text-sm tracking-tight text-zinc-300 transition-colors hover:bg-zinc-900 hover:text-zinc-50"
+              className="w-full px-5 py-2.5 text-center font-lector text-sm tracking-tight text-zinc-300 transition-colors hover:bg-zinc-900 hover:text-zinc-50"
             >
               Kanon
             </motion.button>
