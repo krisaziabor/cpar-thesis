@@ -475,7 +475,7 @@ function HomeInner() {
             backLabel={panelBackEntry?.label}
             headerActions={
               canEditPanelItem ? (
-                <div className="flex items-center gap-3 font-lector text-sm">
+                <div className="flex items-center gap-3 font-sans text-sm">
                   {!itemEditRequested ? (
                     <>
                       <button
@@ -610,7 +610,7 @@ function HomeInner() {
               transition={{ duration: 0.2, ease: [0.215, 0.61, 0.355, 1] }}
               className="w-full max-w-sm rounded-lg border border-zinc-800 bg-zinc-950 p-5 shadow-[0_20px_60px_rgba(0,0,0,0.6)]"
             >
-              <h3 className="font-lector text-lg text-zinc-100">Delete record?</h3>
+              <h3 className="font-sans text-lg font-medium tracking-tight text-zinc-100">Delete record?</h3>
               <p className="mt-2 font-sans text-sm text-zinc-400">
                 This action will permanently remove "{panelItem.title}" and its media.
               </p>

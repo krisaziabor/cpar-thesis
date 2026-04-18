@@ -55,7 +55,7 @@ export default function FeedbackPanel() {
       className="space-y-4 px-6 py-6"
     >
       <div className="space-y-1">
-        <p className="font-lector text-sm text-zinc-300">Share feedback</p>
+        <p className="font-lector text-sm tracking-tight text-zinc-300">Share feedback</p>
         <p className="text-xs text-zinc-500">
           Let me know what is working, what feels off, or what you want next.
         </p>

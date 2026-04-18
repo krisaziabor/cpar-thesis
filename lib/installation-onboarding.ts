@@ -97,19 +97,26 @@ export async function submitProfileSetup(
   icon?: string
 ): Promise<void> {
   if (!db) return;
-  await setDoc(
-    docRef(email),
-    {
-      user_email: email,
-      user_name: name,
-      profile_name: name,
-      ...(icon ? { profile_icon: icon } : {}),
-      profile_setup_at: serverTimestamp(),
-      created_at: serverTimestamp(),
-      updated_at: serverTimestamp(),
-    },
-    { merge: true }
-  );
+  await Promise.all([
+    setDoc(
+      docRef(email),
+      {
+        user_email: email,
+        user_name: name,
+        profile_name: name,
+        ...(icon ? { profile_icon: icon } : {}),
+        profile_setup_at: serverTimestamp(),
+        created_at: serverTimestamp(),
+        updated_at: serverTimestamp(),
+      },
+      { merge: true }
+    ),
+    setDoc(
+      doc(db, "whitelist", email.trim().toLowerCase()),
+      { name },
+      { merge: true }
+    ),
+  ]);
 }
 
 /** Step 1 — save media opt-in decision. */

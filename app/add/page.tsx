@@ -1345,7 +1345,7 @@ function AddItemPageInner({
               transition={{ duration: shouldReduceMotion ? 0 : MOTION_DURATION.panel, ease: EASE_OUT }}
               className="px-6 pt-6 max-w-sm"
             >
-              <p className="font-lector text-sm text-zinc-100">Save your progress?</p>
+              <p className="font-sans text-sm font-medium text-zinc-100">Save your progress?</p>
               <div className="mt-4 flex items-center gap-4">
                 <button
                   type="button"
@@ -1390,7 +1390,7 @@ function AddItemPageInner({
           >
             <div className="flex flex-1 flex-col space-y-5 min-h-0">
               <div>
-                <h1 className="font-lector text-lg text-zinc-100">Add record(s)</h1>
+                <h1 className="font-lector text-lg tracking-tight text-zinc-100">Add record(s)</h1>
                 <p className="mt-1 text-xs text-zinc-500">
                   Paste a URL or upload a file to continue.
                 </p>
@@ -1575,7 +1575,7 @@ function AddItemPageInner({
                           />
                         </div>
                         <div className="flex min-w-0 flex-1 items-center">
-                          <p className="truncate font-lector text-xs text-zinc-300">{pendingCard.sourceLabel}</p>
+                          <p className="truncate font-sans text-xs text-zinc-300">{pendingCard.sourceLabel}</p>
                         </div>
                       </div>
                     </motion.div>
@@ -1855,7 +1855,7 @@ function AddItemPageInner({
                                 className="flex min-h-20 flex-col"
                               >
                                 <p className="truncate font-lector text-sm text-zinc-100">{item.title}</p>
-                                {creatorLine && <p className="mt-1 truncate font-lector text-[11px] text-zinc-500">{creatorLine}</p>}
+                                {creatorLine && <p className="mt-1 truncate font-sans text-[11px] text-zinc-500">{creatorLine}</p>}
                                 <div className="mt-auto flex items-center gap-3 pt-1">
                                   <button
                                     type="button"
@@ -1967,7 +1967,7 @@ function AddItemPageInner({
                 }`}
               >
                 <div className="space-y-1">
-                  <p className="font-lector text-sm">Upload file</p>
+                  <p className="font-sans text-sm font-medium">Upload file</p>
                   <p className="text-xs text-zinc-600">Drag and drop image/PDF here, or click to browse.</p>
                 </div>
               </div>
@@ -2002,7 +2002,7 @@ function AddItemPageInner({
             className="space-y-5"
           >
             <div>
-              <h1 className="font-lector text-base text-zinc-100">Edit record details</h1>
+              <h1 className="font-lector text-base tracking-tight text-zinc-100">Edit record details</h1>
               {queuedItems.length > 1 && (
                 <p className="mt-1 text-xs text-zinc-500">
                   Record {detailsIndex + 1} of {queuedItems.length}
@@ -2069,7 +2069,7 @@ function AddItemPageInner({
                               if (typeBlurTimerRef.current) clearTimeout(typeBlurTimerRef.current);
                               setTypeValue(itemType);
                             }}
-                            className="block w-full px-3 py-2 text-left font-lector text-sm text-zinc-300 transition-colors hover:bg-zinc-900 hover:text-zinc-100"
+                            className="block w-full px-3 py-2 text-left font-sans text-sm text-zinc-300 transition-colors hover:bg-zinc-900 hover:text-zinc-100"
                           >
                             {itemType}
                           </button>
@@ -2081,7 +2081,7 @@ function AddItemPageInner({
                               if (typeBlurTimerRef.current) clearTimeout(typeBlurTimerRef.current);
                               setTypeValue(normalizedDraftType);
                             }}
-                            className="block w-full border-t border-zinc-800 px-3 py-2 text-left font-lector text-sm text-zinc-100 transition-colors hover:bg-zinc-900"
+                            className="block w-full border-t border-zinc-800 px-3 py-2 text-left font-sans text-sm text-zinc-100 transition-colors hover:bg-zinc-900"
                           >
                             Create &quot;{normalizedDraftType}&quot;
                           </button>
@@ -2120,7 +2120,7 @@ function AddItemPageInner({
                   <button
                     type="button"
                     onClick={() => patch({ mediaDate: fetchedMediaDate })}
-                    className="font-lector text-xs text-zinc-400 transition-colors duration-150 ease-[ease] hover:text-zinc-100"
+                    className="font-sans text-xs text-zinc-400 transition-colors duration-150 ease-[ease] hover:text-zinc-100"
                   >
                     Reset to fetched date
                   </button>
@@ -2231,7 +2231,7 @@ function AddItemPageInner({
                   setStep("record");
                 }}
                 disabled={!canContinueDetails}
-                className="font-lector text-sm text-zinc-100 transition-colors duration-150 ease-[ease] hover:text-white disabled:opacity-40"
+                className="font-sans text-sm text-zinc-100 transition-colors duration-150 ease-[ease] hover:text-white disabled:opacity-40"
               >
                 {detailsIndex < queuedItems.length - 1 ? "Next record" : "Add narrative"}
               </button>
@@ -2249,7 +2249,7 @@ function AddItemPageInner({
             className="space-y-5"
           >
             <div>
-              <h1 className="text-base font-medium text-zinc-100">Record narratives</h1>
+              <h1 className="font-lector text-base tracking-tight text-zinc-100">Record narratives</h1>
               <p className="mt-1 text-xs text-zinc-500">
                 {destination === "holding"
                   ? "Record in sequence, or skip recordings and save directly to Hold."
@@ -2269,7 +2269,7 @@ function AddItemPageInner({
                 <p className="text-xs text-zinc-500">
                   Item {recordIndex + 1} of {recordingQueue.length}
                 </p>
-                <p className="text-sm text-zinc-100">{activeQueueItem.title}</p>
+                <p className="font-lector text-sm text-zinc-100">{activeQueueItem.title}</p>
                 <p className="text-xs text-zinc-500">
                   {[activeQueueItem.creator, activeQueueItem.mediaDate].filter(Boolean).join(" · ")}
                 </p>
@@ -2304,7 +2304,7 @@ function AddItemPageInner({
                       void handleSubmitBatch();
                     }
                   }}
-                  className="font-lector text-sm text-zinc-500 transition-colors duration-150 ease-[ease] hover:text-zinc-200"
+                  className="font-sans text-sm text-zinc-500 transition-colors duration-150 ease-[ease] hover:text-zinc-200"
                 >
                   Skip
                 </button>
@@ -2313,7 +2313,7 @@ function AddItemPageInner({
                 <button
                   onClick={() => setRecordIndex((idx) => idx + 1)}
                   disabled={destination === "library" ? !canAdvanceRecording : false}
-                  className="font-lector text-sm text-zinc-100 transition-colors duration-150 ease-[ease] hover:text-white disabled:opacity-40"
+                  className="font-sans text-sm text-zinc-100 transition-colors duration-150 ease-[ease] hover:text-white disabled:opacity-40"
                 >
                   Next recording
                 </button>
@@ -2321,7 +2321,7 @@ function AddItemPageInner({
                 <button
                   onClick={handleSubmitBatch}
                   disabled={destination === "library" ? !canAdvanceRecording : false}
-                  className="font-lector text-sm text-zinc-100 transition-colors duration-150 ease-[ease] hover:text-white disabled:opacity-40"
+                  className="font-sans text-sm text-zinc-100 transition-colors duration-150 ease-[ease] hover:text-white disabled:opacity-40"
                 >
                   Submit all
                 </button>
@@ -2372,4 +2372,4 @@ const primaryBtn =
 
 const ghostBtn = "text-xs text-zinc-500 transition-colors duration-150 ease-[ease] hover:text-zinc-200 disabled:opacity-40";
 const sourceActionPrimaryBtn =
-  "font-lector text-sm tracking-tight text-zinc-100 transition-colors duration-150 ease-[ease] hover:text-white disabled:opacity-40";
+  "font-sans text-sm tracking-tight text-zinc-100 transition-colors duration-150 ease-[ease] hover:text-white disabled:opacity-40";

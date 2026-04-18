@@ -113,7 +113,7 @@ export default function ConnectPanel({
       {mode === "select" ? (
         <div className="space-y-5">
           <div>
-            <h2 className="font-lector text-xl text-zinc-100">Search and select</h2>
+            <h2 className="font-lector text-xl tracking-tight text-zinc-100">Search and select</h2>
             <p className="mt-1 text-xs text-zinc-500">
               Pick at least two elements, then continue to recording.
             </p>
@@ -174,7 +174,7 @@ export default function ConnectPanel({
       ) : (
         <div className="space-y-6">
           <div>
-            <h2 className="font-lector text-xl text-zinc-100">Record the connection</h2>
+            <h2 className="font-lector text-xl tracking-tight text-zinc-100">Record the connection</h2>
             <p className="mt-1 text-xs text-zinc-500">
               Confirm the selected elements, record your narrative, then send.
             </p>

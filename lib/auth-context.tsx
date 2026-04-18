@@ -120,7 +120,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           const selfRegistered = !access.firstName;
           setUser(firebaseUser);
           setRole(access.role);
-          setFirstName(access.firstName);
           setAuthError(null);
           try {
             await loadOnboarding(firebaseUser.email, selfRegistered);
@@ -130,14 +129,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           try {
             const profile = await getUserProfile(firebaseUser.email);
             setAvatarColors(profile?.avatar_colors ?? null);
-            // If whitelist had no firstName (typical for self-registered users),
-            // fall back to the name saved during onboarding (users/{email}.name)
-            // so the floating-nav welcome greeting can personalize.
-            if (!access.firstName && profile?.name) {
-              const derived = profile.name.trim().split(/\s+/)[0] ?? null;
-              if (derived) setFirstName(derived);
-            }
+            const profileFirstName = profile?.name?.trim().split(/\s+/)[0] ?? null;
+            setFirstName(access.firstName ?? profileFirstName);
           } catch {
+            setFirstName(access.firstName);
             setAvatarColors(null);
           }
         }
@@ -186,8 +181,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const profile = await getUserProfile(user.email);
         if (profile?.avatar_colors) setAvatarColors(profile.avatar_colors);
         if (!firstName && profile?.name) {
-          const derived = profile.name.trim().split(/\s+/)[0] ?? null;
-          if (derived) setFirstName(derived);
+          setFirstName(profile.name.trim().split(/\s+/)[0] ?? null);
         }
       } catch {}
     }
