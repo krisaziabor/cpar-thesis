@@ -444,8 +444,12 @@ export default function OnboardingPage() {
     if (!allPicked) return;
     setSubmitting(true);
     await submitAvatarColors(activeEmail, colors);
+    try {
+      sessionStorage.setItem("kanon-just-onboarded", "1");
+    } catch {}
     await refreshOnboarding();
     setSubmitting(false);
+    router.replace("/");
   }
 
   /* ── Derived state ─────────────────────────────────────────────────────── */
@@ -582,17 +586,13 @@ export default function OnboardingPage() {
                   shouldReduceMotion ? { duration: 0 } : REVEAL.textFade
                 }
               >
-                {revealTranscript ? (
+                {revealTranscript && (
                   <SyncedTranscript
                     audioUrl={revealTranscript.audio_url}
                     words={revealTranscript.words}
                     onPlayStart={handleRevealPlayStart}
                     onFinished={() => setRevealListened(true)}
                   />
-                ) : (
-                  <p className="font-sans text-xs text-white/50">
-                    This is yours.
-                  </p>
                 )}
               </motion.div>
 
@@ -1031,26 +1031,6 @@ export default function OnboardingPage() {
         )}
       </AnimatePresence>
 
-      {/* ── Complete — enter app ─────────────────────────────────────────── */}
-      <AnimatePresence>
-        {activeStep === "complete" && !isLoading && (
-          <div className="fixed inset-0 z-10 flex items-center justify-center">
-            <motion.div {...m}>
-              <button
-                onClick={() => {
-                  try {
-                    sessionStorage.setItem("kanon-just-onboarded", "1");
-                  } catch {}
-                  router.replace("/");
-                }}
-                className="font-sans text-xs text-zinc-300 transition-colors hover:text-zinc-50"
-              >
-                Done
-              </button>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
     </div>
   );
 }

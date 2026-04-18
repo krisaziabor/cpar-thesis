@@ -120,7 +120,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           const selfRegistered = !access.firstName;
           setUser(firebaseUser);
           setRole(access.role);
-          setFirstName(access.firstName);
           setAuthError(null);
           try {
             await loadOnboarding(firebaseUser.email, selfRegistered);
@@ -130,7 +129,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           try {
             const profile = await getUserProfile(firebaseUser.email);
             setAvatarColors(profile?.avatar_colors ?? null);
+            const profileFirstName = profile?.name?.trim().split(/\s+/)[0] ?? null;
+            setFirstName(access.firstName ?? profileFirstName);
           } catch {
+            setFirstName(access.firstName);
             setAvatarColors(null);
           }
         }
@@ -177,6 +179,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         const profile = await getUserProfile(user.email);
         if (profile?.avatar_colors) setAvatarColors(profile.avatar_colors);
+        if (!firstName && profile?.name) {
+          setFirstName(profile.name.trim().split(/\s+/)[0] ?? null);
+        }
       } catch {}
     }
   }
