@@ -4,9 +4,9 @@ import { useState, useEffect } from "react";
 import {
   signInWithPopup,
   GoogleAuthProvider,
-  sendSignInLinkToEmail,
   isSignInWithEmailLink,
   signInWithEmailLink,
+  signOut,
 } from "firebase/auth";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
@@ -52,6 +52,27 @@ export default function LoginPage() {
     if (!loading && user) router.replace("/");
   }, [user, loading, router]);
 
+  // Magic links often open in a new tab; Firebase syncs auth across same-origin tabs, but
+  // when you return to this tab we re-check so you are not stuck on login after signing in elsewhere.
+  useEffect(() => {
+    if (!auth || typeof window === "undefined") return;
+    const firebaseAuth = auth;
+
+    function redirectIfAlreadySignedIn() {
+      if (document.visibilityState !== "visible") return;
+      if (firebaseAuth.currentUser) {
+        router.replace("/");
+      }
+    }
+
+    document.addEventListener("visibilitychange", redirectIfAlreadySignedIn);
+    window.addEventListener("focus", redirectIfAlreadySignedIn);
+    return () => {
+      document.removeEventListener("visibilitychange", redirectIfAlreadySignedIn);
+      window.removeEventListener("focus", redirectIfAlreadySignedIn);
+    };
+  }, [auth, router]);
+
   useEffect(() => {
     if (!auth || typeof window === "undefined") return;
     if (!isSignInWithEmailLink(auth, window.location.href)) return;
@@ -84,28 +105,40 @@ export default function LoginPage() {
 
   const error = localError || authError || "";
 
-  async function handleGoogleSignIn(emailHint?: string) {
+  async function handleGoogleSignIn(expectedEmail?: string) {
     if (!auth) { setError("Firebase is not configured."); return; }
     setLocalError("");
     setSigningIn(true);
 
-    const normalizedHint = emailHint?.trim().toLowerCase() ?? "";
-    if (normalizedHint) {
+    const normalizedExpected = expectedEmail?.trim().toLowerCase() ?? "";
+    if (normalizedExpected) {
       googleProvider.setCustomParameters({
-        login_hint: normalizedHint,
-        ...(normalizedHint.endsWith("@yale.edu") ? { hd: "yale.edu" } : {}),
+        login_hint: normalizedExpected,
+        ...(normalizedExpected.endsWith("@yale.edu") ? { hd: "yale.edu" } : {}),
       });
     } else {
       googleProvider.setCustomParameters({});
     }
 
     try {
-      await signInWithPopup(auth, googleProvider);
+      const result = await signInWithPopup(auth, googleProvider);
+      if (normalizedExpected) {
+        const googleEmail = result.user.email?.trim().toLowerCase() ?? "";
+        if (googleEmail !== normalizedExpected) {
+          await signOut(auth);
+          const displayEmail = expectedEmail?.trim() || normalizedExpected;
+          setLocalError(
+            `Sign in with the Google account for ${displayEmail}—the same address you entered.`,
+          );
+          return;
+        }
+      }
     } catch (err: unknown) {
       const code = (err as { code?: string }).code;
       if (code !== "auth/popup-closed-by-user" && code !== "auth/cancelled-popup-request") {
         setLocalError(err instanceof Error ? err.message : "Sign-in failed.");
       }
+    } finally {
       setSigningIn(false);
     }
   }
@@ -155,10 +188,18 @@ export default function LoginPage() {
     }
 
     try {
-      await sendSignInLinkToEmail(auth, gatedEmail, {
-        url: `${window.location.origin}/login`,
-        handleCodeInApp: true,
+      const res = await fetch("/api/auth/send-magic-link", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: gatedEmail }),
       });
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) {
+        setLocalError(
+          typeof data.error === "string" ? data.error : "Failed to send sign-in link.",
+        );
+        return;
+      }
       localStorage.setItem(EMAIL_STORAGE_KEY, gatedEmail);
       setStage("sent");
     } catch (err: unknown) {
@@ -242,33 +283,36 @@ export default function LoginPage() {
                       ? `Hey ${gatedFirstName}!`
                       : "Welcome back! Glad you are here :)"}
                 </p>
-                <button
-                  onClick={() => void handleGoogleSignIn(gatedEmail)}
-                  className="flex items-center gap-2 font-sans text-xs text-zinc-300 transition-colors hover:text-zinc-50"
-                >
-                  <GoogleIcon />
-                  {isNewUser ? "Sign up with Google" : "Continue with Google"}
-                </button>
-                <div className="flex items-center gap-4">
+                <div className="flex w-full flex-row flex-wrap items-center gap-x-4 gap-y-3">
                   <button
+                    type="button"
+                    onClick={() => void handleGoogleSignIn(gatedEmail)}
+                    className="flex shrink-0 items-center gap-2 font-sans text-xs text-zinc-300 transition-colors hover:text-zinc-50"
+                  >
+                    <GoogleIcon />
+                    {isNewUser ? "Sign up with Google" : "Continue with Google"}
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => void handleSendMagicLink()}
-                    className="font-sans text-xs text-zinc-500 transition-colors hover:text-zinc-300"
+                    className="shrink-0 font-sans text-xs text-zinc-500 transition-colors hover:text-zinc-300"
                   >
                     {isNewUser ? "Send sign-up link" : "Send magic link"}
                   </button>
-                  <button
-                    onClick={() => {
-                      setStage("gate");
-                      setEmailInput("");
-                      setGatedEmail("");
-                      setGatedFirstName(null);
-                      setIsNewUser(false);
-                    }}
-                    className="font-sans text-xs text-zinc-500 transition-colors hover:text-zinc-300"
-                  >
-                    Use a different email
-                  </button>
                 </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setStage("gate");
+                    setEmailInput("");
+                    setGatedEmail("");
+                    setGatedFirstName(null);
+                    setIsNewUser(false);
+                  }}
+                  className="font-sans text-xs text-zinc-500 transition-colors hover:text-zinc-300"
+                >
+                  Use a different email
+                </button>
               </motion.div>
             )}
 
@@ -281,7 +325,7 @@ export default function LoginPage() {
                 <p className="font-sans text-xs text-zinc-300">
                   Magic link sent to {gatedEmail}.
                 </p>
-                <p className="font-sans text-[11px] text-zinc-500">
+                <p className="font-sans text-xs text-zinc-500">
                   Check your email (spam included)
                 </p>
                 <div className="flex items-center gap-4">
