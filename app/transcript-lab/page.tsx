@@ -155,7 +155,7 @@ export default function TranscriptLabPage() {
     <div className="min-h-screen bg-black p-6">
       <div className="mx-auto max-w-3xl space-y-6">
         <div>
-          <h1 className="font-lector text-xl text-zinc-200">
+          <h1 className="font-lector text-xl tracking-tight text-zinc-200">
             Onboarding Audio
           </h1>
           <p className="mt-1 font-sans text-xs text-zinc-500">
@@ -217,7 +217,7 @@ export default function TranscriptLabPage() {
                       <span className={`inline-block h-2 w-2 rounded-full ${
                         isReady ? "bg-emerald-500" : isTranscribing ? "bg-amber-500 animate-pulse" : isError ? "bg-red-500" : "bg-zinc-700"
                       }`} />
-                      <p className="font-lector text-xs text-zinc-200">{slot.label}</p>
+                      <p className="font-sans text-xs text-zinc-200">{slot.label}</p>
                       <code className="font-mono text-[10px] text-zinc-600">{slot.name}</code>
                     </div>
                     <p className="mt-0.5 font-sans text-[11px] text-zinc-500">

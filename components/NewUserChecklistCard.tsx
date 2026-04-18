@@ -108,7 +108,7 @@ export default function NewUserChecklistCard({ userEmail }: NewUserChecklistCard
             collapsed ? "" : "border-b border-zinc-800"
           } w-full text-left`}
         >
-          <p className="font-lector text-sm text-zinc-200">Getting Started</p>
+          <p className="font-lector text-sm tracking-tight text-zinc-200">Getting Started</p>
           <span className="text-xs text-zinc-500 transition-colors hover:text-zinc-300">
             {collapsed ? "▸" : "▾"}
           </span>

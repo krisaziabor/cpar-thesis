@@ -218,7 +218,7 @@ export default function ActivityPanel() {
   return (
     <div className="space-y-5 px-6 py-6">
       <div className="space-y-1">
-        <p className="font-lector text-base text-zinc-300">Activity</p>
+        <p className="font-lector text-sm tracking-tight text-zinc-300">Activity</p>
         <p className="text-xs text-zinc-500">
           {dataLoading
             ? "Loading activity..."

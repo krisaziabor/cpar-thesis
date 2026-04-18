@@ -239,7 +239,7 @@ export default function FloatingNav() {
               transition={{ duration: MOTION_DURATION.standard, ease: EASE_OUT }}
               className="overflow-hidden border-b border-zinc-800"
             >
-              <div className="flex flex-col gap-2 px-4 py-3">
+              <div className="flex flex-col gap-2 px-4 py-3 font-lector">
                 <p className="text-xs text-zinc-400">
                   Select thumbnails in the graph to connect them.
                 </p>

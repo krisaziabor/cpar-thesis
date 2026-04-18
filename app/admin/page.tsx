@@ -544,7 +544,7 @@ export default function AdminPage() {
   if (!user || role !== "admin") {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-black">
-        <p className="font-lector text-lg text-zinc-400">404</p>
+        <p className="font-sans text-lg font-medium text-zinc-400">404</p>
         <p className="text-sm text-zinc-500">This page could not be found.</p>
         <Link
           href="/"

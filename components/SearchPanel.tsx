@@ -50,7 +50,7 @@ export default function SearchPanel() {
   return (
     <div className="space-y-4 px-6 py-6">
       <div className="space-y-1">
-        <p className="font-lector text-sm text-zinc-300">Search</p>
+        <p className="font-lector text-sm tracking-tight text-zinc-300">Search</p>
         <p className="text-xs text-zinc-500">Find texts by title, creator, tag, or transcript.</p>
       </div>
 
@@ -80,7 +80,7 @@ export default function SearchPanel() {
               className="flex items-center justify-between border-b border-zinc-800 py-2.5 text-left transition-colors hover:bg-zinc-900/40 last:border-0"
             >
               <div className="min-w-0">
-                <p className="truncate text-sm text-zinc-200">{item.title}</p>
+                <p className="truncate font-lector text-sm text-zinc-200">{item.title}</p>
                 <p className="truncate text-xs text-zinc-500">{item.creator}</p>
               </div>
               <span className="ml-3 shrink-0 text-[11px] text-zinc-600">{item.type}</span>

@@ -37,7 +37,7 @@ export default function ColophonPage() {
         </section>
 
         <section className="space-y-3">
-        <h2 className="text-md font-lector">Typography</h2>
+        <h2 className="font-lector text-base tracking-tight">Typography</h2>
         <p className="text-sm leading-6 text-zinc-400">
           Lector by Forgotten Shapes, Die Grotesk by Klim Font Foundry
         </p>

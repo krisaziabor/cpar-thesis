@@ -211,11 +211,11 @@ export default function MarkdownEditor({
           onChange={(e) => onChange(e.target.value)}
           onKeyDown={handleKeyDown}
           placeholder={placeholder}
-          className="min-h-[200px] resize-y bg-transparent px-4 py-3 font-lector text-xs leading-relaxed text-zinc-300 placeholder:text-zinc-600 focus:outline-none"
+          className="min-h-[200px] resize-y bg-transparent px-4 py-3 font-sans text-xs leading-relaxed text-zinc-300 placeholder:text-zinc-600 focus:outline-none"
         />
       ) : (
         <div
-          className="max-h-[300px] min-h-[200px] overflow-y-auto px-4 py-3 font-lector text-xs leading-relaxed text-zinc-300"
+          className="max-h-[300px] min-h-[200px] overflow-y-auto px-4 py-3 font-sans text-xs leading-relaxed text-zinc-300"
           dangerouslySetInnerHTML={{
             __html: renderMarkdown(value),
           }}

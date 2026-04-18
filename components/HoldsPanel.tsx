@@ -67,7 +67,7 @@ function UserCard({
         className="flex w-full items-center justify-between px-4 py-3 text-left transition-colors hover:bg-zinc-900/50"
       >
         <div className="min-w-0">
-          <p className="truncate font-lector text-sm text-zinc-100">
+          <p className="truncate font-sans text-sm font-medium text-zinc-100">
             {firstName}
             {lastName && (
               <span className="text-zinc-400"> {lastName}</span>
@@ -231,7 +231,7 @@ export default function HoldsPanel({ currentUserEmail, initialUserEmail }: Holds
   return (
     <div className="space-y-5 px-6 py-6">
       <div className="space-y-1">
-        <h2 className="font-lector text-lg text-zinc-100">Holds</h2>
+        <h2 className="font-lector text-sm tracking-tight text-zinc-100">Holds</h2>
         <p className="text-xs text-zinc-500">
           Browse records saved by each user.
         </p>
