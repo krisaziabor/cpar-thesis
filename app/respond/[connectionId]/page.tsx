@@ -1,20 +1,64 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import AudioRecorder from "@/components/AudioRecorder";
-import { MOCK_CONNECTIONS, MOCK_ITEMS } from "@/lib/mock-data";
+import {
+  subscribeToConnection,
+  getConnectionItemIds,
+  getConnectionResponse,
+  subscribeToItems,
+  addConnectionResponse,
+} from "@/lib/items";
+import type { Connection, Item, Response } from "@/lib/types";
+
+function formatDate(ts: unknown): string {
+  if (!ts) return "—";
+  if (typeof ts === "object" && ts !== null && "toDate" in ts) {
+    return (ts as { toDate: () => Date }).toDate().toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
+  }
+  return String(ts);
+}
 
 export default function RespondPage() {
   const { loading, user } = useAuth();
   const params = useParams();
+  const searchParams = useSearchParams();
   const router = useRouter();
   const connectionId = params.connectionId as string;
-  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const parentResponseId = searchParams.get("parentResponseId");
 
-  if (loading) {
+  const [connection, setConnection] = useState<Connection | null | undefined>(undefined);
+  const [itemIds, setItemIds] = useState<string[]>([]);
+  const [allItems, setAllItems] = useState<Item[]>([]);
+  const [parentResponse, setParentResponse] = useState<Response | null>(null);
+  const [blob, setBlob] = useState<Blob | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => subscribeToConnection(connectionId, setConnection), [connectionId]);
+  useEffect(() => {
+    getConnectionItemIds(connectionId).then(setItemIds);
+  }, [connectionId]);
+  useEffect(() => subscribeToItems(setAllItems), []);
+  useEffect(() => {
+    if (!parentResponseId) return;
+    let cancelled = false;
+    getConnectionResponse(connectionId, parentResponseId).then((r) => {
+      if (!cancelled) setParentResponse(r);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [connectionId, parentResponseId]);
+
+  if (loading || connection === undefined) {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <span className="font-mono text-xs text-zinc-400">loading…</span>
@@ -23,8 +67,7 @@ export default function RespondPage() {
   }
   if (!user) return null;
 
-  const connection = MOCK_CONNECTIONS.find((c) => c.id === connectionId);
-  if (!connection) {
+  if (connection === null) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-4">
         <p className="text-sm text-zinc-500">Connection not found.</p>
@@ -35,9 +78,33 @@ export default function RespondPage() {
     );
   }
 
-  const items = connection.item_ids.map((id) =>
-    MOCK_ITEMS.find((i) => i.id === id)
-  );
+  const connectedItems = itemIds
+    .map((iid) => allItems.find((i) => i.id === iid))
+    .filter(Boolean) as Item[];
+
+  const respondingLabel = parentResponseId
+    ? parentResponse
+      ? `reply to ${parentResponse.created_by}`
+      : "reply to response"
+    : "respond to connection";
+
+  async function handleSubmit() {
+    if (!user?.email || !blob) return;
+    setSaving(true);
+    setError("");
+    try {
+      await addConnectionResponse(
+        connectionId,
+        blob,
+        user.email,
+        parentResponseId || null
+      );
+      router.push(`/connections/${connectionId}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to submit.");
+      setSaving(false);
+    }
+  }
 
   return (
     <div className="min-h-screen bg-white dark:bg-black">
@@ -49,9 +116,7 @@ export default function RespondPage() {
           >
             ← cancel
           </Link>
-          <span className="font-mono text-xs text-zinc-400">
-            respond to connection
-          </span>
+          <span className="font-mono text-xs text-zinc-400">{respondingLabel}</span>
           <span />
         </div>
       </header>
@@ -60,52 +125,83 @@ export default function RespondPage() {
         <div className="flex flex-col gap-6">
           <div>
             <h1 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">
-              Add your response
+              {parentResponseId ? "Reply to this response" : "Add your response"}
             </h1>
             <p className="mt-1 text-sm text-zinc-500">
               Audio is required for responses.
             </p>
           </div>
 
-          {/* Connection summary */}
+          {/* Context summary */}
           <div className="border border-zinc-200 px-4 py-3 dark:border-zinc-800">
-            <p className="font-mono text-xs text-zinc-400">responding to</p>
+            <p className="font-mono text-xs text-zinc-400">
+              {parentResponseId ? "replying to response on" : "responding to"}
+            </p>
             <div className="mt-1 flex flex-wrap items-center gap-2">
-              {items.map((item, i) => (
-                <span key={item?.id ?? i} className="flex items-center gap-2">
+              {connectedItems.map((item, i) => (
+                <span key={item.id} className="flex items-center gap-2">
                   {i > 0 && (
                     <span className="text-zinc-300 dark:text-zinc-700">·</span>
                   )}
                   <span className="font-medium text-zinc-900 dark:text-zinc-50">
-                    {item?.title ?? "Unknown"}
+                    {item.title}
                   </span>
                 </span>
               ))}
             </div>
             <p className="mt-1 font-mono text-xs text-zinc-400">
-              by {connection.created_by} · {connection.created_at}
+              by {connection.created_by} · {formatDate(connection.created_at)}
             </p>
             {connection.transcript && (
               <p className="mt-2 text-sm italic text-zinc-500 dark:text-zinc-400">
-                "{connection.transcript}"
+                &ldquo;{connection.transcript}&rdquo;
               </p>
+            )}
+
+            {parentResponseId && parentResponse && (
+              <div className="mt-3 border-t border-zinc-200 pt-3 dark:border-zinc-800">
+                <p className="font-mono text-xs text-zinc-400">
+                  response by {parentResponse.created_by} ·{" "}
+                  {formatDate(parentResponse.created_at)}
+                </p>
+                {parentResponse.audio_url && (
+                  <audio
+                    src={parentResponse.audio_url}
+                    controls
+                    className="mt-2 w-full"
+                  />
+                )}
+                {parentResponse.transcript && (
+                  <p className="mt-2 text-sm italic text-zinc-500 dark:text-zinc-400">
+                    &ldquo;{parentResponse.transcript}&rdquo;
+                  </p>
+                )}
+              </div>
             )}
           </div>
 
           <AudioRecorder
-            onRecorded={(_blob, url) => setAudioUrl(url)}
-            prompt="What does this connection bring up for you?"
+            onRecorded={(b) => setBlob(b)}
+            prompt={
+              parentResponseId
+                ? "What do you want to say back?"
+                : "What does this connection bring up for you?"
+            }
           />
+
+          {error && <p className="text-xs text-red-500">{error}</p>}
 
           <div className="flex gap-3">
             <button
-              onClick={() =>
-                router.push(`/connections/${connectionId}`)
-              }
-              disabled={!audioUrl}
+              onClick={() => void handleSubmit()}
+              disabled={!blob || saving}
               className="border border-zinc-900 px-4 py-2 text-sm font-medium text-zinc-900 hover:bg-zinc-900 hover:text-white disabled:opacity-40 dark:border-zinc-100 dark:text-zinc-100 dark:hover:bg-zinc-100 dark:hover:text-zinc-900"
             >
-              submit response
+              {saving
+                ? "submitting…"
+                : parentResponseId
+                  ? "submit reply"
+                  : "submit response"}
             </button>
           </div>
 

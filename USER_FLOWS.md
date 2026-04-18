@@ -47,6 +47,14 @@ _Navigation exists on all pages. Back and exit (with draft/discard options) avai
 3. Records audio, can listen back, then confirms.
 4. Submits, brought back to Connection Detail with new response visible.
 
+### Flow 4: Replying to a Specific Response
+
+1. User opens Connection Detail (or an item's Responses list on the Item panel).
+2. On any existing audio response they see a **Reply** action.
+3. Pressing it opens a recorder anchored to that response, with a summary of who they're replying to.
+4. Records audio, can listen back, then confirms.
+5. Submits — the new response appears threaded underneath the response it replies to, forming an audio conversation. Replies can themselves be replied to, producing nested threads.
+
 > **Note:** User can abandon any flow at any step: option to save as draft or discard. User can navigate back through previous steps.
 
 ### Pages and their respective elements
@@ -57,8 +65,8 @@ _Navigation exists on all pages. Back and exit (with draft/discard options) avai
 - **Item Detail page:** Item title, audio testimony player, creator name & date added, item type/creator/link/tags, list of connections (who made them, whether they have responses), **Connect** action button, back/navigation.
 - **Connect page:** Anchored item summary (pinned), search/browse interface for existing items, selected items list (minimum 1 additional), confirm button.
 - **Audio Record page (for connections):** Summary of items being connected, recording interface, playback to review, re-record option, confirmation button.
-- **Connection Detail page:** Connection summary (which items, who made it, when), audio player for connection testimony, list of responses with their audio players, **Respond** button.
-- **Response Audio page:** Summary of connection being responded to, recording interface, playback to review, re-record option, confirmation button.
+- **Connection Detail page:** Connection summary (which items, who made it, when), audio player for connection testimony, threaded list of responses with their audio players, **Respond** button on the connection and **Reply** button on each response.
+- **Response Audio page:** Summary of connection (or parent response) being responded to, recording interface, playback to review, re-record option, confirmation button. Passing `?parentResponseId=…` anchors the submission as a reply to that specific response instead of to the connection itself.
 
 ---
 

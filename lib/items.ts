@@ -139,6 +139,22 @@ function queueItemResponseTranscript(itemId: string, responseId: string, audioUr
   })();
 }
 
+function queueConnectionResponseTranscript(connectionId: string, responseId: string, audioUrl: string): void {
+  if (!db || !audioUrl) return;
+  void (async () => {
+    const transcript = await requestTranscript(audioUrl);
+    if (!transcript) return;
+    try {
+      await updateDoc(
+        doc(db, "connections", connectionId, "responses", responseId),
+        { transcript }
+      );
+    } catch {
+      // Best-effort background transcription; ignore write failures.
+    }
+  })();
+}
+
 // ─── Published items ──────────────────────────────────────────────────────────
 
 /**
@@ -762,13 +778,75 @@ export function subscribeToResponses(
 }
 
 /**
+ * Create an audio response on a connection.
+ * Stores audio in Storage, writes response doc, then backfills transcript.
+ * If `parentResponseId` is supplied, the new response is threaded as a reply
+ * to that response instead of to the connection itself.
+ */
+export async function addConnectionResponse(
+  connectionId: string,
+  blob: Blob,
+  createdBy: string,
+  parentResponseId?: string | null
+): Promise<string> {
+  if (!db) throw new Error("Firestore not initialised");
+  if (!storage) throw new Error("Storage not initialised");
+
+  const mimeType = blob.type || "audio/webm";
+  const ext = mimeType.includes("mp4")
+    ? "mp4"
+    : mimeType.includes("ogg")
+    ? "ogg"
+    : "webm";
+
+  const responseRef = doc(collection(db, "connections", connectionId, "responses"));
+  const storageRef = ref(
+    storage,
+    `audio/connection_responses/${connectionId}/${responseRef.id}.${ext}`
+  );
+  await uploadBytes(storageRef, blob, { contentType: mimeType });
+  const audioUrl = await getDownloadURL(storageRef);
+
+  const payload: Record<string, unknown> = {
+    connection_id: connectionId,
+    audio_url: audioUrl,
+    transcript: "",
+    created_by: createdBy,
+    created_at: serverTimestamp(),
+  };
+  if (parentResponseId) payload.parent_response_id = parentResponseId;
+
+  await setDoc(responseRef, payload);
+
+  queueConnectionResponseTranscript(connectionId, responseRef.id, audioUrl);
+  return responseRef.id;
+}
+
+/** Fetch a single connection response doc once (no listener). */
+export async function getConnectionResponse(
+  connectionId: string,
+  responseId: string
+): Promise<ConnectionResponse | null> {
+  if (!db) return null;
+  const snap = await getDoc(
+    doc(db, "connections", connectionId, "responses", responseId)
+  );
+  return snap.exists()
+    ? ({ id: snap.id, ...snap.data() } as ConnectionResponse)
+    : null;
+}
+
+/**
  * Create an audio response on an item.
  * Stores audio in Storage, writes response doc, then backfills transcript.
+ * If `parentResponseId` is supplied, the new response is threaded as a reply
+ * to that response instead of to the item itself.
  */
 export async function addItemResponse(
   itemId: string,
   blob: Blob,
-  createdBy: string
+  createdBy: string,
+  parentResponseId?: string | null
 ): Promise<string> {
   if (!db) throw new Error("Firestore not initialised");
   if (!storage) throw new Error("Storage not initialised");
@@ -785,16 +863,29 @@ export async function addItemResponse(
   await uploadBytes(storageRef, blob, { contentType: mimeType });
   const audioUrl = await getDownloadURL(storageRef);
 
-  await setDoc(responseRef, {
+  const payload: Record<string, unknown> = {
     item_id: itemId,
     audio_url: audioUrl,
     transcript: "",
     created_by: createdBy,
     created_at: serverTimestamp(),
-  });
+  };
+  if (parentResponseId) payload.parent_response_id = parentResponseId;
+
+  await setDoc(responseRef, payload);
 
   queueItemResponseTranscript(itemId, responseRef.id, audioUrl);
   return responseRef.id;
+}
+
+/** Fetch a single item response doc once (no listener). */
+export async function getItemResponse(
+  itemId: string,
+  responseId: string
+): Promise<ItemResponse | null> {
+  if (!db) return null;
+  const snap = await getDoc(doc(db, "items", itemId, "responses", responseId));
+  return snap.exists() ? ({ id: snap.id, ...snap.data() } as ItemResponse) : null;
 }
 
 /** Real-time listener for responses on an item, newest-first. */

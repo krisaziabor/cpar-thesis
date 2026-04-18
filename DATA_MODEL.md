@@ -63,6 +63,17 @@ erDiagram
         string audio_url "required"
         string transcript "auto-generated"
         string created_by FK "user_id"
+        string parent_response_id FK "optional — threads this reply under another response on the same connection"
+        timestamp created_at
+    }
+
+    ITEM_RESPONSE {
+        string id PK
+        string item_id FK
+        string audio_url "required"
+        string transcript "auto-generated"
+        string created_by FK "user_id"
+        string parent_response_id FK "optional — threads this reply under another response on the same item"
         timestamp created_at
     }
 ```
@@ -75,6 +86,9 @@ erDiagram
 | Item | Required | Core friction—voice recording is the soul of the archive |
 | Connection | Required | Drawing a relationship deserves explanation |
 | Response | Required | The reason to respond is to add your voice |
+
+### Threaded Responses
+Both item responses and connection responses carry an optional `parent_response_id`. When set, the new audio response is a direct reply to that specific response rather than to the underlying item/connection. This enables back-and-forth audio dialogue within an archive entry without introducing a separate collection: responses form a tree rooted at the item or connection, where `parent_response_id == null` (or missing) denotes a top-level response and any other value is a reply.
 
 ### Multi-Item Connections
 Connections can link 2+ items through the `CONNECTION_ITEM` junction table. This allows users to say "these five things all relate" in a single gesture rather than creating multiple binary connections.
