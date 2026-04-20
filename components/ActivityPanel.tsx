@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
 import { usePanelHistory } from "@/lib/panel-history-context";
@@ -50,10 +50,11 @@ function toDate(ts: unknown): Date | null {
 function formatDate(ts: unknown): string {
   const date = toDate(ts);
   if (!date) return "—";
+  const sameYear = date.getFullYear() === new Date().getFullYear();
   return date.toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
-    year: "numeric",
+    ...(sameYear ? {} : { year: "numeric" }),
   });
 }
 
@@ -94,6 +95,27 @@ export default function ActivityPanel() {
   const [dataLoading, setDataLoading] = useState(true);
   const [filter, setFilter] = useState<ActivityFilter>("all");
   const [nameByEmail, setNameByEmail] = useState<Record<string, string>>({});
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [topFade, setTopFade] = useState(false);
+  const [bottomFade, setBottomFade] = useState(false);
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    function update() {
+      if (!el) return;
+      setTopFade(el.scrollTop > 4);
+      setBottomFade(el.scrollTop < el.scrollHeight - el.clientHeight - 4);
+    }
+    el.addEventListener("scroll", update, { passive: true });
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    update();
+    return () => {
+      el.removeEventListener("scroll", update);
+      ro.disconnect();
+    };
+  }, []);
 
   useEffect(() => subscribeToItems((fetched) => { setItems(fetched); setDataLoading(false); }), []);
   useEffect(() => subscribeToAllConnections(setConnections), []);
@@ -216,9 +238,35 @@ export default function ActivityPanel() {
   }
 
   return (
-    <div className="space-y-5 px-6 py-6">
+    <div className="relative h-full overflow-hidden">
+      {/* Top fade */}
+      <div aria-hidden className={`pointer-events-none absolute inset-x-0 top-0 z-10 h-16 transition-opacity duration-150 ${topFade ? "opacity-100" : "opacity-0"}`}>
+        <div
+          className="absolute inset-0 [-webkit-backdrop-filter:blur(8px)] [backdrop-filter:blur(8px)]"
+          style={{
+            maskImage: "linear-gradient(to bottom, black 0%, black 40%, transparent 100%)",
+            WebkitMaskImage: "linear-gradient(to bottom, black 0%, black 40%, transparent 100%)",
+          }}
+        />
+        <div className="absolute inset-0 bg-gradient-to-b from-zinc-950 via-zinc-950/60 to-transparent" />
+      </div>
+
+      {/* Bottom fade */}
+      <div aria-hidden className={`pointer-events-none absolute inset-x-0 bottom-0 z-10 h-24 transition-opacity duration-150 ${bottomFade ? "opacity-100" : "opacity-0"}`}>
+        <div
+          className="absolute inset-0 [-webkit-backdrop-filter:blur(8px)] [backdrop-filter:blur(8px)]"
+          style={{
+            maskImage: "linear-gradient(to bottom, transparent 0%, black 50%, black 100%)",
+            WebkitMaskImage: "linear-gradient(to bottom, transparent 0%, black 50%, black 100%)",
+          }}
+        />
+        <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/60 to-transparent" />
+      </div>
+
+      <div ref={scrollRef} className="h-full overflow-y-auto scrollbar-hide">
+        <div className="space-y-5 px-6 py-6">
       <div className="space-y-1">
-        <p className="font-lector text-sm tracking-tight text-zinc-300">Activity</p>
+        <p className="font-lector text-xl tracking-tight text-zinc-300">Activity</p>
         <p className="text-xs text-zinc-500">
           {dataLoading
             ? "Loading activity..."
@@ -270,7 +318,7 @@ export default function ActivityPanel() {
                     key={a.key}
                     className="group flex items-start justify-between gap-3 border-b border-zinc-800 py-3 transition-colors hover:bg-zinc-900/40 last:border-0"
                   >
-                    <div className="min-w-0">
+                    <div className="min-w-0 flex-1 text-left">
                       {a.type === "added" && (
                         <p className="text-xs leading-snug text-zinc-400">
                           <span className="text-zinc-200">{displayPerson(a.person)}</span>
@@ -280,7 +328,7 @@ export default function ActivityPanel() {
                             onClick={() =>
                               navigatePanel(`/?item=${a.itemId}`, "Activity")
                             }
-                            className="font-lector text-zinc-200 underline-offset-2 transition-colors hover:text-zinc-100 hover:underline"
+                            className="text-left font-lector text-zinc-200 underline-offset-2 transition-colors hover:text-zinc-100 hover:underline"
                           >
                             {a.itemTitle}
                           </button>
@@ -294,13 +342,13 @@ export default function ActivityPanel() {
                             <>
                               {a.connectedItems.map((item, idx) => (
                                 <span key={item.id}>
-                                  {idx > 0 && <span className="text-zinc-600"> · </span>}
+                                  {idx > 0 && <span className="text-zinc-600"> & </span>}
                                   <button
                                     type="button"
                                     onClick={() =>
                                       navigatePanel(`/?item=${item.id}`, "Activity")
                                     }
-                                    className="font-lector text-zinc-200 underline-offset-2 transition-colors hover:text-zinc-100 hover:underline"
+                                    className="text-left font-lector text-zinc-200 underline-offset-2 transition-colors hover:text-zinc-100 hover:underline"
                                   >
                                     {item.title}
                                   </button>
@@ -326,6 +374,8 @@ export default function ActivityPanel() {
 
       {/* Bottom padding for floating nav clearance */}
       <div className="h-16" />
+        </div>
+      </div>
     </div>
   );
 }

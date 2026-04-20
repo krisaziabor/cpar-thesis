@@ -677,7 +677,8 @@ export async function resolveDeletionRequest(
 export async function createConnection(
   itemIds: string[],
   audioBlob: Blob | null,
-  createdBy: string
+  createdBy: string,
+  title?: string
 ): Promise<string> {
   if (!db) throw new Error("Firestore not initialised");
 
@@ -696,6 +697,7 @@ export async function createConnection(
   }
 
   await setDoc(connectionRef, {
+    ...(title?.trim() ? { title: title.trim() } : {}),
     audio_url: audioUrl,
     transcript: "",
     created_by: createdBy,

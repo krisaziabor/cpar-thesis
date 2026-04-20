@@ -19,7 +19,7 @@ export default function UtilityDock() {
   const replayNonce = useSequenceReplayNonce();
   const [expanded, setExpanded] = useState(false);
   const displayName =
-    user?.displayName?.trim() ||
+    user?.displayName?.trim().split(/\s+/)[0] ||
     user?.email?.split("@")[0]?.replace(/[._-]+/g, " ") ||
     "friend";
   const userInitial = displayName.charAt(0).toUpperCase();

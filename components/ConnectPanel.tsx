@@ -8,7 +8,8 @@ import ConnectionItemsPreview, {
   type ConnectionPreviewItem,
 } from "@/components/ConnectionItemsPreview";
 import { createConnection, findExistingConnectionByItemIds, subscribeToItems } from "@/lib/items";
-import type { Item } from "@/lib/types";
+import { subscribeToUserKanon } from "@/lib/kanon";
+import type { Item, KanonSave } from "@/lib/types";
 import { useAuth } from "@/lib/auth-context";
 import { useNavStatus } from "@/lib/nav-status-context";
 
@@ -56,7 +57,10 @@ export default function ConnectPanel({
   const [mode, setMode] = useState<"select" | "record">(initialMode);
   const [selected, setSelected] = useState<string[]>(selectedIds);
   const [search, setSearch] = useState("");
+  const [holdFilter, setHoldFilter] = useState(false);
+  const [myKanonSaves, setMyKanonSaves] = useState<KanonSave[]>([]);
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
+  const [title, setTitle] = useState("");
   const [error, setError] = useState("");
   /** Duplicate of current selection while browsing (select mode). */
   const [duplicateId, setDuplicateId] = useState<string | null>(null);
@@ -75,6 +79,10 @@ export default function ConnectPanel({
 
   useEffect(() => subscribeToItems(setItems), []);
   useEffect(() => {
+    if (!createdBy) return;
+    return subscribeToUserKanon(createdBy, setMyKanonSaves);
+  }, [createdBy]);
+  useEffect(() => {
     setMode(initialMode);
   }, [initialMode]);
   useEffect(() => {
@@ -85,10 +93,15 @@ export default function ConnectPanel({
     () => selected.map((id) => items.find((i) => i.id === id)).filter(Boolean) as Item[],
     [selected, items]
   );
+  const myHeldItemIds = useMemo(
+    () => new Set(myKanonSaves.filter((s) => s.reference_type === "item").map((s) => s.reference_id)),
+    [myKanonSaves]
+  );
   const filteredItems = useMemo(() => {
+    const base = holdFilter ? items.filter((i) => myHeldItemIds.has(i.id)) : items;
     const q = normalize(search);
-    if (!q) return items;
-    return items.filter((item) => {
+    if (!q) return base;
+    return base.filter((item) => {
       const fields = [
         item.title ?? "",
         item.creator ?? "",
@@ -97,7 +110,7 @@ export default function ConnectPanel({
       ];
       return fields.some((field) => normalize(field).includes(q));
     });
-  }, [items, search]);
+  }, [items, search, holdFilter, myHeldItemIds]);
   const canRecord = selected.length >= 2;
 
   const previewRows = useMemo(() => itemsToPreviewRows(selectedItems), [selectedItems]);
@@ -194,7 +207,7 @@ export default function ConnectPanel({
       try {
         onLeaveConnectFlowForSubmit?.();
         router.replace(submitReturnUrl);
-        const connectionId = await createConnection(selected, audioBlob, createdBy);
+        const connectionId = await createConnection(selected, audioBlob, createdBy, title);
         resolve("Connection filed");
         onCreated?.(connectionId);
       } catch (err) {
@@ -214,6 +227,7 @@ export default function ConnectPanel({
   function goToSelect() {
     setMode("select");
     setAudioBlob(null);
+    setTitle("");
     setExistingBlock(null);
     syncSelectModeUrl("select");
   }
@@ -251,6 +265,17 @@ export default function ConnectPanel({
               placeholder="Search by title, creator, or tag..."
               className="w-full rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-200 outline-none transition-colors placeholder:text-zinc-600 focus:border-zinc-600"
             />
+            <button
+              type="button"
+              onClick={() => setHoldFilter((v) => !v)}
+              className={`rounded border px-2.5 py-1.5 text-xs transition-colors ${
+                holdFilter
+                  ? "border-zinc-500 bg-zinc-800 text-zinc-100"
+                  : "border-zinc-800 text-zinc-500 hover:border-zinc-600 hover:text-zinc-400"
+              }`}
+            >
+              From my hold {holdFilter && myHeldItemIds.size > 0 ? `(${myHeldItemIds.size})` : ""}
+            </button>
 
             {duplicateId && canRecord && (
               <div className="space-y-3 rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-3">
@@ -280,15 +305,26 @@ export default function ConnectPanel({
                       key={item.id}
                       type="button"
                       onClick={() => toggleSelected(item.id)}
-                      className={`flex w-full items-center justify-between border-b border-zinc-800 px-4 py-2.5 text-left transition-colors last:border-0 ${
+                      className={`flex w-full items-center gap-3 border-b border-zinc-800 px-3 py-2.5 text-left transition-colors last:border-0 ${
                         isSelected ? "bg-zinc-900/60" : "hover:bg-zinc-900/40"
                       }`}
                     >
-                      <div className="min-w-0">
-                        <p className="truncate text-sm text-zinc-200">{item.title}</p>
-                        <p className="truncate text-xs text-zinc-500">{item.creator}</p>
+                      <div className="h-9 w-9 shrink-0 overflow-hidden rounded border border-zinc-800 bg-zinc-900">
+                        {item.thumbnail_url ? (
+                          <img src={item.thumbnail_url} alt="" className="h-full w-full object-cover" />
+                        ) : (
+                          <div className="flex h-full w-full items-center justify-center text-[8px] uppercase tracking-widest text-zinc-600">
+                            {item.type}
+                          </div>
+                        )}
                       </div>
-                      <span className="ml-3 shrink-0 text-xs text-zinc-500">
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm text-zinc-200">{item.title}</p>
+                        <p className="truncate text-xs text-zinc-500">
+                          {[item.creator, item.media_date].filter(Boolean).join(" · ")}
+                        </p>
+                      </div>
+                      <span className="shrink-0 text-xs text-zinc-500">
                         {isSelected ? "✓" : "+"}
                       </span>
                     </button>
@@ -351,6 +387,16 @@ export default function ConnectPanel({
             >
               ← Search & select
             </button>
+          </div>
+          <div className="shrink-0 border-b border-zinc-800 px-5 py-3">
+            <input
+              type="text"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="Give this connection a title (optional)"
+              maxLength={120}
+              className="w-full bg-transparent font-lector text-sm tracking-tight text-white/90 outline-none placeholder:text-white/25"
+            />
           </div>
           <div className="min-h-0 flex-1">
             <RecordingInterface

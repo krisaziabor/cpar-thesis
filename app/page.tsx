@@ -135,6 +135,8 @@ function HomeInner() {
   useSuppressFloatingNavWhile(
     panelMode === "connect" && connectPanelOpen && !connectSelectMode
   );
+  /** Holds panel (full-width two-pane view) — hide nav for focus. */
+  useSuppressFloatingNavWhile(panelMode === "holds");
 
   useEffect(() => {
     if (panelMode !== "add" || !addPanelHasUnsaved) {
@@ -484,9 +486,16 @@ function HomeInner() {
 
       {/* Graph dim overlay — sits above the graph (z-20), below the panel and nav (z-50) */}
       <AnimatePresence>
-        {isNarrativePlaying && (
+        {(isNarrativePlaying ||
+          (panelConnectionId && !panelItemId && panelMode !== "respondConnection") ||
+          isRespondConnectionPanel ||
+          (panelMode === "connect" && connectPanelOpen) ||
+          panelMode === "holds" ||
+          panelMode === "add" ||
+          panelMode === "activity" ||
+          panelMode === "search") && (
           <motion.div
-            key="narrative-dim"
+            key="graph-dim"
             className="fixed inset-0 z-20 bg-black"
             initial={{ opacity: 0 }}
             animate={{ opacity: 0.80 }}
@@ -638,6 +647,7 @@ function HomeInner() {
             onClose={closePanel}
             onBack={panelBackEntry ? panelGoBack : undefined}
             backLabel={panelBackEntry?.label}
+            disableBodyScroll
           >
             <ActivityPanel />
           </RightPanel>
@@ -660,6 +670,9 @@ function HomeInner() {
             onClose={closePanel}
             onBack={panelBackEntry ? panelGoBack : undefined}
             backLabel={panelBackEntry?.label}
+            wide
+            wideWidth={1100}
+            disableBodyScroll
           >
             <HoldsPanel currentUserEmail={user.email ?? null} initialUserEmail={holdUser} />
           </RightPanel>
