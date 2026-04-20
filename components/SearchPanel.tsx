@@ -31,9 +31,10 @@ export default function SearchPanel() {
 
   const results = useMemo(() => {
     const q = normalized(query);
-    if (!q) return items.slice(0, 18);
+    const withAudio = items.filter((item) => !!item.voice_recording_url);
+    if (!q) return withAudio.slice(0, 18);
 
-    return items
+    return withAudio
       .filter((item) => {
         const haystacks = [
           item.title ?? "",

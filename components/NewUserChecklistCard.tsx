@@ -12,6 +12,8 @@ import { useSequenceReplayNonce, useSequenceTimings } from "@/lib/sequence-dialk
 
 interface NewUserChecklistCardProps {
   userEmail: string;
+  /** Added after sequence timing so another UI (e.g. corner feature intro) can enter first. */
+  extraEnterDelaySec?: number;
 }
 
 function emptyProgress(userEmail: string): UserChecklistProgress {
@@ -34,7 +36,10 @@ function progressCount(count: number, target: number): string {
   return `${Math.min(count, target)}/${target}`;
 }
 
-export default function NewUserChecklistCard({ userEmail }: NewUserChecklistCardProps) {
+export default function NewUserChecklistCard({
+  userEmail,
+  extraEnterDelaySec = 0,
+}: NewUserChecklistCardProps) {
   const pathname = usePathname();
   const shouldReduceMotion = useReducedMotion();
   const timings = useSequenceTimings();
@@ -82,9 +87,11 @@ export default function NewUserChecklistCard({ userEmail }: NewUserChecklistCard
     [progress]
   );
 
-  const enterDelay = pathname === "/" && !shouldReduceMotion
-    ? Math.max(0, timings.bottomStartMs + timings.checklistDelayMs) / 1000
-    : 0;
+  const enterDelay =
+    pathname === "/" && !shouldReduceMotion
+      ? Math.max(0, timings.bottomStartMs + timings.checklistDelayMs) / 1000 +
+        extraEnterDelaySec
+      : 0;
 
   return (
     <motion.aside

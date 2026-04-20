@@ -163,6 +163,9 @@ function UserCard({
                         <p className="truncate text-[11px] text-zinc-500">
                           {[item.creator, item.media_date].filter(Boolean).join(" · ")}
                         </p>
+                        {!item.voice_recording_url && (
+                          <p className="text-[11px] text-amber-400/60">No audio recorded</p>
+                        )}
                       </div>
                     </button>
                   </motion.div>
@@ -494,9 +497,12 @@ export default function HoldsPanel({ currentUserEmail, initialUserEmail }: Holds
                       </div>
                       <div className="min-w-0 flex-1 space-y-0.5 py-0.5">
                         <p className="truncate font-lector text-sm text-white/90">{item.title}</p>
-                        <p className="truncate text-xs text-white/40">
+                        <p className="truncate text-[11px] text-white/40">
                           {[item.creator, item.media_date].filter(Boolean).join(" · ")}
                         </p>
+                        {!item.voice_recording_url && (
+                          <p className="text-[11px] text-amber-400/60">No audio recorded</p>
+                        )}
                       </div>
                       <span aria-hidden className={`ml-auto shrink-0 text-xs transition-colors ${
                         isRemoving

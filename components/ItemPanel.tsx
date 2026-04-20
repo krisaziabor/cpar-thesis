@@ -1432,60 +1432,66 @@ export default function ItemPanel({
                 )}
 
                 {/* Actions */}
-                <div className="flex items-center gap-2">
-                  <Link
-                    href={`/?panel=connect&connectPanel=1&connectSelect=1&connectIds=${encodeURIComponent(itemId)}&connectReturnItem=${encodeURIComponent(itemId)}`}
-                    className="flex items-center rounded-full bg-zinc-100 px-4 py-1.5 font-sans text-xs text-zinc-900 transition-colors hover:bg-white"
-                  >
-                    Connect
-                  </Link>
-                  <button
-                    type="button"
-                    onClick={goToRespond}
-                    className="flex items-center gap-1.5 rounded-full border border-zinc-600 bg-zinc-900 px-4 py-1.5 font-sans text-xs text-zinc-100 transition-colors hover:border-zinc-500 hover:bg-zinc-800"
-                  >
-                    Respond
-                  </button>
-                  <button
-                    disabled={savingKanon}
-                    onClick={async () => {
-                      if (!user?.email) return;
-                      setSavingKanon(true);
-                      if (kanonSaveId) {
-                        try {
-                          await removeFromKanon(kanonSaveId);
-                        } finally {
-                          setSavingKanon(false);
+                {item.voice_recording_url ? (
+                  <div className="flex items-center gap-2">
+                    <Link
+                      href={`/?panel=connect&connectPanel=1&connectSelect=1&connectIds=${encodeURIComponent(itemId)}&connectReturnItem=${encodeURIComponent(itemId)}`}
+                      className="flex items-center rounded-full bg-zinc-100 px-4 py-1.5 font-sans text-xs text-zinc-900 transition-colors hover:bg-white"
+                    >
+                      Connect
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={goToRespond}
+                      className="flex items-center gap-1.5 rounded-full border border-zinc-600 bg-zinc-900 px-4 py-1.5 font-sans text-xs text-zinc-100 transition-colors hover:border-zinc-500 hover:bg-zinc-800"
+                    >
+                      Respond
+                    </button>
+                    <button
+                      disabled={savingKanon}
+                      onClick={async () => {
+                        if (!user?.email) return;
+                        setSavingKanon(true);
+                        if (kanonSaveId) {
+                          try {
+                            await removeFromKanon(kanonSaveId);
+                          } finally {
+                            setSavingKanon(false);
+                          }
+                        } else {
+                          const thumbs = item?.thumbnail_url ? [item.thumbnail_url] : [];
+                          const { resolve, reject } = startNavProgress({
+                            id: `hold-${Date.now()}`,
+                            text: "Adding to Hold",
+                            thumbnails: thumbs.length > 0 ? thumbs : undefined,
+                            showProgress: true,
+                            durationMs: 2000,
+                          });
+                          try {
+                            await saveToKanon(user.email, "item", itemId);
+                            resolve("Added to Hold");
+                          } catch (err) {
+                            reject(err instanceof Error ? err.message : "Something went wrong, try again");
+                          } finally {
+                            setSavingKanon(false);
+                          }
                         }
-                      } else {
-                        const thumbs = item?.thumbnail_url ? [item.thumbnail_url] : [];
-                        const { resolve, reject } = startNavProgress({
-                          id: `hold-${Date.now()}`,
-                          text: "Adding to Hold",
-                          thumbnails: thumbs.length > 0 ? thumbs : undefined,
-                          showProgress: true,
-                          durationMs: 2000,
-                        });
-                        try {
-                          await saveToKanon(user.email, "item", itemId);
-                          resolve("Added to Hold");
-                        } catch (err) {
-                          reject(err instanceof Error ? err.message : "Something went wrong, try again");
-                        } finally {
-                          setSavingKanon(false);
-                        }
-                      }
-                    }}
-                    className={`flex items-center gap-1.5 rounded-full border bg-zinc-950 px-4 py-1.5 font-sans text-xs transition-colors disabled:opacity-60 ${
-                      kanonSaveId
-                        ? "border-zinc-500 text-zinc-200 hover:border-zinc-400 hover:text-zinc-100"
-                        : "border-zinc-700 text-zinc-300 hover:border-zinc-600 hover:text-zinc-100"
-                    }`}
-                  >
-                    <span>{kanonSaveId ? "×" : "+"}</span>
-                    {kanonSaveId ? "In Hold" : "Add to Hold"}
-                  </button>
-                </div>
+                      }}
+                      className={`flex items-center gap-1.5 rounded-full border bg-zinc-950 px-4 py-1.5 font-sans text-xs transition-colors disabled:opacity-60 ${
+                        kanonSaveId
+                          ? "border-zinc-500 text-zinc-200 hover:border-zinc-400 hover:text-zinc-100"
+                          : "border-zinc-700 text-zinc-300 hover:border-zinc-600 hover:text-zinc-100"
+                      }`}
+                    >
+                      <span>{kanonSaveId ? "×" : "+"}</span>
+                      {kanonSaveId ? "In Hold" : "Add to Hold"}
+                    </button>
+                  </div>
+                ) : kanonSaveId ? (
+                  <p className="text-xs text-zinc-500">
+                    <span className="text-zinc-300">In your hold.</span> Record audio to make this available in the library.
+                  </p>
+                ) : null}
 
               </>
             )}
