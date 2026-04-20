@@ -5,7 +5,7 @@ import { AuthProvider } from "@/lib/auth-context";
 import { NavGuardProvider } from "@/lib/nav-guard-context";
 import { NavStatusProvider } from "@/lib/nav-status-context";
 import { PanelHistoryProvider } from "@/lib/panel-history-context";
-import FloatingNav from "@/components/FloatingNav";
+import { FloatingNavShell } from "@/lib/floating-nav-suppress-context";
 import UtilityDock from "@/components/UtilityDock";
 import GlobalFeedbackPanel from "@/components/GlobalFeedbackPanel";
 import { DialRoot } from "dialkit";
@@ -18,10 +18,16 @@ export function Providers({ children }: { children: React.ReactNode }) {
         <NavStatusProvider>
           <Suspense fallback={null}>
             <PanelHistoryProvider>
-            {children}
-            <FloatingNav />
-            <UtilityDock />
-            <GlobalFeedbackPanel />
+              <FloatingNavShell
+                trailing={
+                  <>
+                    <UtilityDock />
+                    <GlobalFeedbackPanel />
+                  </>
+                }
+              >
+                {children}
+              </FloatingNavShell>
             </PanelHistoryProvider>
           </Suspense>
           <DialRoot position="top-right" />

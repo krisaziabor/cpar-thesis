@@ -59,6 +59,8 @@ export interface SourceMetadata {
 
   // Social (Instagram / TikTok / Twitter)
   author_url?: string;        // profile URL of the post author
+  like_count?: number;
+  media_item_count?: number;
 
   // PDF
   page_count?: number;
@@ -101,4 +103,9 @@ export interface MetadataResult {
   data?: CanonItemMetadata;
   error?: string;
   source_type?: SourceType;
+  /**
+   * URL pipeline only. `hit` = within normal TTL; `stale` = past TTL but within grace
+   * (stale-while-revalidate — a background refresh was scheduled); `miss` = full fetch.
+   */
+  cache_status?: "hit" | "stale" | "miss";
 }

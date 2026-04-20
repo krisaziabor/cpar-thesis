@@ -27,7 +27,7 @@ import {
 import { getUserProfile } from "./users";
 import type { OnboardingStep } from "./types";
 
-const ONBOARDING_EXEMPT_PATHS = ["/login", "/onboarding", "/admin", "/colophon"];
+const ONBOARDING_EXEMPT_PATHS = ["/login", "/onboarding", "/admin", "/colophon", "/epigraph"];
 
 interface AuthContextValue {
   user: User | null;

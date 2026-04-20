@@ -1,16 +1,26 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import AudioRecorder from "@/components/AudioRecorder";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import RecordingInterface, { type RecordingItemInfo } from "@/components/RecordingInterface";
+import ConnectionItemsPreview, {
+  CONNECTION_PREVIEW_DEFAULT_COLORS,
+  type ConnectionPreviewItem,
+} from "@/components/ConnectionItemsPreview";
 import { createConnection, findExistingConnectionByItemIds, subscribeToItems } from "@/lib/items";
 import type { Item } from "@/lib/types";
+import { useAuth } from "@/lib/auth-context";
 import { useNavStatus } from "@/lib/nav-status-context";
 
 interface ConnectPanelProps {
   selectedIds: string[];
   createdBy: string;
   initialMode?: "select" | "record";
-  onCreated: (connectionId: string) => void;
+  /** Where to land once filing starts (home or item panel). Replaces URL so the floating nav can show filing progress. */
+  submitReturnUrl: string;
+  /** e.g. clear panel stack before leaving the connect flow */
+  onLeaveConnectFlowForSubmit?: () => void;
+  onCreated?: (connectionId: string) => void;
   onOpenExistingResponse?: (connectionId: string) => void;
 }
 
@@ -18,22 +28,50 @@ function normalize(value: string): string {
   return value.trim().toLowerCase();
 }
 
+function itemsToPreviewRows(items: Item[]): ConnectionPreviewItem[] {
+  return items.map((item) => ({
+    id: item.id,
+    title: item.title,
+    thumbnailUrl: item.thumbnail_url,
+  }));
+}
+
 export default function ConnectPanel({
   selectedIds,
   createdBy,
   initialMode = "record",
+  submitReturnUrl,
+  onLeaveConnectFlowForSubmit,
   onCreated,
   onOpenExistingResponse,
 }: ConnectPanelProps) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const { avatarColors } = useAuth();
   const { startProgress: startNavProgress } = useNavStatus();
+  const gradientColors = avatarColors ?? CONNECTION_PREVIEW_DEFAULT_COLORS;
+
   const [items, setItems] = useState<Item[]>([]);
   const [mode, setMode] = useState<"select" | "record">(initialMode);
   const [selected, setSelected] = useState<string[]>(selectedIds);
   const [search, setSearch] = useState("");
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
-  const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-  const [existingConnectionId, setExistingConnectionId] = useState<string | null>(null);
+  /** Duplicate of current selection while browsing (select mode). */
+  const [duplicateId, setDuplicateId] = useState<string | null>(null);
+  /** Blocks record UI if we entered record with an existing set. */
+  const [existingBlock, setExistingBlock] = useState<string | null>(null);
+
+  const syncSelectModeUrl = useCallback(
+    (next: "select" | "record") => {
+      const params = new URLSearchParams(searchParams.toString());
+      if (next === "select") params.set("connectSelect", "1");
+      else params.delete("connectSelect");
+      router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+    },
+    [pathname, router, searchParams]
+  );
 
   useEffect(() => subscribeToItems(setItems), []);
   useEffect(() => {
@@ -62,19 +100,84 @@ export default function ConnectPanel({
   }, [items, search]);
   const canRecord = selected.length >= 2;
 
-  async function handleSend(allowDuplicate = false) {
+  const previewRows = useMemo(() => itemsToPreviewRows(selectedItems), [selectedItems]);
+
+  const recordingItem: RecordingItemInfo = useMemo(() => {
+    const first = selectedItems[0];
+    if (!first) {
+      return {
+        title: "",
+        creator: "",
+        mediaDate: "",
+        thumbnailUrl: null,
+        index: 0,
+        total: 0,
+      };
+    }
+    return {
+      title: first.title,
+      creator: first.creator,
+      mediaDate: first.media_date ?? "",
+      thumbnailUrl: first.thumbnail_url ?? null,
+      index: 0,
+      total: selectedItems.length,
+    };
+  }, [selectedItems]);
+
+  const stackItems = useMemo(
+    () =>
+      selectedItems.map((it) => ({
+        title: it.title,
+        thumbnailUrl: it.thumbnail_url ?? null,
+        creator: it.creator,
+        mediaDate: it.media_date ?? "",
+      })),
+    [selectedItems]
+  );
+
+  /** Debounced: does this selection already exist as a connection? */
+  useEffect(() => {
+    if (selected.length < 2) {
+      setDuplicateId(null);
+      return;
+    }
+    let cancelled = false;
+    const t = window.setTimeout(() => {
+      void findExistingConnectionByItemIds(selected).then((id) => {
+        if (!cancelled) setDuplicateId(id);
+      });
+    }, 320);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(t);
+    };
+  }, [selected]);
+
+  /** If we're in record mode with a duplicate set, block recording. */
+  useEffect(() => {
+    if (mode !== "record" || selected.length < 2 || items.length === 0) {
+      if (mode !== "record") setExistingBlock(null);
+      return;
+    }
+    let cancelled = false;
+    void findExistingConnectionByItemIds(selected).then((id) => {
+      if (!cancelled && id) setExistingBlock(id);
+      else if (!cancelled) setExistingBlock(null);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [mode, selected, items.length]);
+
+  async function handleSend() {
     if (!createdBy || selected.length < 2 || !audioBlob) return;
-    setSaving(true);
     setError("");
-    setExistingConnectionId(null);
     try {
-      if (!allowDuplicate) {
-        const existingId = await findExistingConnectionByItemIds(selected);
-        if (existingId) {
-          setExistingConnectionId(existingId);
-          setSaving(false);
-          return;
-        }
+      const existingId = await findExistingConnectionByItemIds(selected);
+      if (existingId) {
+        setError("This exact connection already exists. Respond to it instead.");
+        setExistingBlock(existingId);
+        return;
       }
 
       const thumbs = selectedItems
@@ -89,16 +192,16 @@ export default function ConnectPanel({
       });
 
       try {
+        onLeaveConnectFlowForSubmit?.();
+        router.replace(submitReturnUrl);
         const connectionId = await createConnection(selected, audioBlob, createdBy);
         resolve("Connection filed");
-        onCreated(connectionId);
+        onCreated?.(connectionId);
       } catch (err) {
         reject(err instanceof Error ? err.message : "Something went wrong, try again");
-        setSaving(false);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create connection.");
-      setSaving(false);
     }
   }
 
@@ -108,142 +211,172 @@ export default function ConnectPanel({
     );
   }
 
+  function goToSelect() {
+    setMode("select");
+    setAudioBlob(null);
+    setExistingBlock(null);
+    syncSelectModeUrl("select");
+  }
+
+  function goToRecord() {
+    if (!canRecord || duplicateId) return;
+    setMode("record");
+    setAudioBlob(null);
+    setError("");
+    syncSelectModeUrl("record");
+  }
+
+  function respondTo(id: string) {
+    if (onOpenExistingResponse) onOpenExistingResponse(id);
+    else onCreated?.(id);
+  }
+
   return (
-    <div className="px-6 py-6">
+    <>
       {mode === "select" ? (
-        <div className="space-y-5">
+        <div className="px-6 py-6">
+          <div className="space-y-5">
+            <div>
+              <h2 className="font-lector text-xl tracking-tight text-zinc-100">Search and select</h2>
+              <p className="mt-1 text-xs text-zinc-500">
+                Pick at least two records. If this exact group already exists, you can respond to that
+                connection instead of recording a new one.
+              </p>
+            </div>
+
+            <input
+              type="search"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search by title, creator, or tag..."
+              className="w-full rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-200 outline-none transition-colors placeholder:text-zinc-600 focus:border-zinc-600"
+            />
+
+            {duplicateId && canRecord && (
+              <div className="space-y-3 rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-3">
+                <p className="text-xs text-amber-200/90">
+                  These records are already linked as a connection. Add a voice response to the existing
+                  thread instead of creating a duplicate.
+                </p>
+                <ConnectionItemsPreview items={previewRows} colors={gradientColors} size="sm" />
+                <button
+                  type="button"
+                  onClick={() => respondTo(duplicateId)}
+                  className="rounded border border-amber-400/50 bg-amber-500/10 px-3 py-1.5 text-xs text-amber-100 transition-colors hover:border-amber-300/60 hover:bg-amber-500/20"
+                >
+                  Respond to connection
+                </button>
+              </div>
+            )}
+
+            <div className="border border-zinc-800">
+              {filteredItems.length === 0 ? (
+                <p className="px-4 py-5 text-xs text-zinc-600">No items found.</p>
+              ) : (
+                filteredItems.map((item) => {
+                  const isSelected = selected.includes(item.id);
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => toggleSelected(item.id)}
+                      className={`flex w-full items-center justify-between border-b border-zinc-800 px-4 py-2.5 text-left transition-colors last:border-0 ${
+                        isSelected ? "bg-zinc-900/60" : "hover:bg-zinc-900/40"
+                      }`}
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate text-sm text-zinc-200">{item.title}</p>
+                        <p className="truncate text-xs text-zinc-500">{item.creator}</p>
+                      </div>
+                      <span className="ml-3 shrink-0 text-xs text-zinc-500">
+                        {isSelected ? "✓" : "+"}
+                      </span>
+                    </button>
+                  );
+                })
+              )}
+            </div>
+
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-xs text-zinc-500">{selected.length} selected</p>
+              {duplicateId && canRecord ? (
+                <span className="text-xs text-zinc-600">Use respond above</span>
+              ) : (
+                <button
+                  type="button"
+                  onClick={goToRecord}
+                  disabled={!canRecord}
+                  className="rounded border border-zinc-700 px-3 py-1.5 text-xs text-zinc-200 transition-colors hover:border-zinc-500 hover:text-zinc-50 disabled:opacity-40"
+                >
+                  Continue to record
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      ) : existingBlock ? (
+        <div className="space-y-5 px-6 py-6">
           <div>
-            <h2 className="font-lector text-xl tracking-tight text-zinc-100">Search and select</h2>
+            <h2 className="font-lector text-xl tracking-tight text-zinc-100">Connection already exists</h2>
             <p className="mt-1 text-xs text-zinc-500">
-              Pick at least two elements, then continue to recording.
+              This exact set of records is already linked. Respond to the existing connection with your
+              voice note, or change your selection.
             </p>
           </div>
-
-          <input
-            type="search"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by title, creator, or tag..."
-            className="w-full rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-200 outline-none transition-colors placeholder:text-zinc-600 focus:border-zinc-600"
-          />
-
-          <div className="border border-zinc-800">
-            {filteredItems.length === 0 ? (
-              <p className="px-4 py-5 text-xs text-zinc-600">No items found.</p>
-            ) : (
-              filteredItems.map((item) => {
-                const isSelected = selected.includes(item.id);
-                return (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() => toggleSelected(item.id)}
-                    className={`flex w-full items-center justify-between border-b border-zinc-800 px-4 py-2.5 text-left transition-colors last:border-0 ${
-                      isSelected
-                        ? "bg-zinc-900/60"
-                        : "hover:bg-zinc-900/40"
-                    }`}
-                  >
-                    <div className="min-w-0">
-                      <p className="truncate text-sm text-zinc-200">{item.title}</p>
-                      <p className="truncate text-xs text-zinc-500">{item.creator}</p>
-                    </div>
-                    <span className="ml-3 shrink-0 text-xs text-zinc-500">
-                      {isSelected ? "✓" : "+"}
-                    </span>
-                  </button>
-                );
-              })
-            )}
-          </div>
-
-          <div className="flex items-center justify-between">
-            <p className="text-xs text-zinc-500">{selected.length} selected</p>
+          <ConnectionItemsPreview items={previewRows} colors={gradientColors} size="md" />
+          <div className="flex flex-wrap gap-3">
             <button
               type="button"
-              onClick={() => {
-                if (canRecord) setMode("record");
-              }}
-              disabled={!canRecord}
-              className="rounded border border-zinc-700 px-3 py-1.5 text-xs text-zinc-200 transition-colors hover:border-zinc-500 hover:text-zinc-50 disabled:opacity-40"
+              onClick={() => respondTo(existingBlock)}
+              className="rounded border border-zinc-200 px-4 py-2 text-sm text-zinc-100 transition-colors hover:border-white hover:text-white"
             >
-              Continue to record
+              Respond to connection
+            </button>
+            <button
+              type="button"
+              onClick={goToSelect}
+              className="rounded border border-zinc-700 px-4 py-2 text-sm text-zinc-400 transition-colors hover:border-zinc-500 hover:text-zinc-200"
+            >
+              Change selection
             </button>
           </div>
         </div>
       ) : (
-        <div className="space-y-6">
-          <div>
-            <h2 className="font-lector text-xl tracking-tight text-zinc-100">Record the connection</h2>
-            <p className="mt-1 text-xs text-zinc-500">
-              Confirm the selected elements, record your narrative, then send.
+        <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
+          <div className="flex shrink-0 items-center justify-between border-b border-zinc-800 px-5 py-2.5">
+            <button
+              type="button"
+              onClick={goToSelect}
+              className="font-sans text-xs text-zinc-500 transition-colors hover:text-zinc-200"
+            >
+              ← Search & select
+            </button>
+          </div>
+          <div className="min-h-0 flex-1">
+            <RecordingInterface
+              item={recordingItem}
+              colors={gradientColors}
+              stackItems={stackItems}
+              heading="Record the connection"
+              showHeading
+              onRecorded={(blob) => setAudioBlob(blob)}
+              onReRecord={() => setAudioBlob(null)}
+              hasRecording={audioBlob !== null}
+              destination="library"
+              isLast
+              canAdvance={audioBlob !== null}
+              onSkip={() => {}}
+              onNext={() => {}}
+              onSubmit={() => void handleSend()}
+            />
+          </div>
+          {error && (
+            <p className="shrink-0 border-t border-zinc-800 bg-zinc-950 px-5 py-2 text-xs text-red-400">
+              {error}
             </p>
-          </div>
-
-          <div className="border border-zinc-800 px-4 py-3">
-            <div className="mb-2 flex items-center justify-between">
-              <p className="text-xs text-zinc-500">connecting</p>
-              <button
-                type="button"
-                onClick={() => setMode("select")}
-                className="text-xs text-zinc-500 transition-colors hover:text-zinc-200"
-              >
-                Search & select
-              </button>
-            </div>
-            <div className="mt-2 flex flex-col gap-1">
-              {selectedItems.map((item, i) => (
-                <p key={item.id} className="text-sm text-zinc-300">
-                  {i > 0 && <span className="mr-2 text-zinc-500">·</span>}
-                  {item.title}
-                </p>
-              ))}
-            </div>
-          </div>
-
-          <AudioRecorder
-            onRecorded={(blob) => setAudioBlob(blob)}
-            prompt="What links these elements?"
-          />
-
-          {error && <p className="text-xs text-red-400">{error}</p>}
-          {existingConnectionId && (
-            <div className="space-y-2 rounded-md border border-zinc-700 bg-zinc-900/40 px-3 py-3">
-              <p className="text-xs text-zinc-300">
-                This exact connection already exists.
-              </p>
-              <div className="flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={() =>
-                    onOpenExistingResponse
-                      ? onOpenExistingResponse(existingConnectionId)
-                      : onCreated(existingConnectionId)
-                  }
-                  className="text-xs text-zinc-100 underline underline-offset-2 hover:text-white"
-                >
-                  Respond to existing connection
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void handleSend(true)}
-                  className="text-xs text-zinc-500 hover:text-zinc-300"
-                >
-                  Create new anyway
-                </button>
-              </div>
-            </div>
           )}
-
-          <button
-            onClick={() => void handleSend()}
-            disabled={saving || !audioBlob || selected.length < 2}
-            className="w-full border border-zinc-700 px-4 py-2.5 text-sm font-medium text-zinc-200 transition-colors hover:border-zinc-500 hover:text-zinc-50 disabled:opacity-40"
-          >
-            Send connection
-          </button>
         </div>
       )}
-    </div>
+    </>
   );
 }

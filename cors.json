@@ -3,6 +3,15 @@
     "origin": ["*"],
     "method": ["GET", "PUT", "POST", "DELETE"],
     "maxAgeSeconds": 3600,
-    "responseHeader": ["Content-Type", "Authorization", "Content-Length", "User-Agent"]
+    "responseHeader": [
+      "Content-Type",
+      "Authorization",
+      "Content-Length",
+      "Content-Range",
+      "Accept-Ranges",
+      "User-Agent",
+      "Cache-Control",
+      "ETag"
+    ]
   }
 ]

@@ -84,6 +84,35 @@ type ItemFields = Pick<Item, "title" | "description" | "media_date" | "type" | "
   source_metadata?: SourceMetadata;
 };
 
+async function requestTimedTranscript(audioUrl: string): Promise<Array<{ word: string; start: number; end: number }> | null> {
+  if (typeof window === "undefined") return null;
+  try {
+    const res = await fetch("/api/transcribe-words", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ audioUrl }),
+    });
+    if (!res.ok) return null;
+    const payload = (await res.json()) as { words?: Array<{ word: string; start: number; end: number }> };
+    return Array.isArray(payload.words) && payload.words.length > 0 ? payload.words : null;
+  } catch {
+    return null;
+  }
+}
+
+function queueItemTimedTranscript(itemId: string, audioUrl: string): void {
+  if (!db || !audioUrl) return;
+  void (async () => {
+    const words = await requestTimedTranscript(audioUrl);
+    if (!words) return;
+    try {
+      await updateDoc(doc(db, "items", itemId), { timed_transcript: words });
+    } catch {
+      // Best-effort background transcription; ignore write failures.
+    }
+  })();
+}
+
 async function requestTranscript(audioUrl: string): Promise<string | null> {
   if (typeof window === "undefined") return null;
   try {
@@ -122,6 +151,26 @@ function queueConnectionTranscript(connectionId: string, audioUrl: string): void
       await updateDoc(doc(db, "connections", connectionId), { transcript });
     } catch {
       // Best-effort background transcription; ignore write failures.
+    }
+  })();
+}
+
+function queueConnectionResponseTranscript(
+  connectionId: string,
+  responseId: string,
+  audioUrl: string
+): void {
+  if (!db || !audioUrl) return;
+  void (async () => {
+    const transcript = await requestTranscript(audioUrl);
+    if (!transcript) return;
+    try {
+      await updateDoc(
+        doc(db, "connections", connectionId, "responses", responseId),
+        { transcript }
+      );
+    } catch {
+      // Best-effort background transcription.
     }
   })();
 }
@@ -171,6 +220,7 @@ export async function setItemAudioUrl(itemId: string, url: string): Promise<void
   if (!db) throw new Error("Firestore not initialised");
   await updateDoc(doc(db, "items", itemId), { voice_recording_url: url });
   queueItemTranscript(itemId, url);
+  queueItemTimedTranscript(itemId, url);
 }
 
 /** Real-time listener for all *published* items, newest-first. */
@@ -361,7 +411,7 @@ export async function upsertDraft(
       updates.voice_recording_url = audioUrl;
     }
     await updateDoc(doc(db, "items", draftId), updates);
-    if (audioUrl) queueItemTranscript(draftId, audioUrl);
+    if (audioUrl) { queueItemTranscript(draftId, audioUrl); queueItemTimedTranscript(draftId, audioUrl); }
     return { draftId, audioUrl };
   }
 
@@ -381,6 +431,7 @@ export async function upsertDraft(
     audioUrl = await uploadItemAudio(audioBlob, docRef.id);
     await updateDoc(doc(db, "items", docRef.id), { voice_recording_url: audioUrl });
     queueItemTranscript(docRef.id, audioUrl);
+    queueItemTimedTranscript(docRef.id, audioUrl);
   }
 
   return { draftId: docRef.id, audioUrl };
@@ -417,6 +468,7 @@ export async function createAndPublishItem(
     console.warn("[createAndPublishItem] checklist tracking failed", error);
   }
   queueItemTranscript(draftId, audioUrl);
+  queueItemTimedTranscript(draftId, audioUrl);
   console.log("[createAndPublishItem] done", draftId);
 
   return draftId;
@@ -455,7 +507,7 @@ export async function publishDraft(
       console.warn("[publishDraft] checklist tracking failed", error);
     }
   }
-  if (audioUrl) queueItemTranscript(draftId, audioUrl);
+  if (audioUrl) { queueItemTranscript(draftId, audioUrl); queueItemTimedTranscript(draftId, audioUrl); }
 }
 
 /** Real-time listener for the current user's drafts, newest-first. */
@@ -515,6 +567,7 @@ export async function addAudioVersion(
   await setDoc(versionRef, { url, created_at: serverTimestamp(), created_by: createdBy });
   await updateDoc(doc(db, "items", itemId), { voice_recording_url: url });
   queueItemTranscript(itemId, url);
+  queueItemTimedTranscript(itemId, url);
 
   return url;
 }
@@ -794,6 +847,46 @@ export async function addItemResponse(
   });
 
   queueItemResponseTranscript(itemId, responseRef.id, audioUrl);
+  return responseRef.id;
+}
+
+/**
+ * Create an audio response on a connection. Uploads audio, writes a response
+ * doc under `connections/{id}/responses`, then kicks off a background
+ * transcription.
+ */
+export async function addConnectionResponse(
+  connectionId: string,
+  blob: Blob,
+  createdBy: string
+): Promise<string> {
+  if (!db) throw new Error("Firestore not initialised");
+  if (!storage) throw new Error("Storage not initialised");
+
+  const mimeType = blob.type || "audio/webm";
+  const ext = mimeType.includes("mp4")
+    ? "mp4"
+    : mimeType.includes("ogg")
+    ? "ogg"
+    : "webm";
+
+  const responseRef = doc(collection(db, "connections", connectionId, "responses"));
+  const storageRef = ref(
+    storage,
+    `audio/connection_responses/${connectionId}/${responseRef.id}.${ext}`
+  );
+  await uploadBytes(storageRef, blob, { contentType: mimeType });
+  const audioUrl = await getDownloadURL(storageRef);
+
+  await setDoc(responseRef, {
+    connection_id: connectionId,
+    audio_url: audioUrl,
+    transcript: "",
+    created_by: createdBy,
+    created_at: serverTimestamp(),
+  });
+
+  queueConnectionResponseTranscript(connectionId, responseRef.id, audioUrl);
   return responseRef.id;
 }
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo, Suspense } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { PanOnScrollMode, ReactFlow, type Node, type NodeTypes } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
@@ -12,14 +12,18 @@ import ItemThumbnailNode from "@/components/ItemThumbnailNode";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import RightPanel from "@/components/RightPanel";
 import ItemPanel from "@/components/ItemPanel";
+import RespondRecordPanel from "@/components/RespondRecordPanel";
+import RespondConnectionRecordPanel from "@/components/RespondConnectionRecordPanel";
 import ActivityPanel from "@/components/ActivityPanel";
 import SearchPanel from "@/components/SearchPanel";
 import HoldsPanel from "@/components/HoldsPanel";
 import { AddItemPageInnerWithSuspense } from "@/app/add/page";
 import ConnectPanel from "@/components/ConnectPanel";
+import ConnectionPanel from "@/components/ConnectionPanel";
 import NewUserChecklistCard from "@/components/NewUserChecklistCard";
 import { useNavGuard } from "@/lib/nav-guard-context";
 import { useNavStatus } from "@/lib/nav-status-context";
+import { useSuppressFloatingNavWhile } from "@/lib/floating-nav-suppress-context";
 import { usePanelHistory } from "@/lib/panel-history-context";
 import { useSequenceReplayNonce, useSequenceTimings } from "@/lib/sequence-dialkit";
 
@@ -42,7 +46,11 @@ function HomeInner() {
   const replayNonce = useSequenceReplayNonce();
   const { registerGuard, unregisterGuard, navigateWithGuard } = useNavGuard();
   const { enqueue: enqueueStatus } = useNavStatus();
-  const { goBack: panelGoBack, backEntry: panelBackEntry, clearHistory: clearPanelHistory } = usePanelHistory();
+  const {
+    goBack: panelGoBack,
+    backEntry: panelBackEntry,
+    clearHistory: clearPanelHistory,
+  } = usePanelHistory();
   const [items, setItems] = useState<Item[]>(() => {
     if (typeof window === "undefined") return [];
     try {
@@ -56,6 +64,15 @@ function HomeInner() {
   });
   const [dataLoading, setDataLoading] = useState(() => items.length === 0);
   const [addProgressPercent, setAddProgressPercent] = useState(100 / 3);
+  const [isNarrativePlaying, setIsNarrativePlaying] = useState(false);
+  const itemFullScreenTriggerRef = useRef<(() => void) | null>(null);
+  const registerItemFullScreenTrigger = useCallback((trigger: () => void) => {
+    itemFullScreenTriggerRef.current = trigger;
+  }, []);
+  const itemMediaFullscreenRef = useRef(false);
+  const setItemMediaFullscreen = useCallback((open: boolean) => {
+    itemMediaFullscreenRef.current = open;
+  }, []);
   const [panelItem, setPanelItem] = useState<Item | null>(null);
   const [panelItemHasConnections, setPanelItemHasConnections] = useState(false);
   const [deletingPanelItem, setDeletingPanelItem] = useState(false);
@@ -65,6 +82,7 @@ function HomeInner() {
   const [addPanelCanGoBack, setAddPanelCanGoBack] = useState(false);
   const [addPanelSourceScrollLocked, setAddPanelSourceScrollLocked] = useState(true);
   const [addPanelHasUnsaved, setAddPanelHasUnsaved] = useState(false);
+  const [isAddInRecordStep, setIsAddInRecordStep] = useState(false);
   const [pendingNavAfterAddClose, setPendingNavAfterAddClose] = useState<string | null>(null);
   const [{ isFirst, shuffleSeed }] = useState<{
     isFirst: boolean;
@@ -84,6 +102,7 @@ function HomeInner() {
   const searchParams = useSearchParams();
 
   const panelItemId = searchParams.get("item");
+  const panelConnectionId = searchParams.get("connection");
   const panelMode   = searchParams.get("panel");
   const holdUser = searchParams.get("holdUser");
   const connectPanelOpen = searchParams.get("connectPanel") === "1";
@@ -93,7 +112,29 @@ function HomeInner() {
     () => connectIdsRaw.split(",").map((v) => v.trim()).filter(Boolean),
     [connectIdsRaw]
   );
+  const connectReturnItem = searchParams.get("connectReturnItem");
+  const connectSubmitReturnUrl = useMemo(() => {
+    if (connectReturnItem) return `/?item=${encodeURIComponent(connectReturnItem)}`;
+    return "/";
+  }, [connectReturnItem]);
   const isConnectSelecting = panelMode === "connect";
+  const isRespondPanel = panelMode === "respond" && !!panelItemId;
+  const isRespondConnectionPanel = panelMode === "respondConnection" && !!panelConnectionId;
+
+  useEffect(() => {
+    if (isRespondPanel) setIsNarrativePlaying(false);
+  }, [isRespondPanel]);
+
+  useSuppressFloatingNavWhile(isRespondPanel);
+  useSuppressFloatingNavWhile(isRespondConnectionPanel);
+  /** Connection panel (wide two-pane view) — hide nav for focus. */
+  useSuppressFloatingNavWhile(!!panelConnectionId && panelMode !== "respondConnection");
+  /** Immersive item listening (narrative / transcript layout opened from the narrative card). */
+  useSuppressFloatingNavWhile(isNarrativePlaying);
+  /** Connect flow record step (wide panel + RecordingInterface) — hide bottom nav for focus. */
+  useSuppressFloatingNavWhile(
+    panelMode === "connect" && connectPanelOpen && !connectSelectMode
+  );
 
   useEffect(() => {
     if (panelMode !== "add" || !addPanelHasUnsaved) {
@@ -242,6 +283,8 @@ function HomeInner() {
     if (!panelItemId) {
       setPanelItem(null);
       setPanelItemHasConnections(false);
+      setIsNarrativePlaying(false);
+      itemMediaFullscreenRef.current = false;
       return;
     }
     const unsubItem = subscribeToItem(panelItemId, setPanelItem);
@@ -315,13 +358,6 @@ function HomeInner() {
 
   function closePanel() {
     clearPanelHistory();
-    if (isConnectSelecting) {
-      const params = new URLSearchParams(searchParams.toString());
-      params.delete("connectPanel");
-      params.delete("connectSelect");
-      router.push(params.toString() ? `/?${params.toString()}` : "/");
-      return;
-    }
     router.push("/");
   }
 
@@ -446,13 +482,68 @@ function HomeInner() {
       </div>
       {user.email && <NewUserChecklistCard userEmail={user.email} />}
 
+      {/* Graph dim overlay — sits above the graph (z-20), below the panel and nav (z-50) */}
       <AnimatePresence>
-        {panelItemId && (
+        {isNarrativePlaying && (
+          <motion.div
+            key="narrative-dim"
+            className="fixed inset-0 z-20 bg-black"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 0.80 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.35, ease: [0.215, 0.61, 0.355, 1] }}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {panelItemId && isRespondPanel && (
+          <RightPanel
+            key="respond-panel"
+            title="Respond"
+            onClose={() => {
+              if (panelBackEntry) panelGoBack();
+              else {
+                const p = new URLSearchParams(searchParams.toString());
+                p.delete("panel");
+                router.push(p.toString() ? `/?${p}` : "/");
+              }
+            }}
+            onBack={panelBackEntry ? panelGoBack : undefined}
+            backLabel={panelBackEntry?.label}
+            wide
+            wideWidth={900}
+            disableBodyScroll
+          >
+            <RespondRecordPanel
+              itemId={panelItemId}
+              onSubmitted={clearPanelHistory}
+              onClose={() => {
+                if (panelBackEntry) panelGoBack();
+                else {
+                  const p = new URLSearchParams(searchParams.toString());
+                  p.delete("panel");
+                  router.push(p.toString() ? `/?${p}` : "/");
+                }
+              }}
+            />
+          </RightPanel>
+        )}
+        {panelItemId && !isRespondPanel && (
           <RightPanel
             key="item-panel"
             onClose={closePanel}
+            escapeDismissBlockedRef={itemMediaFullscreenRef}
             onBack={panelBackEntry ? panelGoBack : undefined}
             backLabel={panelBackEntry?.label}
+            wide={isNarrativePlaying}
+            wideWidth={1100}
+            disableBodyScroll={isNarrativePlaying}
+            onFullScreen={
+              (panelItem?.media_url || panelItem?.thumbnail_url)
+                ? () => itemFullScreenTriggerRef.current?.()
+                : undefined
+            }
             headerActions={
               canEditPanelItem ? (
                 <div className="flex items-center gap-3 font-sans text-sm">
@@ -504,7 +595,13 @@ function HomeInner() {
               ) : undefined
             }
           >
-            <ItemPanel key={panelItemId} itemId={panelItemId} />
+            <ItemPanel
+              key={panelItemId}
+              itemId={panelItemId}
+              onListeningChange={setIsNarrativePlaying}
+              onFullScreenReady={registerItemFullScreenTrigger}
+              onMediaFullscreenChange={setItemMediaFullscreen}
+            />
           </RightPanel>
         )}
         {panelMode === "add" && (
@@ -513,9 +610,12 @@ function HomeInner() {
             onBack={addPanelCanGoBack ? () => setAddPanelBackSignal((prev) => prev + 1) : undefined}
             onClose={() => setAddPanelCloseSignal((prev) => prev + 1)}
             progressPercent={addProgressPercent}
-            disableBodyScroll={addPanelSourceScrollLocked}
+            disableBodyScroll={isAddInRecordStep || addPanelSourceScrollLocked}
+            wide={isAddInRecordStep}
+            wideWidth={900}
           >
             <AddItemPageInnerWithSuspense
+              hideHeader
               onProgressChange={setAddProgressPercent}
               backSignal={addPanelBackSignal}
               closeSignal={addPanelCloseSignal}
@@ -528,6 +628,7 @@ function HomeInner() {
               onCanGoBackChange={setAddPanelCanGoBack}
               onHasUnsavedProgressChange={setAddPanelHasUnsaved}
               onSourceStepScrollLockChange={setAddPanelSourceScrollLocked}
+              onRecordStepChange={setIsAddInRecordStep}
             />
           </RightPanel>
         )}
@@ -563,15 +664,71 @@ function HomeInner() {
             <HoldsPanel currentUserEmail={user.email ?? null} initialUserEmail={holdUser} />
           </RightPanel>
         )}
-        {panelMode === "connect" && connectPanelOpen && (
-          <RightPanel key="connect-panel" title="New connection" onClose={closePanel}>
-            <ConnectPanel
-              selectedIds={connectIds}
-              createdBy={user.email ?? ""}
-              initialMode={connectSelectMode ? "select" : "record"}
-              onCreated={(connectionId) => router.push(`/connections/${connectionId}`)}
-              onOpenExistingResponse={(connectionId) => router.push(`/respond/${connectionId}`)}
+        {panelConnectionId && panelMode === "respondConnection" && (
+          <RightPanel
+            key="respond-connection-panel"
+            title="Respond"
+            onClose={() => {
+              if (panelBackEntry) panelGoBack();
+              else {
+                const p = new URLSearchParams(searchParams.toString());
+                p.delete("panel");
+                router.push(p.toString() ? `/?${p}` : "/");
+              }
+            }}
+            onBack={panelBackEntry ? panelGoBack : undefined}
+            backLabel={panelBackEntry?.label}
+            wide
+            wideWidth={900}
+            disableBodyScroll
+          >
+            <RespondConnectionRecordPanel
+              connectionId={panelConnectionId}
+              onSubmitted={clearPanelHistory}
+              onClose={() => {
+                if (panelBackEntry) panelGoBack();
+                else {
+                  const p = new URLSearchParams(searchParams.toString());
+                  p.delete("panel");
+                  router.push(p.toString() ? `/?${p}` : "/");
+                }
+              }}
             />
+          </RightPanel>
+        )}
+        {panelConnectionId && !panelItemId && panelMode !== "respondConnection" && (
+          <RightPanel
+            key="connection-panel"
+            title="Connection"
+            onClose={closePanel}
+            onBack={panelBackEntry ? panelGoBack : undefined}
+            backLabel={panelBackEntry?.label}
+            wide
+            wideWidth={1100}
+            disableBodyScroll
+          >
+            <ConnectionPanel key={panelConnectionId} connectionId={panelConnectionId} />
+          </RightPanel>
+        )}
+        {panelMode === "connect" && connectPanelOpen && (
+          <RightPanel
+            key="connect-panel"
+            title="New connection"
+            onClose={closePanel}
+            wide={!connectSelectMode}
+            wideWidth={900}
+            disableBodyScroll={!connectSelectMode}
+          >
+            <div className="flex min-h-0 flex-1 flex-col">
+              <ConnectPanel
+                selectedIds={connectIds}
+                createdBy={user.email ?? ""}
+                initialMode={connectSelectMode ? "select" : "record"}
+                submitReturnUrl={connectSubmitReturnUrl}
+                onLeaveConnectFlowForSubmit={clearPanelHistory}
+                onOpenExistingResponse={(connectionId) => router.push(`/respond/${connectionId}`)}
+              />
+            </div>
           </RightPanel>
         )}
         {isDeleteConfirmOpen && panelItem && (

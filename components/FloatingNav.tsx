@@ -51,13 +51,16 @@ function ThumbnailCycler({ thumbnails }: { thumbnails: string[] }) {
 function MorphingText({
   text,
   className,
+  /** Align stagger with parent fade-in so the effect is visible (e.g. nav status row). */
+  entranceDelay = 0,
 }: {
   text: string;
   className?: string;
+  entranceDelay?: number;
 }) {
   return (
     <span className={`whitespace-nowrap font-lector text-sm ${className ?? ""}`}>
-      <AnimatePresence mode="popLayout" initial={false}>
+      <AnimatePresence mode="popLayout">
         {text.split("").map((char, i) => (
           <motion.span
             key={`${i}-${char}-${text}`}
@@ -69,7 +72,7 @@ function MorphingText({
                 type: "spring",
                 stiffness: 350,
                 damping: 55,
-                delay: i * 0.015,
+                delay: entranceDelay + i * 0.015,
               },
             }}
             exit={{
@@ -114,6 +117,7 @@ function StatusMessageCard({ message }: { message: NavStatusMessage }) {
         <MorphingText
           text={message.text}
           className={isError ? "text-amber-300" : "text-zinc-300"}
+          entranceDelay={enterDelay}
         />
       )}
     </motion.div>
@@ -148,13 +152,13 @@ export default function FloatingNav() {
   const isConnectSelecting = pathname === "/" && panel === "connect";
 
   const isAddActive = pathname === "/" && panel === "add";
-  const isConnectActive = isConnectSelecting || pathname === "/connect";
+  const isConnectActive = isConnectSelecting;
   const isSearchActive = pathname === "/" && panel === "search";
   const isActivityActive = pathname === "/" && panel === "activity";
   const isHoldingActive = (pathname === "/" && panel === "holds") || pathname.startsWith("/kanon");
   const holdingHref = "/?panel=holds";
 
-  if (!user || pathname === "/login" || pathname === "/colophon" || pathname === "/onboarding" || pathname === "/onboarding-lab" || pathname === "/admin") return null;
+  if (!user || pathname === "/login" || pathname === "/colophon" || pathname === "/epigraph" || pathname === "/onboarding" || pathname === "/onboarding-lab" || pathname === "/admin") return null;
 
   const enterDelay = pathname === "/" && !shouldReduceMotion
     ? Math.max(0, timings.bottomStartMs + timings.navDelayMs) / 1000
@@ -192,6 +196,11 @@ export default function FloatingNav() {
       key={pathname === "/" ? `floating-nav-${replayNonce}` : "floating-nav"}
       initial={shouldReduceMotion ? false : { opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
+      exit={
+        shouldReduceMotion
+          ? { opacity: 0 }
+          : { opacity: 0, y: 8, transition: { duration: MOTION_DURATION.standard, ease: EASE_OUT } }
+      }
       transition={{
         duration: shouldReduceMotion ? 0 : timings.bottomEnterMs / 1000,
         ease: EASE_OUT,
@@ -239,7 +248,7 @@ export default function FloatingNav() {
               transition={{ duration: MOTION_DURATION.standard, ease: EASE_OUT }}
               className="overflow-hidden border-b border-zinc-800"
             >
-              <div className="flex flex-col gap-2 px-4 py-3 font-lector">
+              <div className="flex flex-col gap-2 px-4 py-3 font-sans">
                 <p className="text-xs text-zinc-400">
                   Select thumbnails in the graph to connect them.
                 </p>

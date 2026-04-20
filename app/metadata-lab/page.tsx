@@ -72,6 +72,8 @@ export default function MetadataLab() {
   const [mediaError, setMediaError] = useState<string | null>(null);
   const [mediaRemoving, setMediaRemoving] = useState(false);
   const [mediaTotalCount, setMediaTotalCount] = useState<number | null>(null);
+  const [mediaPosterUrl, setMediaPosterUrl] = useState<string | null>(null);
+  const [mediaLabItemId, setMediaLabItemId] = useState<string | null>(null);
 
   async function handleDownloadMedia() {
     if (!user) return;
@@ -80,21 +82,32 @@ export default function MetadataLab() {
     setMediaStoragePath(null);
     setMediaError(null);
     setMediaTotalCount(null);
+    setMediaPosterUrl(null);
+    setMediaLabItemId(null);
     try {
       const idToken = await user.getIdToken();
       const itemId = `lab-${Date.now()}`;
+      setMediaLabItemId(itemId);
       const res = await fetch("/api/media/upload-video", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ url, itemId, idToken }),
       });
-      const data = await res.json() as { downloadUrl?: string; storagePath?: string; error?: string; totalMediaCount?: number };
+      const data = await res.json() as {
+        downloadUrl?: string;
+        storagePath?: string;
+        thumbnailUrl?: string;
+        error?: string;
+        totalMediaCount?: number;
+      };
       if (!res.ok || data.error) {
+        setMediaLabItemId(null);
         setMediaError(data.error ?? `HTTP ${res.status}`);
         setMediaStatus("error");
       } else {
         setMediaFileUrl(data.downloadUrl ?? null);
         setMediaStoragePath(data.storagePath ?? null);
+        setMediaPosterUrl(data.thumbnailUrl ?? null);
         if (data.totalMediaCount) setMediaTotalCount(data.totalMediaCount);
         setMediaStatus("success");
       }
@@ -112,6 +125,7 @@ export default function MetadataLab() {
       setMediaStatus("idle");
       setMediaFileUrl(null);
       setMediaStoragePath(null);
+      setMediaPosterUrl(null);
     } catch (err) {
       setMediaError(err instanceof Error ? err.message : "Delete failed");
     } finally {
@@ -129,6 +143,8 @@ export default function MetadataLab() {
     setMediaStoragePath(null);
     setMediaError(null);
     setMediaTotalCount(null);
+    setMediaPosterUrl(null);
+    setMediaLabItemId(null);
 
     try {
       let res: Response;
@@ -271,7 +287,17 @@ export default function MetadataLab() {
                 <p><span className="font-medium text-gray-700">Timeout:</span> 5 s — on failure, scraped result is used as-is</p>
                 <p><span className="font-medium text-gray-700">Fields filled:</span> title, creator, description, published date, content type</p>
                 <p><span className="font-medium text-gray-700">Merge rules:</span> AI wins on missing/garbage values; scraped wins on description length and thumbnail</p>
-                <p><span className="font-medium text-gray-700">Caching:</span> all URL results cached in Firestore for 30 days keyed on normalised URL (tracking params stripped)</p>
+                <p>
+                  <span className="font-medium text-gray-700">Caching:</span> URL results are stored in
+                  Firestore keyed by normalised URL. TTL varies by source (e.g. news 1d, social 7d, DOI 365d).
+                  Past TTL but within 2× TTL, responses are still served (<span className="font-mono">cache: stale</span>)
+                  while a background refresh runs. Use <span className="font-mono">refresh: true</span> to bypass.
+                </p>
+                <p>
+                  <span className="font-medium text-gray-700">yt-dlp cookies:</span> optional{" "}
+                  <span className="font-mono">YT_DLP_COOKIES_FILE</span> or{" "}
+                  <span className="font-mono">YT_DLP_COOKIES_FROM_BROWSER</span> (see docs).
+                </p>
               </div>
             </div>
 
@@ -395,6 +421,24 @@ export default function MetadataLab() {
                     {SOURCE_LABELS[result.source_type]}
                   </span>
                 )}
+                {result.success && result.cache_status && (
+                  <span
+                    className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                      result.cache_status === "hit"
+                        ? "bg-slate-100 text-slate-700"
+                        : result.cache_status === "stale"
+                          ? "bg-amber-100 text-amber-900"
+                          : "bg-sky-100 text-sky-800"
+                    }`}
+                    title={
+                      result.cache_status === "stale"
+                        ? "Served from cache past normal TTL; background refresh scheduled"
+                        : undefined
+                    }
+                  >
+                    cache: {result.cache_status}
+                  </span>
+                )}
               </div>
               <button
                 onClick={copyJson}
@@ -489,6 +533,25 @@ export default function MetadataLab() {
                           value={result.data.source_metadata.view_count.toLocaleString()}
                         />
                       )}
+                      {result.data.source_metadata.like_count != null && (
+                        <Field
+                          label="Likes"
+                          value={result.data.source_metadata.like_count.toLocaleString()}
+                        />
+                      )}
+                      {result.data.source_metadata.published_date && (
+                        <Field
+                          label="Published"
+                          value={result.data.source_metadata.published_date}
+                        />
+                      )}
+                      {result.data.source_metadata.media_item_count != null &&
+                        result.data.source_metadata.media_item_count > 1 && (
+                          <Field
+                            label="Media in post"
+                            value={`${result.data.source_metadata.media_item_count} items`}
+                          />
+                        )}
                       {result.data.source_metadata.source_type === "news" &&
                         typeof (result.data.source_metadata.raw as Record<string, unknown> | undefined)?.readingTime === "number" && (
                           <Field
@@ -604,6 +667,19 @@ export default function MetadataLab() {
                         <p className="text-xs text-gray-500 font-mono break-all bg-gray-50 rounded px-2 py-1.5 border border-gray-200">
                           {mediaFileUrl}
                         </p>
+                        {mediaPosterUrl && (
+                          <div className="flex items-start gap-2">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={mediaPosterUrl}
+                              alt="Poster frame"
+                              className="w-20 h-14 object-cover rounded border border-gray-200"
+                            />
+                            <p className="text-xs text-gray-500 font-mono break-all flex-1">
+                              {mediaPosterUrl}
+                            </p>
+                          </div>
+                        )}
                         <button
                           onClick={handleRemoveMedia}
                           disabled={mediaRemoving}

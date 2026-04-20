@@ -17,7 +17,7 @@ type PdfDocumentProxy = {
   destroy: () => Promise<void>;
 };
 
-export default function MinimalPdfViewer({ url, title }: { url: string; title: string }) {
+export default function MinimalPdfViewer({ url, title, maxCanvasHeight, maxWidth }: { url: string; title: string; maxCanvasHeight?: number; maxWidth?: number }) {
   const frameRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [pdfDoc, setPdfDoc] = useState<PdfDocumentProxy | null>(null);
@@ -142,7 +142,10 @@ export default function MinimalPdfViewer({ url, title }: { url: string; title: s
         if (isCancelled) return;
 
         const baseViewport = pdfPage.getViewport({ scale: 1 });
-        const scale = frameWidth / baseViewport.width;
+        const effectiveWidth = maxWidth ?? frameWidth;
+        const scaleByWidth = effectiveWidth / baseViewport.width;
+        const scaleByHeight = maxCanvasHeight ? maxCanvasHeight / baseViewport.height : Infinity;
+        const scale = Math.min(scaleByWidth, scaleByHeight);
         const viewport = pdfPage.getViewport({ scale });
 
         const ctx = currentCanvas.getContext("2d");
@@ -203,7 +206,7 @@ export default function MinimalPdfViewer({ url, title }: { url: string; title: s
     <div className="flex flex-col gap-2">
       <div
         ref={frameRef}
-        className={`relative w-full overflow-hidden border border-zinc-200 bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-900 ${
+        className={`relative overflow-hidden border border-zinc-200 bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-900 ${maxWidth ? "w-fit" : "w-full"} ${
           shouldReserveHeight ? "min-h-[420px]" : ""
         }`}
         aria-label={`${title} PDF viewer`}

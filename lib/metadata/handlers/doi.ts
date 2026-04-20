@@ -1,6 +1,7 @@
 import type { CanonItemMetadata, ItemType, SourceMetadata } from "../types";
 
 const DOI_PATTERN = /10\.\d{4,9}\/[^\s"<>]+/i;
+const DOI_FETCH_TIMEOUT_MS = 25_000;
 
 // ─── DOI extraction ──────────────────────────────────────────────────────────
 
@@ -101,6 +102,7 @@ async function fetchCrossRefMetadata(doi: string): Promise<CanonItemMetadata> {
       // CrossRef asks for a polite pool identifier
       "User-Agent": "Kanon/1.0 (mailto:contact@kanon.app)",
     },
+    signal: AbortSignal.timeout(DOI_FETCH_TIMEOUT_MS),
   });
 
   if (!res.ok) throw new Error(`CrossRef ${res.status}: ${url}`);
@@ -177,7 +179,10 @@ interface OpenAlexWork {
 
 async function fetchOpenAlexMetadata(doi: string): Promise<CanonItemMetadata> {
   const url = `https://api.openalex.org/works/doi:${encodeURIComponent(doi)}`;
-  const res = await fetch(url, { headers: { "User-Agent": "Kanon/1.0" } });
+  const res = await fetch(url, {
+    headers: { "User-Agent": "Kanon/1.0" },
+    signal: AbortSignal.timeout(DOI_FETCH_TIMEOUT_MS),
+  });
 
   if (!res.ok) throw new Error(`OpenAlex ${res.status}: ${url}`);
 
@@ -220,7 +225,7 @@ async function fetchOpenAlexMetadata(doi: string): Promise<CanonItemMetadata> {
 
 async function fetchArxivMetadata(arxivId: string): Promise<CanonItemMetadata> {
   const url = `https://export.arxiv.org/api/query?id_list=${encodeURIComponent(arxivId)}&max_results=1`;
-  const res = await fetch(url);
+  const res = await fetch(url, { signal: AbortSignal.timeout(DOI_FETCH_TIMEOUT_MS) });
   if (!res.ok) throw new Error(`arXiv ${res.status}: ${url}`);
 
   const xml = await res.text();
