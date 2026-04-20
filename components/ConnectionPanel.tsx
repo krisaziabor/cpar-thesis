@@ -19,6 +19,11 @@ import {
 } from "@/lib/items";
 import { getUserProfile } from "@/lib/users";
 import { usePanelHistory } from "@/lib/panel-history-context";
+import {
+  subscribeToKanonSaveStatus,
+  saveToKanon,
+  removeFromKanon,
+} from "@/lib/kanon";
 import type {
   Connection,
   Item,
@@ -36,6 +41,11 @@ const DEFAULT_GRADIENT_COLORS: [string, string, string] = [
   "#2A86A2",
   "#7238A0",
 ];
+
+const PANE_BLUR_MASK_BOTTOM = `linear-gradient(to bottom, hsla(0,0%,100%,0) 0%, hsla(0,0%,100%,0) 10%, hsla(0,0%,100%,0.06) 24%, hsla(0,0%,100%,0.28) 44%, hsla(0,0%,100%,0.62) 64%, hsla(0,0%,100%,0.9) 82%, hsl(0,0%,100%) 100%)`;
+const PANE_DIM_MASK_BOTTOM = `linear-gradient(to bottom, hsla(0,0%,100%,0) 0%, hsla(0,0%,100%,0) 6%, hsla(0,0%,100%,0.18) 32%, hsla(0,0%,100%,0.55) 58%, hsla(0,0%,100%,0.92) 80%, hsl(0,0%,100%) 100%)`;
+const PANE_BLUR_MASK_TOP = `linear-gradient(to bottom, hsl(0,0%,100%) 0%, hsla(0,0%,100%,0.9) 18%, hsla(0,0%,100%,0.62) 36%, hsla(0,0%,100%,0.28) 56%, hsla(0,0%,100%,0.06) 76%, hsla(0,0%,100%,0) 90%, hsla(0,0%,100%,0) 100%)`;
+const PANE_DIM_MASK_TOP = `linear-gradient(to bottom, hsl(0,0%,100%) 0%, hsla(0,0%,100%,0.92) 20%, hsla(0,0%,100%,0.55) 42%, hsla(0,0%,100%,0.18) 68%, hsla(0,0%,100%,0) 94%, hsla(0,0%,100%,0) 100%)`;
 
 function formatDateShort(ts: unknown): string {
   if (!ts) return "—";
@@ -109,10 +119,25 @@ export default function ConnectionPanel({
     [string, string, string] | null
   >(null);
   const [audioDuration, setAudioDuration] = useState<number | null>(null);
+  const [kanonSaveId, setKanonSaveId] = useState<string | null>(null);
+  const [savingKanon, setSavingKanon] = useState(false);
 
   const transcriptRef = useRef<SyncedTranscriptHandle>(null);
   const transcriptScrollRef = useRef<HTMLDivElement>(null);
   const [narrativePlaying, setNarrativePlaying] = useState(false);
+
+  const leftPaneRef = useRef<HTMLDivElement>(null);
+  const leftPaneContentRef = useRef<HTMLDivElement>(null);
+  const [leftAtTop, setLeftAtTop] = useState(true);
+  const [leftAtBottom, setLeftAtBottom] = useState(false);
+
+  const updateLeftPaneFades = useCallback(() => {
+    const el = leftPaneRef.current;
+    if (!el) return;
+    const ε = 3;
+    setLeftAtTop(el.scrollTop <= ε);
+    setLeftAtBottom(el.scrollTop + el.clientHeight >= el.scrollHeight - ε);
+  }, []);
 
   // Scroll-driven mask on the transcript — mirrors ItemPanel listening.
   const TRANSCRIPT_MASK_OPAQUE_FRAC = 0.6;
@@ -147,6 +172,10 @@ export default function ConnectionPanel({
   }, [connectionId]);
   useEffect(() => subscribeToItems(setAllItems), []);
   useEffect(() => subscribeToResponses(connectionId, setResponses), [connectionId]);
+  useEffect(() => {
+    if (!user?.email) return;
+    return subscribeToKanonSaveStatus(user.email, "connection", connectionId, setKanonSaveId);
+  }, [user?.email, connectionId]);
 
   useEffect(() => {
     if (!connection?.created_by) {
@@ -202,6 +231,15 @@ export default function ConnectionPanel({
     [itemIds, allItems]
   );
 
+  // Re-check left pane fades when the inner content grows/shrinks (e.g. items load).
+  useEffect(() => {
+    const el = leftPaneContentRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(updateLeftPaneFades);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [updateLeftPaneFades]);
+
   const goToItem = useCallback(
     (itemId: string) => {
       navigatePanel(`/?item=${encodeURIComponent(itemId)}`, "Connection");
@@ -251,20 +289,37 @@ export default function ConnectionPanel({
   return (
     <div className="relative flex h-full overflow-hidden">
       {/* ── Left pane — connected records ─────────────────────────── */}
-      <div className="relative z-10 flex-1 min-w-0 overflow-y-auto">
-        <div className="flex flex-col gap-3 px-6 py-6">
-          <motion.p
-            className="font-lector text-sm tracking-tight text-white/50"
-            initial={shouldReduceMotion ? false : { opacity: 0, y: 4 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: MOTION_DURATION.standard, ease: EASE_OUT }}
-          >
-            {connectedItems.length > 0
-              ? `${connectedItems.length} connected record${
-                  connectedItems.length === 1 ? "" : "s"
-                }`
-              : "Connected records"}
-          </motion.p>
+      <div className="relative z-10 flex-1 min-w-0">
+        <div
+          ref={leftPaneRef}
+          onScroll={updateLeftPaneFades}
+          className="absolute inset-0 overflow-y-auto scrollbar-hide"
+        >
+        <div ref={leftPaneContentRef} className="flex flex-col gap-3 px-6 py-6">
+          <div className="flex flex-col gap-1">
+            {connection.title && (
+              <motion.h2
+                className="font-lector text-xl tracking-tight text-white"
+                initial={shouldReduceMotion ? false : { opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: MOTION_DURATION.standard, ease: EASE_OUT }}
+              >
+                {connection.title}
+              </motion.h2>
+            )}
+            <motion.p
+              className="font-lector text-sm tracking-tight text-white/50"
+              initial={shouldReduceMotion ? false : { opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: MOTION_DURATION.standard, ease: EASE_OUT }}
+            >
+              {connectedItems.length > 0
+                ? `${connectedItems.length} connected record${
+                    connectedItems.length === 1 ? "" : "s"
+                  }`
+                : "Connected records"}
+            </motion.p>
+          </div>
 
           <div className="flex flex-col gap-3">
             <AnimatePresence initial={false}>
@@ -393,6 +448,39 @@ export default function ConnectionPanel({
 
           <div className="h-12" />
         </div>
+        </div>
+
+        {/* Top fade — visible once user scrolls down */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-x-0 top-0 z-20 h-20 transition-opacity duration-200"
+          style={{ opacity: leftAtTop ? 0 : 1 }}
+        >
+          <div
+            className="absolute inset-0 bg-white/[0.03] [-webkit-backdrop-filter:blur(14px)] [backdrop-filter:blur(14px)]"
+            style={{ maskImage: PANE_BLUR_MASK_TOP, WebkitMaskImage: PANE_BLUR_MASK_TOP }}
+          />
+          <div
+            className="absolute inset-0 bg-gradient-to-b from-black via-black/35 to-transparent"
+            style={{ maskImage: PANE_DIM_MASK_TOP, WebkitMaskImage: PANE_DIM_MASK_TOP }}
+          />
+        </div>
+
+        {/* Bottom fade — visible when more content lies below */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-x-0 bottom-0 z-20 h-20 transition-opacity duration-200"
+          style={{ opacity: leftAtBottom ? 0 : 1 }}
+        >
+          <div
+            className="absolute inset-0 bg-white/[0.03] [-webkit-backdrop-filter:blur(14px)] [backdrop-filter:blur(14px)]"
+            style={{ maskImage: PANE_BLUR_MASK_BOTTOM, WebkitMaskImage: PANE_BLUR_MASK_BOTTOM }}
+          />
+          <div
+            className="absolute inset-0 bg-gradient-to-t from-black via-black/35 to-transparent"
+            style={{ maskImage: PANE_DIM_MASK_BOTTOM, WebkitMaskImage: PANE_DIM_MASK_BOTTOM }}
+          />
+        </div>
       </div>
 
       {/* ── Right pane — transcript + Respond ─────────────────────── */}
@@ -500,14 +588,39 @@ export default function ConnectionPanel({
           </div>
         </div>
 
-        {/* Respond */}
-        <div className="shrink-0 border-t border-white/10 px-6 pb-6 pt-5">
+        {/* Respond + Hold */}
+        <div className="shrink-0 border-t border-white/10 px-6 pb-6 pt-5 flex items-center gap-3">
           <button
             type="button"
             onClick={goToRespond}
             className="inline-flex items-center rounded-full bg-zinc-100 px-4 py-1.5 font-sans text-xs text-zinc-900 transition-colors duration-150 ease-out hover:bg-white"
           >
             Respond
+          </button>
+          <button
+            type="button"
+            disabled={savingKanon}
+            onClick={async () => {
+              if (!user?.email) return;
+              setSavingKanon(true);
+              try {
+                if (kanonSaveId) {
+                  await removeFromKanon(kanonSaveId);
+                } else {
+                  await saveToKanon(user.email, "connection", connectionId);
+                }
+              } finally {
+                setSavingKanon(false);
+              }
+            }}
+            className={`inline-flex items-center gap-1.5 rounded-full border bg-zinc-950 px-4 py-1.5 font-sans text-xs transition-colors duration-150 ease-out disabled:opacity-60 ${
+              kanonSaveId
+                ? "border-zinc-500 text-zinc-200 hover:border-zinc-400 hover:text-zinc-100"
+                : "border-zinc-700 text-zinc-300 hover:border-zinc-600 hover:text-zinc-100"
+            }`}
+          >
+            <span>{kanonSaveId ? "×" : "+"}</span>
+            {kanonSaveId ? "In Hold" : "Add to Hold"}
           </button>
         </div>
       </motion.div>

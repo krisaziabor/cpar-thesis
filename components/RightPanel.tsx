@@ -1,7 +1,8 @@
 "use client";
 
 import type { MutableRefObject } from "react";
-import { useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { EASE_OUT, MOTION_DURATION } from "@/lib/motion";
 
@@ -50,6 +51,15 @@ export default function RightPanel({
   escapeDismissBlockedRef,
 }: RightPanelProps) {
   const shouldReduceMotion = useReducedMotion();
+  const backButtonRef = useRef<HTMLButtonElement>(null);
+  const [backTooltipPos, setBackTooltipPos] = useState<{ left: number; top: number } | null>(null);
+
+  function showBackTooltip() {
+    const el = backButtonRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    setBackTooltipPos({ left: rect.left + rect.width / 2, top: rect.bottom + 8 });
+  }
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -100,23 +110,30 @@ export default function RightPanel({
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -6 }}
                 transition={{ duration: shouldReduceMotion ? 0 : MOTION_DURATION.fast, ease: EASE_OUT }}
-                className="group/back relative shrink-0"
+                className="shrink-0"
               >
                 <button
+                  ref={backButtonRef}
                   onClick={onBack}
+                  onMouseEnter={showBackTooltip}
+                  onMouseLeave={() => setBackTooltipPos(null)}
                   aria-label={backLabel ? `Back to ${backLabel}` : "Go back"}
                   className="text-base leading-none text-zinc-500 transition-colors hover:text-zinc-200"
                 >
                   ←
                 </button>
-                {backLabel && (
-                  <div className="pointer-events-none absolute left-1/2 top-[calc(100%+8px)] z-20 hidden -translate-x-1/2 whitespace-nowrap rounded-md border border-zinc-700 bg-zinc-900 px-2.5 py-1.5 font-sans text-[11px] text-zinc-300 shadow-[0_8px_20px_rgba(0,0,0,0.5)] group-hover/back:block">
-                    {backLabel}
-                  </div>
-                )}
               </motion.div>
             )}
           </AnimatePresence>
+          {backLabel && backTooltipPos && createPortal(
+            <div
+              className="pointer-events-none fixed z-[9999] -translate-x-1/2 whitespace-nowrap rounded-md border border-zinc-700 bg-zinc-900 px-2.5 py-1.5 font-sans text-[11px] text-zinc-300 shadow-[0_8px_20px_rgba(0,0,0,0.5)]"
+              style={{ left: backTooltipPos.left, top: backTooltipPos.top }}
+            >
+              {backLabel}
+            </div>,
+            document.body
+          )}
           <button
             onClick={onClose}
             className="shrink-0 text-base leading-none text-zinc-500 hover:text-zinc-200"

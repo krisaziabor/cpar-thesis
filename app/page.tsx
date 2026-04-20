@@ -21,6 +21,7 @@ import { AddItemPageInnerWithSuspense } from "@/app/add/page";
 import ConnectPanel from "@/components/ConnectPanel";
 import ConnectionPanel from "@/components/ConnectionPanel";
 import NewUserChecklistCard from "@/components/NewUserChecklistCard";
+import FirstTimeIntroOverlay from "@/components/FirstTimeIntroOverlay";
 import { useNavGuard } from "@/lib/nav-guard-context";
 import { useNavStatus } from "@/lib/nav-status-context";
 import { useSuppressFloatingNavWhile } from "@/lib/floating-nav-suppress-context";
@@ -30,6 +31,8 @@ import { useSequenceReplayNonce, useSequenceTimings } from "@/lib/sequence-dialk
 const NODE_TYPES: NodeTypes = {
   itemThumbnail: ItemThumbnailNode,
 };
+
+type FirstTimeIntroState = { open: boolean; variant: "fullscreen" | "card" };
 
 export default function Home() {
   return (
@@ -65,6 +68,14 @@ function HomeInner() {
   const [dataLoading, setDataLoading] = useState(() => items.length === 0);
   const [addProgressPercent, setAddProgressPercent] = useState(100 / 3);
   const [isNarrativePlaying, setIsNarrativePlaying] = useState(false);
+
+  const [firstTimeIntro, setFirstTimeIntro] = useState<FirstTimeIntroState>(() => {
+    if (typeof window === "undefined") return { open: false, variant: "card" };
+    if (sessionStorage.getItem("kanon-just-onboarded")) {
+      return { open: true, variant: "card" };
+    }
+    return { open: false, variant: "card" };
+  });
   const itemFullScreenTriggerRef = useRef<(() => void) | null>(null);
   const registerItemFullScreenTrigger = useCallback((trigger: () => void) => {
     itemFullScreenTriggerRef.current = trigger;
@@ -127,6 +138,10 @@ function HomeInner() {
 
   useSuppressFloatingNavWhile(isRespondPanel);
   useSuppressFloatingNavWhile(isRespondConnectionPanel);
+  /** Full-screen feature intro — hide the floating nav while it's up (corner card leaves nav visible). */
+  useSuppressFloatingNavWhile(
+    firstTimeIntro.open && firstTimeIntro.variant === "fullscreen"
+  );
   /** Connection panel (wide two-pane view) — hide nav for focus. */
   useSuppressFloatingNavWhile(!!panelConnectionId && panelMode !== "respondConnection");
   /** Immersive item listening (narrative / transcript layout opened from the narrative card). */
@@ -135,6 +150,8 @@ function HomeInner() {
   useSuppressFloatingNavWhile(
     panelMode === "connect" && connectPanelOpen && !connectSelectMode
   );
+  /** Holds panel (full-width two-pane view) — hide nav for focus. */
+  useSuppressFloatingNavWhile(panelMode === "holds");
 
   useEffect(() => {
     if (panelMode !== "add" || !addPanelHasUnsaved) {
@@ -180,6 +197,8 @@ function HomeInner() {
     if (justOnboarded) {
       sessionStorage.removeItem("kanon-just-onboarded");
       sessionStorage.setItem("kanon-greeted", "1");
+      // One-time 4-slide feature intro as a corner card (Getting Started waits to enter).
+      setFirstTimeIntro({ open: true, variant: "card" });
       try { localStorage.setItem(KEY, Date.now().toString()); } catch {}
 
       const name = firstName ?? user.displayName?.split(/\s+/)[0] ?? null;
@@ -279,6 +298,15 @@ function HomeInner() {
     }, introDelay);
   }, [authLoading, user, firstName, enqueueStatus, timings]);
 
+  // Utility menu “Walkthrough” → full-screen slides (`UtilityDock`).
+  useEffect(() => {
+    if (searchParams.get("introTour") !== "fullscreen") return;
+    setFirstTimeIntro({ open: true, variant: "fullscreen" });
+    const p = new URLSearchParams(searchParams.toString());
+    p.delete("introTour");
+    router.replace(p.toString() ? `/?${p}` : "/");
+  }, [searchParams, router]);
+
   useEffect(() => {
     if (!panelItemId) {
       setPanelItem(null);
@@ -312,7 +340,7 @@ function HomeInner() {
 
     // Shuffle a copy so order is random per page load (seeded once on mount)
     const rand = mulberry32(shuffleSeed);
-    const shuffled = [...items];
+    const shuffled = [...items.filter((i) => !!i.voice_recording_url)];
     for (let i = shuffled.length - 1; i > 0; i--) {
       const j = Math.floor(rand() * (i + 1));
       [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
@@ -480,13 +508,38 @@ function HomeInner() {
           />
         )}
       </div>
-      {user.email && <NewUserChecklistCard userEmail={user.email} />}
+      {user.email && (
+        <NewUserChecklistCard
+          userEmail={user.email}
+          extraEnterDelaySec={
+            firstTimeIntro.open &&
+            firstTimeIntro.variant === "card" &&
+            !shouldReduceMotion
+              ? 0.38
+              : 0
+          }
+        />
+      )}
+
+      {/* One-time 4-slide feature intro (corner card after onboarding; full screen from account menu). */}
+      <FirstTimeIntroOverlay
+        variant={firstTimeIntro.variant}
+        open={firstTimeIntro.open}
+        onClose={() => setFirstTimeIntro((s) => ({ ...s, open: false }))}
+      />
 
       {/* Graph dim overlay — sits above the graph (z-20), below the panel and nav (z-50) */}
       <AnimatePresence>
-        {isNarrativePlaying && (
+        {(isNarrativePlaying ||
+          (panelConnectionId && !panelItemId && panelMode !== "respondConnection") ||
+          isRespondConnectionPanel ||
+          (panelMode === "connect" && connectPanelOpen) ||
+          panelMode === "holds" ||
+          panelMode === "add" ||
+          panelMode === "activity" ||
+          panelMode === "search") && (
           <motion.div
-            key="narrative-dim"
+            key="graph-dim"
             className="fixed inset-0 z-20 bg-black"
             initial={{ opacity: 0 }}
             animate={{ opacity: 0.80 }}
@@ -638,6 +691,7 @@ function HomeInner() {
             onClose={closePanel}
             onBack={panelBackEntry ? panelGoBack : undefined}
             backLabel={panelBackEntry?.label}
+            disableBodyScroll
           >
             <ActivityPanel />
           </RightPanel>
@@ -660,6 +714,9 @@ function HomeInner() {
             onClose={closePanel}
             onBack={panelBackEntry ? panelGoBack : undefined}
             backLabel={panelBackEntry?.label}
+            wide
+            wideWidth={1100}
+            disableBodyScroll
           >
             <HoldsPanel currentUserEmail={user.email ?? null} initialUserEmail={holdUser} />
           </RightPanel>

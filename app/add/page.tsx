@@ -17,16 +17,17 @@ import {
   findPublishedItemByTitle,
   getItem,
   subscribeToDrafts,
+  subscribeToItems,
   upsertDraft,
   updateItem,
   uploadItemFile,
 } from "@/lib/items";
 import { DEFAULT_ITEM_TYPES, ensureItemTypeExists, subscribeToItemTypes } from "@/lib/item-types";
-import { hasKanonSave, saveToKanon } from "@/lib/kanon";
+import { hasKanonSave, saveToKanon, subscribeToUserKanon } from "@/lib/kanon";
 import { isDownloadableVideoPageUrl } from "@/lib/metadata/classify";
 import type { MetadataResult, SourceMetadata, SourceType } from "@/lib/metadata/types";
 import { mirrorPreviewAudio, mirrorThumbnail, mirrorVideo, uploadBase64Thumbnail } from "@/lib/media-upload";
-import type { Item } from "@/lib/types";
+import type { Item, KanonSave } from "@/lib/types";
 import { EASE_OUT, MOTION_DURATION } from "@/lib/motion";
 import { useSuppressFloatingNavWhile } from "@/lib/floating-nav-suppress-context";
 import { useNavStatus } from "@/lib/nav-status-context";
@@ -517,6 +518,20 @@ function AddItemPageInner({
     return subscribeToDrafts(user.email, setDrafts);
   }, [user?.email]);
 
+  const [allItems, setAllItems] = useState<Item[]>([]);
+  const [myKanonSaves, setMyKanonSaves] = useState<KanonSave[]>([]);
+  useEffect(() => subscribeToItems(setAllItems), []);
+  useEffect(() => {
+    if (!user?.email) return;
+    return subscribeToUserKanon(user.email, setMyKanonSaves);
+  }, [user?.email]);
+  const incompleteHoldItems = useMemo(() => {
+    const heldIds = new Set(
+      myKanonSaves.filter((s) => s.reference_type === "item").map((s) => s.reference_id)
+    );
+    return allItems.filter((i) => heldIds.has(i.id) && !i.voice_recording_url);
+  }, [allItems, myKanonSaves]);
+
   useEffect(() => {
     if (!user?.email) return;
     return subscribeToItemTypes(setItemTypes);
@@ -597,6 +612,7 @@ function AddItemPageInner({
   const canAdvanceRecording = !!activeRecording.blob || !!activeRecording.existingUrl;
   const canContinueFromSource = queuedItems.length > 0;
   const showDraftsSection = step === "source" && drafts.length > 0;
+  const showIncompleteHoldSection = step === "source" && incompleteHoldItems.length > 0;
   const stepOrder: Step[] = ["source", "details", "record"];
   const currentStepIndex = stepOrder.indexOf(step);
   const headerProgressPercent = ((currentStepIndex + 1) / stepOrder.length) * 100;
@@ -1421,6 +1437,42 @@ function AddItemPageInner({
                   Paste a URL or upload a file to continue.
                 </p>
               </div>
+
+              {showIncompleteHoldSection && (
+                <section className="space-y-2 pt-1">
+                  <h2 className="text-xs uppercase tracking-wide text-zinc-500">
+                    <span className="text-zinc-600">{incompleteHoldItems.length}</span>{" "}
+                    {incompleteHoldItems.length === 1 ? "Held record" : "Held records"} · No audio
+                  </h2>
+                  <div className="space-y-2">
+                    {incompleteHoldItems.map((item) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => router.push(`/?item=${item.id}`)}
+                        className="flex w-full items-center gap-2 rounded-md border border-zinc-800 px-3 py-2 text-left transition-colors hover:bg-zinc-900/40"
+                      >
+                        <div className="h-9 w-9 shrink-0 overflow-hidden rounded border border-zinc-800 bg-zinc-900">
+                          {item.thumbnail_url ? (
+                            <img src={item.thumbnail_url} alt="" className="h-full w-full object-cover" />
+                          ) : (
+                            <div className="flex h-full w-full items-center justify-center text-[8px] uppercase tracking-widest text-zinc-600">
+                              {item.type}
+                            </div>
+                          )}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-xs text-zinc-300">{item.title}</p>
+                          <p className="truncate text-[11px] text-zinc-500">
+                            {[item.creator, item.media_date].filter(Boolean).join(" · ")}
+                          </p>
+                        </div>
+                        <span className="shrink-0 text-xs text-zinc-500">→</span>
+                      </button>
+                    ))}
+                  </div>
+                </section>
+              )}
 
               {showDraftsSection && (
                 <section className="space-y-2 pt-1">

@@ -59,6 +59,7 @@ export interface Item {
 /** Connection: links 2+ items with required audio description */
 export interface Connection {
   id: string;
+  title?: string;
   audio_url: string;
   transcript: string;
   created_by: string;

@@ -10,7 +10,7 @@ import { EASE_OUT, MOTION_DURATION } from "@/lib/motion";
 import GradientSVG from "@/components/GradientSVG";
 
 export default function UtilityDock() {
-  const { user, role, avatarColors, signOut } = useAuth();
+  const { user, role, avatarColors, signOut, firstName } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -19,7 +19,8 @@ export default function UtilityDock() {
   const replayNonce = useSequenceReplayNonce();
   const [expanded, setExpanded] = useState(false);
   const displayName =
-    user?.displayName?.trim() ||
+    firstName?.trim() ||
+    user?.displayName?.trim().split(/\s+/)[0] ||
     user?.email?.split("@")[0]?.replace(/[._-]+/g, " ") ||
     "friend";
   const userInitial = displayName.charAt(0).toUpperCase();
@@ -35,6 +36,13 @@ export default function UtilityDock() {
     const params = new URLSearchParams(searchParams.toString());
     params.set("panel", "feedback");
     router.push(params.toString() ? `${pathname}?${params.toString()}` : pathname);
+  }
+
+  function openFullscreenFeatureIntro() {
+    setExpanded(false);
+    const params = new URLSearchParams(pathname === "/" ? searchParams.toString() : "");
+    params.set("introTour", "fullscreen");
+    router.push(`/?${params.toString()}`);
   }
 
   return (
@@ -58,10 +66,24 @@ export default function UtilityDock() {
             transition={{ duration: MOTION_DURATION.standard, ease: EASE_OUT }}
             className="mb-3 w-[17rem] overflow-hidden rounded-lg border border-zinc-800 bg-zinc-950 shadow-[0_4px_24px_rgba(0,0,0,0.5)]"
           >
-            <div className="border-b border-zinc-800 px-4 py-2 text-[11px] text-zinc-500">
+            <div className="border-b border-zinc-800 px-4 py-2.5 font-sans text-xs tracking-tight text-white/95">
               Hey {displayName}!
             </div>
             <div className="flex flex-col divide-y divide-zinc-800">
+              <button
+                type="button"
+                onClick={openFullscreenFeatureIntro}
+                className="px-4 py-2.5 text-left text-xs text-zinc-400 transition-colors hover:bg-zinc-900 hover:text-zinc-50"
+              >
+                Walkthrough
+              </button>
+              <button
+                type="button"
+                onClick={openFeedback}
+                className="px-4 py-2.5 text-left text-xs text-zinc-400 transition-colors hover:bg-zinc-900 hover:text-zinc-50"
+              >
+                Feedback
+              </button>
               <Link
                 href="/colophon"
                 onClick={() => setExpanded(false)}
@@ -76,13 +98,6 @@ export default function UtilityDock() {
               >
                 Epigraph
               </Link>
-              <button
-                type="button"
-                onClick={openFeedback}
-                className="px-4 py-2.5 text-left text-xs text-zinc-400 transition-colors hover:bg-zinc-900 hover:text-zinc-50"
-              >
-                Feedback
-              </button>
               <button
                 type="button"
                 onClick={() => {
