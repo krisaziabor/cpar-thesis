@@ -1,17 +1,29 @@
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { storage } from "./firebase";
 
+interface UploadFromProxyOptions {
+  /** Resize to max 800px wide and encode WebP (proxy route). */
+  optimizeThumbnail?: boolean;
+}
+
 /**
  * Fetch bytes from an external URL via the server-side CORS proxy, then upload
  * them to Firebase Storage at `storagePath`. Returns the Firebase download URL.
  */
-async function uploadFromProxy(externalUrl: string, storagePath: string): Promise<string> {
+async function uploadFromProxy(
+  externalUrl: string,
+  storagePath: string,
+  options?: UploadFromProxyOptions
+): Promise<string> {
   if (!storage) throw new Error("Storage not initialised");
 
   const res = await fetch("/api/media/proxy", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ url: externalUrl }),
+    body: JSON.stringify({
+      url: externalUrl,
+      ...(options?.optimizeThumbnail ? { optimizeThumbnail: true } : {}),
+    }),
   });
 
   if (!res.ok) {
@@ -54,8 +66,9 @@ async function uploadFromProxy(externalUrl: string, storagePath: string): Promis
  * Path: `thumbnails/items/{itemId}.{ext}`
  */
 export async function mirrorThumbnail(externalUrl: string, itemId: string): Promise<string> {
-  const ext = externalUrl.match(/\.(png|webp|gif|jpg|jpeg)(?:[?#]|$)/i)?.[1]?.toLowerCase() ?? "jpg";
-  return uploadFromProxy(externalUrl, `thumbnails/items/${itemId}.${ext}`);
+  return uploadFromProxy(externalUrl, `thumbnails/items/${itemId}.webp`, {
+    optimizeThumbnail: true,
+  });
 }
 
 /**
@@ -103,6 +116,8 @@ export async function uploadBase64Thumbnail(dataUri: string, itemId: string): Pr
 
 export interface MirrorVideoResult {
   downloadUrl: string;
+  /** Server-generated poster (Firebase Storage) when ffmpeg succeeded. */
+  thumbnailUrl?: string;
   /** Set when the source post contained more than one media item; only the first was saved. */
   totalMediaCount?: number;
 }
@@ -127,6 +142,14 @@ export async function mirrorVideo(
     throw new Error(`Video upload failed (${res.status}): ${errMsg}`);
   }
 
-  const data = await res.json() as { downloadUrl: string; totalMediaCount?: number };
-  return { downloadUrl: data.downloadUrl, totalMediaCount: data.totalMediaCount };
+  const data = await res.json() as {
+    downloadUrl: string;
+    thumbnailUrl?: string;
+    totalMediaCount?: number;
+  };
+  return {
+    downloadUrl: data.downloadUrl,
+    thumbnailUrl: data.thumbnailUrl,
+    totalMediaCount: data.totalMediaCount,
+  };
 }

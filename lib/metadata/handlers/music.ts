@@ -1,9 +1,11 @@
 import type { CanonItemMetadata, SourceMetadata } from "../types";
+import { tryResolveYoutubeUrlViaHaikuSearch } from "../youtube-track-resolve";
 
 // ─── Odesli / song.link API ───────────────────────────────────────────────────
 // Free, no API key required. Rate limit: ~10 req/s.
 
 const ODESLI_BASE = "https://api.song.link/v1-alpha.1/links";
+const MUSIC_FETCH_TIMEOUT_MS = 20_000;
 
 interface OdesliEntity {
   id: string;
@@ -37,6 +39,16 @@ const ODESLI_TO_PLATFORM: Record<string, string> = {
   amazonMusic: "amazon_music",
   deezer: "deezer",
 };
+
+/** If Odesli did not include YouTube, try Haiku → search query + YouTube Data API. */
+async function enrichYoutubeIfMissing(
+  platform_links: Record<string, string>,
+  track: { title: string; artist: string; album?: string }
+): Promise<void> {
+  if (platform_links.youtube) return;
+  const url = await tryResolveYoutubeUrlViaHaikuSearch(track);
+  if (url) platform_links.youtube = url;
+}
 
 function detectPlatform(url: string): string {
   const hostname = new URL(url).hostname.toLowerCase().replace(/^www\./, "");
@@ -75,6 +87,7 @@ async function getSpotifyToken(): Promise<string | null> {
         Authorization: `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString("base64")}`,
       },
       body: "grant_type=client_credentials",
+      signal: AbortSignal.timeout(MUSIC_FETCH_TIMEOUT_MS),
     });
     if (!res.ok) return null;
     const data = await res.json() as { access_token: string; expires_in: number };
@@ -137,6 +150,7 @@ async function fetchSpotifyTrackDetails(spotifyUrl: string): Promise<SpotifyTrac
   try {
     const res = await fetch(`https://api.spotify.com/v1/tracks/${match[1]}`, {
       headers: { Authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(MUSIC_FETCH_TIMEOUT_MS),
     });
     if (!res.ok) {
       return {
@@ -215,6 +229,15 @@ async function fallbackFromSpotifyUrl(url: string, platform: string): Promise<Ca
     return buildFallbackMusicMetadata(url, platform);
   }
 
+  const platform_links: Record<string, string> = {
+    spotify: spotifyDetails.spotifyUrl ?? url,
+  };
+  await enrichYoutubeIfMissing(platform_links, {
+    title: spotifyDetails.title ?? "Unknown Track",
+    artist: spotifyDetails.creator ?? "Unknown Artist",
+    album: spotifyDetails.albumTitle ?? undefined,
+  });
+
   const sourceMetadata: SourceMetadata = {
     source_type: "music",
     platform,
@@ -224,7 +247,7 @@ async function fallbackFromSpotifyUrl(url: string, platform: string): Promise<Ca
     published_date: spotifyDetails.releaseDate ?? undefined,
     preview_url: spotifyDetails.previewUrl ?? undefined,
     platforms: ["spotify"],
-    platform_links: { spotify: spotifyDetails.spotifyUrl ?? url },
+    platform_links,
   };
 
   return {
@@ -256,6 +279,7 @@ async function fetchItunesTrackDetails(trackId: string): Promise<ItunesTrackDeta
   try {
     const res = await fetch(`https://itunes.apple.com/lookup?id=${encodeURIComponent(trackId)}`, {
       headers: { "User-Agent": "Kanon/1.0 (https://kanon.app)" },
+      signal: AbortSignal.timeout(MUSIC_FETCH_TIMEOUT_MS),
     });
     if (!res.ok) return { albumTitle: null, year: null, releaseDate: null };
 
@@ -286,6 +310,7 @@ export async function fetchMusicMetadata(url: string): Promise<CanonItemMetadata
 
   const res = await fetch(apiUrl, {
     headers: { "User-Agent": "Kanon/1.0 (https://kanon.app)" },
+    signal: AbortSignal.timeout(MUSIC_FETCH_TIMEOUT_MS),
   });
 
   if (!res.ok) {
@@ -348,6 +373,12 @@ export async function fetchMusicMetadata(url: string): Promise<CanonItemMetadata
     (entity.type === "album" ? entity.title : undefined);
   const releaseYear = spotifyDetails.year ?? itunesDetails.year ?? undefined;
   const releaseDate = spotifyDetails.releaseDate ?? itunesDetails.releaseDate ?? undefined;
+
+  await enrichYoutubeIfMissing(platform_links, {
+    title: entity.title ?? "Unknown Track",
+    artist: entity.artistName ?? "Unknown Artist",
+    album: albumTitle,
+  });
 
   const sourceMetadata: SourceMetadata = {
     source_type: "music",

@@ -27,6 +27,56 @@ export interface AIEnrichmentResult {
   language?: string;
 }
 
+const AI_SOURCE_TYPES = new Set([
+  "news-article",
+  "essay-blog",
+  "video",
+  "music",
+  "social-post",
+  "generic-link",
+]);
+
+/** Drop unknown keys, coerce types, cap lengths — never trust model JSON. */
+export function parseAIEnrichmentJson(raw: unknown): AIEnrichmentResult {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+  const o = raw as Record<string, unknown>;
+  const out: AIEnrichmentResult = {};
+
+  if (typeof o.title === "string") {
+    const t = o.title.trim().slice(0, 500);
+    if (t) out.title = t;
+  }
+
+  if (Array.isArray(o.authors)) {
+    const authors = o.authors
+      .filter((a): a is string => typeof a === "string")
+      .map((a) => a.trim().slice(0, 200))
+      .filter(Boolean)
+      .slice(0, 20);
+    if (authors.length) out.authors = authors;
+  }
+
+  if (typeof o.description === "string") {
+    const d = o.description.trim().slice(0, 2000);
+    if (d) out.description = d;
+  }
+
+  if (typeof o.publishedDate === "string") {
+    const p = o.publishedDate.trim();
+    if (/^\d{4}-\d{2}-\d{2}/.test(p)) out.publishedDate = p.slice(0, 10);
+  }
+
+  if (typeof o.sourceType === "string" && AI_SOURCE_TYPES.has(o.sourceType)) {
+    out.sourceType = o.sourceType;
+  }
+
+  if (typeof o.language === "string" && /^[a-z]{2}(-[A-Z]{2})?$/.test(o.language)) {
+    out.language = o.language;
+  }
+
+  return out;
+}
+
 // ─── Page text extraction ────────────────────────────────────────────────────
 
 function extractPageText(html: string): string {
@@ -103,7 +153,8 @@ export async function aiEnrichMetadata(
         .replace(/^```json\n?/, "")
         .replace(/\n?```$/, "")
         .trim();
-      return JSON.parse(cleaned) as AIEnrichmentResult;
+      const parsed: unknown = JSON.parse(cleaned);
+      return parseAIEnrichmentJson(parsed);
     } catch {
       console.warn("[ai-enrich] malformed JSON:", text.slice(0, 200));
       return {};

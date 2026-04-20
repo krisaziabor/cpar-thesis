@@ -1,7 +1,7 @@
 /**
  * Server-side video download using yt-dlp.
  * Supports Instagram, TikTok, Twitter/X, and 1000+ other sites.
- * YouTube is handled separately by the youtube handler (ytdl-core).
+ * YouTube streams may also be resolved via yt-dlp when ytdl-core fails.
  */
 
 import { execFile } from "node:child_process";
@@ -30,6 +30,25 @@ interface YtDlpProbe {
   filesize_approx?: number;
   playlist_count?: number;
   n_entries?: number;
+}
+
+/**
+ * Optional Netscape cookie file or browser cookie jar for age-gated / flaky pages.
+ * Precedence: `YT_DLP_COOKIES_FILE` (path on disk) over `YT_DLP_COOKIES_FROM_BROWSER` (e.g. `chrome`).
+ * Serverless: browser mode often unavailable; prefer exporting cookies to a file.
+ */
+export function ytDlpGlobalArgs(): string[] {
+  const args: string[] = [];
+  const cookieFile = process.env.YT_DLP_COOKIES_FILE?.trim();
+  if (cookieFile && existsSync(cookieFile)) {
+    args.push("--cookies", cookieFile);
+    return args;
+  }
+  const fromBrowser = process.env.YT_DLP_COOKIES_FROM_BROWSER?.trim();
+  if (fromBrowser) {
+    args.push("--cookies-from-browser", fromBrowser);
+  }
+  return args;
 }
 
 function resolveYtDlpBinary(): string {
@@ -68,6 +87,175 @@ function extToContentType(ext: string): string {
   return "video/mp4";
 }
 
+const IMAGE_EXT_TO_MIME: Record<string, string> = {
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  png: "image/png",
+  webp: "image/webp",
+};
+
+/** Normalized fields from `yt-dlp --dump-single-json` for social pages. */
+export interface YtDlpMediaProbe {
+  title?: string;
+  description?: string;
+  thumbnailUrl?: string;
+  uploader?: string;
+  uploaderUrl?: string;
+  /** YYYY-MM-DD when derivable */
+  published_date?: string;
+  duration_seconds?: number;
+  view_count?: number;
+  like_count?: number;
+  playlist_count?: number;
+  id?: string;
+  extractor?: string;
+  raw: Record<string, unknown>;
+}
+
+function ymdToIsoDate(ymd: string | undefined): string | undefined {
+  if (!ymd || !/^\d{8}$/.test(ymd)) return undefined;
+  return `${ymd.slice(0, 4)}-${ymd.slice(4, 6)}-${ymd.slice(6, 8)}`;
+}
+
+function timestampToIsoDate(ts: unknown): string | undefined {
+  if (typeof ts !== "number" || !Number.isFinite(ts) || ts <= 0) return undefined;
+  return new Date(ts * 1000).toISOString().slice(0, 10);
+}
+
+function parseYtCount(v: unknown): number | undefined {
+  if (typeof v === "number" && Number.isFinite(v)) return Math.trunc(v);
+  if (typeof v === "string" && /^\d[\d,]*$/.test(v.replace(/,/g, ""))) {
+    return parseInt(v.replace(/,/g, ""), 10);
+  }
+  return undefined;
+}
+
+/**
+ * Single yt-dlp JSON probe — no video download. Use with TikTok / Instagram / X video URLs.
+ * Returns null if yt-dlp is missing or the page is unsupported.
+ */
+export async function probeMediaPageWithYtDlp(pageUrl: string): Promise<YtDlpMediaProbe | null> {
+  let binaryPath: string;
+  try {
+    binaryPath = resolveYtDlpBinary();
+  } catch {
+    return null;
+  }
+
+  try {
+    const { stdout } = await execFileAsync(
+      binaryPath,
+      [...ytDlpGlobalArgs(), "--dump-single-json", "--no-playlist", "--no-warnings", pageUrl],
+      { maxBuffer: 32 * 1024 * 1024, timeout: 45_000 }
+    );
+
+    const j = JSON.parse(stdout.trim()) as Record<string, unknown>;
+    const uploadDate = typeof j.upload_date === "string" ? j.upload_date : undefined;
+    const published =
+      ymdToIsoDate(uploadDate) ?? timestampToIsoDate(j.timestamp);
+
+    const title = typeof j.title === "string" ? j.title : undefined;
+    const description = typeof j.description === "string" ? j.description : undefined;
+    const thumbnailUrl = typeof j.thumbnail === "string" ? j.thumbnail : undefined;
+    const uploader =
+      typeof j.uploader === "string"
+        ? j.uploader
+        : typeof j.channel === "string"
+          ? j.channel
+          : undefined;
+    const uploaderUrl =
+      typeof j.uploader_url === "string"
+        ? j.uploader_url
+        : typeof j.channel_url === "string"
+          ? j.channel_url
+          : undefined;
+
+    const duration =
+      typeof j.duration === "number" && Number.isFinite(j.duration)
+        ? Math.max(0, Math.floor(j.duration))
+        : undefined;
+
+    const playlistCount =
+      typeof j.playlist_count === "number"
+        ? j.playlist_count
+        : typeof j.n_entries === "number"
+          ? j.n_entries
+          : undefined;
+
+    return {
+      title,
+      description,
+      thumbnailUrl,
+      uploader,
+      uploaderUrl,
+      published_date: published,
+      duration_seconds: duration,
+      view_count: parseYtCount(j.view_count),
+      like_count: parseYtCount(j.like_count),
+      playlist_count: playlistCount,
+      id: typeof j.id === "string" ? j.id : undefined,
+      extractor: typeof j.extractor === "string" ? j.extractor : undefined,
+      raw: j,
+    };
+  } catch (err) {
+    console.warn("[yt-dlp-probe] failed:", err);
+    return null;
+  }
+}
+
+/**
+ * Best-effort clean poster image (no oEmbed play-button overlay on IG, etc.).
+ * Uses yt-dlp only; does not download video bytes.
+ */
+export async function fetchThumbnailBytesViaYtDlp(
+  pageUrl: string
+): Promise<{ buffer: Buffer; mimeType: string } | null> {
+  const binaryPath = resolveYtDlpBinary();
+  const tmpDir = await mkdtemp(path.join(tmpdir(), "kanon-thumb-"));
+  const outBase = path.join(tmpDir, "thumb");
+
+  try {
+    await execFileAsync(
+      binaryPath,
+      [
+        ...ytDlpGlobalArgs(),
+        "--no-playlist",
+        "--no-warnings",
+        "--skip-download",
+        "--write-thumbnail",
+        "-o",
+        `${outBase}.%(ext)s`,
+        pageUrl,
+      ],
+      { maxBuffer: 16 * 1024 * 1024, timeout: 45_000 }
+    );
+
+    const files = readdirSync(tmpDir);
+    const thumbFile = files.find((f) => f.startsWith("thumb."));
+    if (!thumbFile) return null;
+
+    const buf = readFileSync(path.join(tmpDir, thumbFile));
+    if (buf.byteLength < 256 || buf.byteLength > 12 * 1024 * 1024) return null;
+
+    const ext = path.extname(thumbFile).slice(1).toLowerCase() || "jpg";
+    const mimeType = IMAGE_EXT_TO_MIME[ext] ?? "image/jpeg";
+    return { buffer: buf, mimeType };
+  } catch (err) {
+    console.warn("[yt-dlp-thumbnail] failed:", err);
+    return null;
+  } finally {
+    try {
+      for (const f of readdirSync(tmpDir)) {
+        unlinkSync(path.join(tmpDir, f));
+      }
+      const { rmdirSync } = await import("node:fs");
+      rmdirSync(tmpDir);
+    } catch {
+      /* best-effort */
+    }
+  }
+}
+
 /**
  * Use yt-dlp to download a video to a temp file and return its bytes.
  * yt-dlp manages all platform-specific cookies/headers internally, so
@@ -84,6 +272,7 @@ export async function downloadVideo(url: string): Promise<DownloadedVideo> {
   const { stdout: probeStdout } = await execFileAsync(
     binaryPath,
     [
+      ...ytDlpGlobalArgs(),
       "--dump-single-json",
       "--no-playlist",
       "--no-warnings",
@@ -113,6 +302,7 @@ export async function downloadVideo(url: string): Promise<DownloadedVideo> {
     await execFileAsync(
       binaryPath,
       [
+        ...ytDlpGlobalArgs(),
         "--no-playlist",
         "--no-warnings",
         "-f",
@@ -155,4 +345,62 @@ export async function downloadVideo(url: string): Promise<DownloadedVideo> {
       rmdirSync(tmpDir);
     } catch { /* best-effort cleanup */ }
   }
+}
+
+/**
+ * Best-effort direct MP4/stream URL for YouTube when @distube/ytdl-core cannot produce one.
+ * Uses the same yt-dlp binary and cookie env vars as other extractors.
+ */
+export async function tryYoutubeStreamUrlViaYtDlp(pageUrl: string): Promise<string | undefined> {
+  let binaryPath: string;
+  try {
+    binaryPath = resolveYtDlpBinary();
+  } catch {
+    return undefined;
+  }
+  try {
+    const { stdout } = await execFileAsync(
+      binaryPath,
+      [
+        ...ytDlpGlobalArgs(),
+        "--dump-single-json",
+        "--no-playlist",
+        "--no-warnings",
+        "-f",
+        "best[ext=mp4][vcodec!=none][acodec!=none]/best[ext=mp4][vcodec!=none]/best[ext=mp4]/best",
+        pageUrl,
+      ],
+      { maxBuffer: 32 * 1024 * 1024, timeout: 60_000 }
+    );
+    const j = JSON.parse(stdout.trim()) as Record<string, unknown>;
+    if (typeof j.url === "string" && /^https?:\/\//.test(j.url)) {
+      return j.url;
+    }
+    const formats = j.formats as
+      | Array<{ url?: string; vcodec?: string; acodec?: string }>
+      | undefined;
+    if (!Array.isArray(formats)) return undefined;
+    for (let i = formats.length - 1; i >= 0; i--) {
+      const f = formats[i];
+      if (
+        f?.url &&
+        /^https?:\/\//.test(f.url) &&
+        f.vcodec &&
+        f.vcodec !== "none" &&
+        f.acodec &&
+        f.acodec !== "none"
+      ) {
+        return f.url;
+      }
+    }
+    for (let i = formats.length - 1; i >= 0; i--) {
+      const f = formats[i];
+      if (f?.url && /^https?:\/\//.test(f.url) && f.vcodec && f.vcodec !== "none") {
+        return f.url;
+      }
+    }
+  } catch (err) {
+    console.warn("[yt-dlp-youtube-stream] failed:", err);
+  }
+  return undefined;
 }

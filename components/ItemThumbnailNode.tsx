@@ -17,6 +17,25 @@ export type ItemThumbnailNodeType = Node<
   "itemThumbnail"
 >;
 
+/** When there is no thumbnail image, show a small host hint so text-only tweets etc. are recognizable. */
+function linkHostBadge(link: string | undefined): { label: string; title: string } | null {
+  if (!link?.trim()) return null;
+  try {
+    const h = new URL(link).hostname.replace(/^www\./, "").toLowerCase();
+    if (h === "x.com" || h === "twitter.com" || h.endsWith(".twitter.com"))
+      return { label: "X", title: "Post on X" };
+    if (h === "instagram.com" || h.endsWith(".instagram.com") || h === "instagr.am")
+      return { label: "IG", title: "Instagram" };
+    if (h === "tiktok.com" || h.endsWith(".tiktok.com"))
+      return { label: "TT", title: "TikTok" };
+    if (h === "youtu.be" || h.includes("youtube.com"))
+      return { label: "YT", title: "YouTube" };
+  } catch {
+    return null;
+  }
+  return null;
+}
+
 export default function ItemThumbnailNode({ data }: NodeProps<ItemThumbnailNodeType>) {
   const { item, isFirst, index, isSelected, isConnectSelecting } = data;
   const hasAnimatedRef = useRef(false);
@@ -56,14 +75,34 @@ export default function ItemThumbnailNode({ data }: NodeProps<ItemThumbnailNodeT
           />
         ) : (
           <div
-            className={`flex items-center justify-center bg-zinc-900 ${
+            className={`flex flex-col items-center justify-center gap-1 bg-zinc-900 ${
               isSelected ? "ring-2 ring-zinc-200 ring-offset-2 ring-offset-black" : ""
             }`}
             style={{ height: NODE_H }}
           >
-            <span className="text-[11px] text-zinc-600 uppercase tracking-widest">
-              {item.type}
-            </span>
+            {(() => {
+              const badge = linkHostBadge(item.link);
+              if (badge) {
+                return (
+                  <>
+                    <span
+                      className="text-lg font-semibold leading-none text-zinc-400"
+                      title={badge.title}
+                    >
+                      {badge.label}
+                    </span>
+                    <span className="text-[10px] text-zinc-600 uppercase tracking-widest">
+                      {item.type}
+                    </span>
+                  </>
+                );
+              }
+              return (
+                <span className="text-[11px] text-zinc-600 uppercase tracking-widest">
+                  {item.type}
+                </span>
+              );
+            })()}
           </div>
         )}
       </motion.div>

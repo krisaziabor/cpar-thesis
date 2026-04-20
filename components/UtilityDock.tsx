@@ -69,6 +69,13 @@ export default function UtilityDock() {
               >
                 Colophon
               </Link>
+              <Link
+                href="/epigraph"
+                onClick={() => setExpanded(false)}
+                className="px-4 py-2.5 text-left text-xs text-zinc-400 transition-colors hover:bg-zinc-900 hover:text-zinc-50"
+              >
+                Epigraph
+              </Link>
               <button
                 type="button"
                 onClick={openFeedback}

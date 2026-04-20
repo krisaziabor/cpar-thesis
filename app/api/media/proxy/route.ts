@@ -38,7 +38,7 @@ function looksLikePdfUrl(raw: string): boolean {
 
 /**
  * POST /api/media/proxy
- * Body: { url: string }
+ * Body: { url: string, optimizeThumbnail?: boolean }
  *
  * Fetches the target URL server-side (bypassing browser CORS restrictions),
  * validates it is an image, audio, or PDF, and streams the bytes back to the
@@ -47,8 +47,8 @@ function looksLikePdfUrl(raw: string): boolean {
  */
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json() as { url?: string };
-    const { url } = body;
+    const body = await request.json() as { url?: string; optimizeThumbnail?: boolean };
+    const { url, optimizeThumbnail } = body;
 
     if (!url || typeof url !== "string") {
       return NextResponse.json({ error: "url required" }, { status: 400 });
@@ -63,6 +63,7 @@ export async function POST(request: NextRequest) {
         Accept: "image/*,audio/*,application/pdf,*/*;q=0.8",
       },
       redirect: "follow",
+      signal: AbortSignal.timeout(25_000),
     });
 
     if (!upstream.ok) {
@@ -97,6 +98,31 @@ export async function POST(request: NextRequest) {
         { error: `File exceeds ${Math.floor(MAX_BYTES / (1024 * 1024))} MB limit` },
         { status: 413 }
       );
+    }
+
+    if (
+      optimizeThumbnail &&
+      isKnownAllowedType &&
+      contentType.startsWith("image/") &&
+      !contentType.includes("svg")
+    ) {
+      try {
+        const sharp = (await import("sharp")).default;
+        const out = await sharp(Buffer.from(buffer))
+          .rotate()
+          .resize({ width: 800, withoutEnlargement: true })
+          .webp({ quality: 82 })
+          .toBuffer();
+        return new NextResponse(new Blob([new Uint8Array(out)]), {
+          headers: {
+            "Content-Type": "image/webp",
+            "Content-Length": String(out.byteLength),
+            "Cache-Control": "public, max-age=3600",
+          },
+        });
+      } catch (err) {
+        console.warn("[media-proxy] thumbnail optimize failed, returning original:", err);
+      }
     }
 
     return new NextResponse(buffer, {

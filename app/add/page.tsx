@@ -6,6 +6,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { AnimatePresence, motion, useAnimationControls, useReducedMotion } from "framer-motion";
 import { useAuth } from "@/lib/auth-context";
 import AudioRecorder from "@/components/AudioRecorder";
+import RecordingInterface from "@/components/RecordingInterface";
+import { getUserProfile } from "@/lib/users";
 import {
   createItemDoc,
   createAndPublishItem,
@@ -26,6 +28,7 @@ import type { MetadataResult, SourceMetadata, SourceType } from "@/lib/metadata/
 import { mirrorPreviewAudio, mirrorThumbnail, mirrorVideo, uploadBase64Thumbnail } from "@/lib/media-upload";
 import type { Item } from "@/lib/types";
 import { EASE_OUT, MOTION_DURATION } from "@/lib/motion";
+import { useSuppressFloatingNavWhile } from "@/lib/floating-nav-suppress-context";
 import { useNavStatus } from "@/lib/nav-status-context";
 
 type Step = "source" | "details" | "record";
@@ -402,6 +405,7 @@ export function AddItemPageInnerWithSuspense({
   onCanGoBackChange,
   onHasUnsavedProgressChange,
   onSourceStepScrollLockChange,
+  onRecordStepChange,
 }: {
   hideHeader?: boolean;
   onProgressChange?: (progressPercent: number) => void;
@@ -411,6 +415,7 @@ export function AddItemPageInnerWithSuspense({
   onCanGoBackChange?: (canGoBack: boolean) => void;
   onHasUnsavedProgressChange?: (hasUnsaved: boolean) => void;
   onSourceStepScrollLockChange?: (locked: boolean) => void;
+  onRecordStepChange?: (active: boolean) => void;
 }) {
   return (
     <Suspense>
@@ -423,6 +428,7 @@ export function AddItemPageInnerWithSuspense({
         onCanGoBackChange={onCanGoBackChange}
         onHasUnsavedProgressChange={onHasUnsavedProgressChange}
         onSourceStepScrollLockChange={onSourceStepScrollLockChange}
+        onRecordStepChange={onRecordStepChange}
       />
     </Suspense>
   );
@@ -437,6 +443,7 @@ function AddItemPageInner({
   onCanGoBackChange,
   onHasUnsavedProgressChange,
   onSourceStepScrollLockChange,
+  onRecordStepChange,
 }: {
   hideHeader?: boolean;
   onProgressChange?: (progressPercent: number) => void;
@@ -446,6 +453,7 @@ function AddItemPageInner({
   onCanGoBackChange?: (canGoBack: boolean) => void;
   onHasUnsavedProgressChange?: (hasUnsaved: boolean) => void;
   onSourceStepScrollLockChange?: (locked: boolean) => void;
+  onRecordStepChange?: (active: boolean) => void;
 }) {
   const { loading: authLoading, user } = useAuth();
   const router = useRouter();
@@ -457,6 +465,7 @@ function AddItemPageInner({
   const isPanelAddMode = searchParams.get("panel") === "add";
 
   const [step, setStep] = useState<Step>("source");
+  useSuppressFloatingNavWhile(step === "record");
   const [draft, setDraft] = useState<ItemDraft>(EMPTY);
   const [destination, setDestination] = useState<Destination>("library");
   const [queuedItems, setQueuedItems] = useState<QueueItem[]>([]);
@@ -480,7 +489,8 @@ function AddItemPageInner({
   const [, setFilePreviewUrl] = useState<string | null>(null);
   const [isDragActive, setIsDragActive] = useState(false);
   const [showClosePrompt, setShowClosePrompt] = useState(false);
-  
+  const [userColors, setUserColors] = useState<[string, string, string]>(["#C73C28", "#2A86A2", "#7238A0"]);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const editFileInputRef = useRef<HTMLInputElement>(null);
   const cardsScrollRef = useRef<HTMLDivElement>(null);
@@ -628,6 +638,17 @@ function AddItemPageInner({
   useEffect(() => {
     onCanGoBackChange?.(step !== "source");
   }, [onCanGoBackChange, step]);
+
+  useEffect(() => {
+    onRecordStepChange?.(step === "record");
+  }, [onRecordStepChange, step]);
+
+  useEffect(() => {
+    if (!user?.email) return;
+    getUserProfile(user.email).then((profile) => {
+      if (profile?.avatar_colors) setUserColors(profile.avatar_colors);
+    });
+  }, [user?.email]);
 
   useEffect(() => {
     setRecordings((prev) =>
@@ -1209,12 +1230,14 @@ function AddItemPageInner({
           await updateItem(itemId, { media_url: fileUrl });
         }
 
+        let persistedThumbnail = false;
         if (itemData.thumbnailUrl) {
           try {
             const savedThumbnail = itemData.thumbnailUrl.startsWith("data:")
               ? await uploadBase64Thumbnail(itemData.thumbnailUrl, itemId)
               : await mirrorThumbnail(itemData.thumbnailUrl, itemId);
             await updateItem(itemId, { thumbnail_url: savedThumbnail });
+            persistedThumbnail = true;
           } catch {
             // Non-fatal
           }
@@ -1240,8 +1263,11 @@ function AddItemPageInner({
         if (shouldMirrorVideo) {
           try {
             const token = await currentUser.getIdToken();
-            const { downloadUrl } = await mirrorVideo(pageUrl, itemId, token);
+            const { downloadUrl, thumbnailUrl: posterUrl } = await mirrorVideo(pageUrl, itemId, token);
             await updateItem(itemId, { media_url: downloadUrl });
+            if (posterUrl && !persistedThumbnail) {
+              await updateItem(itemId, { thumbnail_url: posterUrl });
+            }
           } catch {
             // Non-fatal
           }
@@ -1320,7 +1346,7 @@ function AddItemPageInner({
 
 
   return (
-    <div className={hideHeader ? "relative" : "relative min-h-screen bg-black"}>
+    <div className={hideHeader ? "relative h-full" : "relative min-h-screen bg-black"}>
       {fileInput}
 
       <AnimatePresence>
@@ -1333,7 +1359,7 @@ function AddItemPageInner({
             transition={{ duration: shouldReduceMotion ? 0 : MOTION_DURATION.panel, ease: EASE_OUT }}
             className={
               isPanelAddMode
-                ? "fixed right-4 top-4 z-[60] flex h-[calc(100vh-2rem)] w-[460px] max-w-[92vw] items-start justify-start rounded-2xl backdrop-blur-xl"
+                ? `fixed right-4 top-4 z-[60] flex h-[calc(100vh-2rem)] ${step === "record" ? "w-[900px]" : "w-[460px]"} max-w-[95vw] items-start justify-start rounded-2xl backdrop-blur-xl`
                 : "absolute inset-0 z-30 flex items-start justify-start backdrop-blur-xl"
             }
             style={{ backgroundColor: "rgba(0, 0, 0, 0.6)" }}
@@ -1377,7 +1403,7 @@ function AddItemPageInner({
         )}
       </AnimatePresence>
 
-      <main className="mx-auto max-w-xl px-6 pb-8 pt-6">
+      <main className={step === "record" ? "h-full" : "mx-auto max-w-xl px-6 pb-8 pt-6"}>
         <AnimatePresence initial={false} mode="wait">
         {step === "source" && (
           <motion.section
@@ -2002,7 +2028,7 @@ function AddItemPageInner({
             className="space-y-5"
           >
             <div>
-              <h1 className="font-lector text-base tracking-tight text-zinc-100">Edit record details</h1>
+              <h1 className="font-lector text-lg tracking-tight text-zinc-100 mb-6">Edit record details</h1>
               {queuedItems.length > 1 && (
                 <p className="mt-1 text-xs text-zinc-500">
                   Record {detailsIndex + 1} of {queuedItems.length}
@@ -2239,95 +2265,54 @@ function AddItemPageInner({
           </motion.section>
         )}
 
-        {step === "record" && (
-          <motion.section
+        {step === "record" && activeQueueItem && (
+          <motion.div
             key="add-step-record"
-            initial={shouldReduceMotion ? false : { opacity: 0, y: 6 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={shouldReduceMotion ? { opacity: 1, y: 0 } : { opacity: 0, y: -6 }}
+            initial={shouldReduceMotion ? false : { opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={shouldReduceMotion ? { opacity: 1 } : { opacity: 0 }}
             transition={{ duration: shouldReduceMotion ? 0 : MOTION_DURATION.standard, ease: EASE_OUT }}
-            className="space-y-5"
+            className="h-full"
           >
-            <div>
-              <h1 className="font-lector text-base tracking-tight text-zinc-100">Record narratives</h1>
-              <p className="mt-1 text-xs text-zinc-500">
-                {destination === "holding"
-                  ? "Record in sequence, or skip recordings and save directly to Hold."
-                  : "Record in sequence. Each queued item needs its own audio before submit."}
-              </p>
-            </div>
-
-            {activeQueueItem && (
-              <div className="space-y-2 rounded-lg border border-zinc-800 px-4 py-3">
-                {activeQueueItem.thumbnailUrl && (
-                  <img
-                    src={activeQueueItem.thumbnailUrl}
-                    alt={`${activeQueueItem.title} thumbnail`}
-                    className="h-auto w-full rounded border border-zinc-800 object-cover"
-                  />
-                )}
-                <p className="text-xs text-zinc-500">
-                  Item {recordIndex + 1} of {recordingQueue.length}
-                </p>
-                <p className="font-lector text-sm text-zinc-100">{activeQueueItem.title}</p>
-                <p className="text-xs text-zinc-500">
-                  {[activeQueueItem.creator, activeQueueItem.mediaDate].filter(Boolean).join(" · ")}
-                </p>
-              </div>
-            )}
-
-            <AudioRecorder
-              onRecorded={(blob) => {
+            <RecordingInterface
+              item={{
+                title: activeQueueItem.title,
+                creator: activeQueueItem.creator,
+                mediaDate: activeQueueItem.mediaDate,
+                thumbnailUrl: activeQueueItem.thumbnailUrl,
+                index: recordIndex,
+                total: recordingQueue.length,
+              }}
+              colors={userColors}
+              hasRecording={canAdvanceRecording}
+              onRecorded={(blob) =>
                 setRecordings((prev) =>
                   prev.map((entry, idx) =>
                     idx === recordIndex ? { blob, existingUrl: null } : entry
                   )
-                );
-              }}
-              onClearedInitial={() =>
-                setRecordings((prev) =>
-                  prev.map((entry, idx) => (idx === recordIndex ? { blob: null, existingUrl: null } : entry))
                 )
               }
-              initialUrl={undefined}
-              prompt="Why does this matter?"
+              onReRecord={() =>
+                setRecordings((prev) =>
+                  prev.map((entry, idx) =>
+                    idx === recordIndex ? { blob: null, existingUrl: null } : entry
+                  )
+                )
+              }
+              destination={destination}
+              isLast={recordIndex >= recordingQueue.length - 1}
+              canAdvance={canAdvanceRecording}
+              onSkip={() => {
+                if (recordIndex < recordingQueue.length - 1) {
+                  setRecordIndex((idx) => idx + 1);
+                } else {
+                  void handleSubmitBatch();
+                }
+              }}
+              onNext={() => setRecordIndex((idx) => idx + 1)}
+              onSubmit={() => void handleSubmitBatch()}
             />
-
-            <div className="flex items-center gap-3">
-              {destination === "holding" && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (recordIndex < recordingQueue.length - 1) {
-                      setRecordIndex((idx) => idx + 1);
-                    } else {
-                      void handleSubmitBatch();
-                    }
-                  }}
-                  className="font-sans text-sm text-zinc-500 transition-colors duration-150 ease-[ease] hover:text-zinc-200"
-                >
-                  Skip
-                </button>
-              )}
-              {recordIndex < recordingQueue.length - 1 ? (
-                <button
-                  onClick={() => setRecordIndex((idx) => idx + 1)}
-                  disabled={destination === "library" ? !canAdvanceRecording : false}
-                  className="font-sans text-sm text-zinc-100 transition-colors duration-150 ease-[ease] hover:text-white disabled:opacity-40"
-                >
-                  Next recording
-                </button>
-              ) : (
-                <button
-                  onClick={handleSubmitBatch}
-                  disabled={destination === "library" ? !canAdvanceRecording : false}
-                  className="font-sans text-sm text-zinc-100 transition-colors duration-150 ease-[ease] hover:text-white disabled:opacity-40"
-                >
-                  Submit all
-                </button>
-              )}
-            </div>
-          </motion.section>
+          </motion.div>
         )}
         </AnimatePresence>
 

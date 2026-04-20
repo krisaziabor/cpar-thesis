@@ -9,9 +9,25 @@ import { fetchImageMetadata } from "./handlers/image";
 import { fetchNewsMetadata } from "./handlers/news";
 import { fetchMediaFileMetadata } from "./handlers/media-file";
 import { scoreMetadata, AI_CONFIDENCE_THRESHOLD } from "./score";
-import { getCachedMetadata, setCachedMetadata, logEnrichment } from "./cache";
+import {
+  resolveMetadataCache,
+  scheduleMetadataRefresh,
+  setCachedMetadata,
+  logEnrichment,
+} from "./cache";
 import { aiEnrichMetadata, mergeMetadata } from "./ai-enrich";
 import type { CanonItemMetadata, MetadataResult, SourceType } from "./types";
+
+/** Ephemeral CDN URLs must not be cached (they expire quickly). */
+function cloneForMetadataCache(metadata: CanonItemMetadata): CanonItemMetadata {
+  if (!metadata.video_download_url) return metadata;
+  const rest = { ...metadata };
+  delete rest.video_download_url;
+  return {
+    ...rest,
+    source_metadata: { ...metadata.source_metadata },
+  };
+}
 
 interface PipelineInput {
   url?: string;
@@ -40,7 +56,11 @@ export async function runMetadataPipeline(
         case "audio":
         case "video":
           metadata = await fetchMediaFileMetadata(
-            { name: input.file.name, type: input.file.type },
+            {
+              name: input.file.name,
+              type: input.file.type,
+              buffer: input.file.buffer,
+            },
             sourceType
           );
           break;
@@ -50,18 +70,26 @@ export async function runMetadataPipeline(
     } else if (input.url) {
       sourceType = classifyUrl(input.url);
 
-      // ── Cache check (all URL-based handlers) ─────────────────────────────
+      // ── Cache check (all URL-based handlers) — stale-while-revalidate ────
       if (!input.refresh) {
-        const cached = await getCachedMetadata(input.url);
-        if (cached) {
-          return { success: true, data: cached, source_type: sourceType };
+        const resolved = await resolveMetadataCache(input.url);
+        if (resolved.kind === "hit") {
+          if (resolved.revalidateInBackground) {
+            scheduleMetadataRefresh(input.url);
+          }
+          return {
+            success: true,
+            data: resolved.metadata,
+            source_type: sourceType,
+            cache_status: resolved.revalidateInBackground ? "stale" : "hit",
+          };
         }
       }
 
       // ── Handler dispatch ──────────────────────────────────────────────────
       switch (sourceType) {
         case "pdf": {
-          const res = await fetch(input.url);
+          const res = await fetch(input.url, { signal: AbortSignal.timeout(60_000) });
           if (!res.ok) throw new Error(`Could not fetch PDF at ${input.url}`);
           const buf = Buffer.from(await res.arrayBuffer());
           const name = input.url.split("/").pop() ?? "document.pdf";
@@ -149,12 +177,19 @@ export async function runMetadataPipeline(
       // ── Cache write (URL-based handlers only) ────────────────────────────
       const finalScore = metadata.source_metadata.confidence_score ?? scoreMetadata(metadata);
       const aiEnriched = metadata.source_metadata.ai_enriched ?? false;
-      setCachedMetadata(input.url, metadata, aiEnriched, finalScore).catch(() => {});
+      setCachedMetadata(input.url, cloneForMetadataCache(metadata), aiEnriched, finalScore).catch(
+        () => {}
+      );
     } else {
       throw new Error("Either url or file must be provided");
     }
 
-    return { success: true, data: metadata, source_type: sourceType };
+    return {
+      success: true,
+      data: metadata,
+      source_type: sourceType,
+      ...(input.url ? { cache_status: "miss" as const } : {}),
+    };
   } catch (err) {
     return {
       success: false,

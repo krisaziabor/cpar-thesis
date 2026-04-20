@@ -1,5 +1,6 @@
 "use client";
 
+import type { MutableRefObject } from "react";
 import { useEffect } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { EASE_OUT, MOTION_DURATION } from "@/lib/motion";
@@ -12,9 +13,24 @@ interface RightPanelProps {
   /** Label shown as a tooltip on the back arrow (e.g. the previous panel's title). */
   backLabel?: string;
   onClose: () => void;
+  /** When provided, renders a fullscreen icon button next to the close button. */
+  onFullScreen?: () => void;
   children: React.ReactNode;
   /** When true the body area will not scroll; the child is responsible for its own overflow. */
   disableBodyScroll?: boolean;
+  /** When true the panel expands wide. */
+  wide?: boolean;
+  /** Override the wide width (default 1640). */
+  wideWidth?: number;
+  /** Optional layer rendered behind the header and body (e.g. ambient gradient). */
+  backgroundOverlay?: React.ReactNode;
+  /** When false, Escape does not call onClose (e.g. child fullscreen handles Escape). Default true. */
+  closeOnEscape?: boolean;
+  /**
+   * When provided, Escape does not call onClose while this ref is true (read synchronously on each keydown).
+   * Use for overlays that dismiss on Escape before the panel should.
+   */
+  escapeDismissBlockedRef?: MutableRefObject<boolean>;
 }
 
 export default function RightPanel({
@@ -24,30 +40,51 @@ export default function RightPanel({
   onBack,
   backLabel,
   onClose,
+  onFullScreen,
   children,
   disableBodyScroll,
+  wide,
+  wideWidth = 1640,
+  backgroundOverlay,
+  closeOnEscape = true,
+  escapeDismissBlockedRef,
 }: RightPanelProps) {
   const shouldReduceMotion = useReducedMotion();
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key !== "Escape") return;
+      if (escapeDismissBlockedRef?.current) return;
+      if (!closeOnEscape) return;
+      onClose();
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [onClose]);
+  }, [onClose, closeOnEscape, escapeDismissBlockedRef]);
 
   return (
     /* No backdrop — panel floats over canvas so other nodes remain clickable */
     <motion.div
-      className="fixed bottom-4 right-4 top-4 z-50 flex w-[460px] max-w-[92vw] flex-col overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-950 shadow-[0_20px_60px_rgba(0,0,0,0.7)]"
-      initial={shouldReduceMotion ? false : { opacity: 0, x: 24 }}
-      animate={{ opacity: 1, x: 0 }}
+      className="fixed bottom-4 right-4 top-4 z-50 flex flex-col overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-950 shadow-[0_20px_60px_rgba(0,0,0,0.7)]"
+      style={{ maxWidth: "95vw" }}
+      initial={shouldReduceMotion ? false : { opacity: 0, x: 24, width: 460 }}
+      animate={{ opacity: 1, x: 0, width: wide ? wideWidth : 460 }}
       exit={shouldReduceMotion ? { opacity: 1, x: 0 } : { opacity: 0, x: 24 }}
-      transition={{ duration: shouldReduceMotion ? 0 : MOTION_DURATION.panel, ease: EASE_OUT }}
+      transition={{
+        duration: shouldReduceMotion ? 0 : MOTION_DURATION.panel,
+        ease: EASE_OUT,
+        width: { duration: shouldReduceMotion ? 0 : 0.4, ease: [0.645, 0.045, 0.355, 1] },
+      }}
     >
+      {/* Background overlay — behind header and body, clipped by panel's overflow-hidden */}
+      {backgroundOverlay && (
+        <div className="pointer-events-none absolute inset-0 z-0 rounded-2xl overflow-hidden">
+          {backgroundOverlay}
+        </div>
+      )}
+
       {/* Header */}
-      <div className="relative flex shrink-0 items-center justify-between border-b border-zinc-800 px-5 py-3">
+      <div className="relative z-10 flex shrink-0 items-center justify-between border-b border-zinc-800 px-5 py-3">
         {typeof progressPercent === "number" && (
           <div
             className="pointer-events-none absolute bottom-[-1px] left-0 h-px bg-zinc-100 transition-[width] duration-250 ease-[ease]"
@@ -86,6 +123,17 @@ export default function RightPanel({
           >
             ✕
           </button>
+          {onFullScreen && (
+            <button
+              onClick={onFullScreen}
+              aria-label="Full screen"
+              className="shrink-0 text-zinc-500 hover:text-zinc-200 transition-colors"
+            >
+              <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M1 4.5V1H4.5M8.5 1H12V4.5M12 8.5V12H8.5M4.5 12H1V8.5" />
+              </svg>
+            </button>
+          )}
           {title && (
             <span className="truncate font-lector text-sm tracking-tight text-zinc-400">
               {title}
@@ -96,7 +144,9 @@ export default function RightPanel({
       </div>
 
       {/* Body */}
-      <div className={`flex-1 ${disableBodyScroll ? "overflow-hidden" : "overflow-y-auto"}`}>
+      <div
+        className={`relative z-10 flex min-h-0 flex-1 flex-col ${disableBodyScroll ? "overflow-hidden" : "overflow-y-auto"}`}
+      >
         {children}
       </div>
     </motion.div>

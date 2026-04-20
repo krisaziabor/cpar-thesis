@@ -1,4 +1,5 @@
 import type { CanonItemMetadata, SourceMetadata } from "../types";
+import { probeMediaPageWithYtDlp, tryYoutubeStreamUrlViaYtDlp } from "../video-extract";
 
 // ─── Video ID extraction ──────────────────────────────────────────────────────
 
@@ -45,13 +46,33 @@ interface YouTubeApiVideo {
   statistics?: { viewCount?: string };
 }
 
+const YT_FETCH_TIMEOUT_MS = 20_000;
+
+/** maxresdefault is often 404; fall back to hqdefault which always exists. */
+async function ensureYoutubeThumbnailUrl(thumbnailUrl: string): Promise<string> {
+  if (!/maxresdefault/i.test(thumbnailUrl)) return thumbnailUrl;
+  try {
+    const head = await fetch(thumbnailUrl, {
+      method: "HEAD",
+      redirect: "follow",
+      signal: AbortSignal.timeout(5000),
+    });
+    if (head.ok) return thumbnailUrl;
+  } catch {
+    /* use fallback */
+  }
+  return thumbnailUrl.replace(/maxresdefault/gi, "hqdefault");
+}
+
 export async function fetchYouTubeMetadata(url: string): Promise<CanonItemMetadata> {
   const videoId = extractYouTubeVideoId(url);
   if (!videoId) throw new Error(`Cannot extract video ID from URL: ${url}`);
 
-  // oEmbed — always available, no key required
   const oembedUrl = `https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`;
-  const oembedRes = await fetch(oembedUrl);
+  const [oembedRes, probe] = await Promise.all([
+    fetch(oembedUrl, { signal: AbortSignal.timeout(YT_FETCH_TIMEOUT_MS) }),
+    probeMediaPageWithYtDlp(url),
+  ]);
   if (!oembedRes.ok) throw new Error(`YouTube oEmbed failed (${oembedRes.status})`);
   const oembed: OEmbedResponse = await oembedRes.json();
 
@@ -59,7 +80,10 @@ export async function fetchYouTubeMetadata(url: string): Promise<CanonItemMetada
     source_type: "youtube",
     video_id: videoId,
     channel: oembed.author_name,
-    raw: { oembed } as Record<string, unknown>,
+    raw: {
+      oembed,
+      ...(probe ? { ytdlp: probe.raw } : {}),
+    } as Record<string, unknown>,
   };
 
   let title = oembed.title;
@@ -75,7 +99,7 @@ export async function fetchYouTubeMetadata(url: string): Promise<CanonItemMetada
       const apiUrl =
         `https://www.googleapis.com/youtube/v3/videos` +
         `?id=${videoId}&key=${encodeURIComponent(apiKey)}&part=snippet,contentDetails,statistics`;
-      const apiRes = await fetch(apiUrl);
+      const apiRes = await fetch(apiUrl, { signal: AbortSignal.timeout(YT_FETCH_TIMEOUT_MS) });
       const apiData = await apiRes.json();
       const video: YouTubeApiVideo | undefined = apiData.items?.[0];
 
@@ -101,7 +125,11 @@ export async function fetchYouTubeMetadata(url: string): Promise<CanonItemMetada
           view_count: video.statistics?.viewCount
             ? parseInt(video.statistics.viewCount, 10)
             : undefined,
-          raw: { oembed, api: video } as Record<string, unknown>,
+          raw: {
+            oembed,
+            api: video,
+            ...(probe ? { ytdlp: probe.raw } : {}),
+          } as Record<string, unknown>,
         };
       }
     } catch (err) {
@@ -109,16 +137,27 @@ export async function fetchYouTubeMetadata(url: string): Promise<CanonItemMetada
     }
   }
 
-  // Get direct video download URL via ytdl-core (no API key needed)
-  let videoDownloadUrl: string | undefined;
-  try {
-    const directInfo = await getDirectVideoInfo(url);
-    videoDownloadUrl = directInfo.url;
-    if (!publishedDate && directInfo.publishedDate) {
-      publishedDate = directInfo.publishedDate;
+  if (probe) {
+    if (sourceMetadata.duration_seconds == null && probe.duration_seconds != null) {
+      sourceMetadata.duration_seconds = probe.duration_seconds;
     }
-  } catch (err) {
-    console.warn("[youtube] Could not get direct video URL:", err);
+    if (sourceMetadata.view_count == null && probe.view_count != null) {
+      sourceMetadata.view_count = probe.view_count;
+    }
+    if (sourceMetadata.like_count == null && probe.like_count != null) {
+      sourceMetadata.like_count = probe.like_count;
+    }
+    if (!sourceMetadata.description?.trim() && probe.description?.trim()) {
+      sourceMetadata.description = probe.description.trim().slice(0, 500);
+    }
+  }
+
+  // Direct stream URL: ytdl-core first, then yt-dlp (same cookies env as social).
+  let videoDownloadUrl: string | undefined;
+  const directInfo = await getDirectVideoInfo(url);
+  videoDownloadUrl = directInfo.url;
+  if (!publishedDate && directInfo.publishedDate) {
+    publishedDate = directInfo.publishedDate;
   }
 
   // Final fallback for cases where APIs and ytdl cannot provide the date.
@@ -131,6 +170,8 @@ export async function fetchYouTubeMetadata(url: string): Promise<CanonItemMetada
     channel,
     published_date: publishedDate,
   };
+
+  thumbnailUrl = await ensureYoutubeThumbnailUrl(thumbnailUrl);
 
   return {
     title,
@@ -150,36 +191,43 @@ export async function fetchYouTubeMetadata(url: string): Promise<CanonItemMetada
 async function getDirectVideoInfo(
   url: string
 ): Promise<{ url?: string; publishedDate?: string }> {
-  const ytdl = await import("@distube/ytdl-core");
-  const info = await ytdl.default.getInfo(url);
+  try {
+    const ytdl = await import("@distube/ytdl-core");
+    const info = await ytdl.default.getInfo(url);
 
-  const videoDetails = info.videoDetails as { publishDate?: string; uploadDate?: string };
-  const playerResponse = info.player_response as {
-    microformat?: {
-      playerMicroformatRenderer?: {
-        publishDate?: string;
-        uploadDate?: string;
+    const videoDetails = info.videoDetails as { publishDate?: string; uploadDate?: string };
+    const playerResponse = info.player_response as {
+      microformat?: {
+        playerMicroformatRenderer?: {
+          publishDate?: string;
+          uploadDate?: string;
+        };
       };
     };
-  };
 
-  const publishedDate =
-    normalizeYouTubeDate(videoDetails.publishDate) ??
-    normalizeYouTubeDate(videoDetails.uploadDate) ??
-    normalizeYouTubeDate(playerResponse.microformat?.playerMicroformatRenderer?.publishDate) ??
-    normalizeYouTubeDate(playerResponse.microformat?.playerMicroformatRenderer?.uploadDate);
-  let urlResult: string | undefined;
-  try {
-    const format = ytdl.default.chooseFormat(info.formats, {
-      quality: "highestvideo",
-      filter: "audioandvideo",
-    });
-    urlResult = format.url;
-  } catch {
-    // Keep published date even if we cannot derive a direct stream URL.
+    const publishedDate =
+      normalizeYouTubeDate(videoDetails.publishDate) ??
+      normalizeYouTubeDate(videoDetails.uploadDate) ??
+      normalizeYouTubeDate(playerResponse.microformat?.playerMicroformatRenderer?.publishDate) ??
+      normalizeYouTubeDate(playerResponse.microformat?.playerMicroformatRenderer?.uploadDate);
+    let urlResult: string | undefined;
+    try {
+      const format = ytdl.default.chooseFormat(info.formats, {
+        quality: "highestvideo",
+        filter: "audioandvideo",
+      });
+      urlResult = format.url;
+    } catch {
+      /* keep publishedDate */
+    }
+
+    return { url: urlResult, publishedDate };
+  } catch (err) {
+    console.warn("[youtube] ytdl-core getInfo failed, trying yt-dlp:", err);
+    const ytdlpUrl = await tryYoutubeStreamUrlViaYtDlp(url);
+    if (ytdlpUrl) return { url: ytdlpUrl };
+    return {};
   }
-
-  return { url: urlResult, publishedDate };
 }
 
 /**
@@ -253,6 +301,7 @@ async function fetchYouTubePublishedDateFromWatchPage(videoId: string): Promise<
     const watchUrl = `https://www.youtube.com/watch?v=${videoId}`;
     const res = await fetch(watchUrl, {
       headers: { "User-Agent": "Mozilla/5.0 (compatible; kanon-metadata/1.0)" },
+      signal: AbortSignal.timeout(YT_FETCH_TIMEOUT_MS),
     });
     if (!res.ok) return undefined;
 

@@ -1,0 +1,41 @@
+# Paste into /metadata-lab or POST /api/metadata with { "url": "...", "refresh": true }.
+# What to verify is noted per section.
+
+# --- Instagram (caption, tags, thumbnail_source in raw: yt-dlp-json vs yt-dlp-write-thumbnail) ---
+# Use any current *public* reel or /p/ URL (replace when link dies).
+# https://www.instagram.com/reel/XXXXXXXXX/
+# https://www.instagram.com/p/XXXXXXXXX/
+
+# --- TikTok (parallel oEmbed + probe: published_date, duration_seconds, view_count, like_count) ---
+https://www.tiktok.com/@scout2015/video/6718335390845094670
+
+# --- TikTok short link: paste a fresh vm.tiktok.com share URL from the app when testing redirects ---
+
+# --- Twitter / X (parallel oEmbed + yt-dlp; photo tweets via twimg in oEmbed HTML) ---
+https://twitter.com/nasa/status/648786585381908480
+https://x.com/Wikipedia/status/1458029437435932729
+# Video tweet (probe: duration, thumbnail) — replace if link dies:
+# https://twitter.com/Twitter/status/1518623997054918656
+
+# --- YouTube (thumbnail maxres → hq when needed) ---
+https://www.youtube.com/watch?v=jNQXAC9IVRw
+https://www.youtube.com/shorts/jNQXAC9IVRw
+
+# --- Music (Odesli + Spotify enrichment) ---
+https://open.spotify.com/track/4iV5W9uYEdYUVa79Axb7Rh
+
+# --- DOI (long cache TTL after schema bump) ---
+https://doi.org/10.1038/s41586-020-2649-2
+
+# --- Generic URL (og:image absolutized; charset from server or meta) ---
+https://en.wikipedia.org/wiki/Open_Graph_protocol
+
+# --- Server video upload (POST /api/media/upload-video): ffprobe on buffer + poster JPEG at thumbnails/items/{id}.jpg ---
+# Use /metadata-lab File tab or /add flow; response JSON may include thumbnailUrl; item gets duration_seconds from ffprobe in metadata pipeline.
+# "Remove from Storage" in metadata-lab deletes both media/items/... and thumbnails/items/{labId}.jpg when applicable.
+
+# --- Optional yt-dlp auth (Instagram/TikTok/X age-gated or flaky) ---
+# YT_DLP_COOKIES_FILE=/absolute/path/to/cookies.txt   (Netscape format; takes precedence)
+# YT_DLP_COOKIES_FROM_BROWSER=chrome                   (often fails on serverless; use file in prod)
+
+# --- Firestore metadata cache: per-source TTL; stale-while-revalidate serves up to 2× TTL while refreshing in background ---
