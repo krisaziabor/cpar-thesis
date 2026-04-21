@@ -28,6 +28,7 @@ import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { useAuth } from "@/lib/auth-context";
 import { useNavGuard } from "@/lib/nav-guard-context";
 import { useNavStatus } from "@/lib/nav-status-context";
+import { useFloatingNavSuppressed } from "@/lib/floating-nav-suppress-context";
 import {
   subscribeToUserChecklistProgress,
   backfillChecklistProgress,
@@ -98,6 +99,7 @@ export default function MobileBottomDrawer() {
   const shouldReduceMotion = useReducedMotion();
   const { navigateWithGuard } = useNavGuard();
   const { currentMessage } = useNavStatus();
+  const navSuppressed = useFloatingNavSuppressed();
 
   const [drawerState, setDrawerState] = useState<DrawerState>("icon");
   const [checklistCollapsed, setChecklistCollapsed] = useState(true);
@@ -438,12 +440,18 @@ export default function MobileBottomDrawer() {
         </div>
       )}
 
-      {/* Icon / Bar — hidden while sheet is open or connect handle is showing */}
+      {/* Icon / Bar — hidden while sheet is open, connect handle is showing, or nav is suppressed */}
       {!showConnectHandle && drawerState !== "open" && (
-        <div
-          className="fixed inset-x-0 z-50 flex justify-center px-4"
-          style={{ bottom: bottomInset }}
-        >
+        <AnimatePresence>
+          {!navSuppressed && (
+            <motion.div
+              key="mobile-nav-icon-bar"
+              className="fixed inset-x-0 z-50 flex justify-center px-4"
+              style={{ bottom: bottomInset }}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1, transition: { duration: 0.15, ease: [0.215, 0.61, 0.355, 1] } }}
+              exit={{ opacity: 0, transition: { duration: 0.12, ease: [0.215, 0.61, 0.355, 1] } }}
+            >
           <AnimatePresence mode="wait" initial={false}>
             {drawerState === "icon" && (
               <motion.button
@@ -507,8 +515,10 @@ export default function MobileBottomDrawer() {
                 <span className="text-xs text-zinc-500">▴</span>
               </motion.button>
             )}
-          </AnimatePresence>
-        </div>
+            </AnimatePresence>
+            </motion.div>
+          )}
+        </AnimatePresence>
       )}
     </div>
   );

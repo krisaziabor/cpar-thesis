@@ -16,6 +16,7 @@ import FloatingNav from "@/components/FloatingNav";
 interface FloatingNavSuppressContextValue {
   acquire: () => void;
   release: () => void;
+  suppressed: boolean;
 }
 
 const FloatingNavSuppressContext = createContext<FloatingNavSuppressContextValue | null>(null);
@@ -49,7 +50,7 @@ export function FloatingNavShell({
     sync();
   }, [sync]);
 
-  const value = useMemo(() => ({ acquire, release }), [acquire, release]);
+  const value = useMemo(() => ({ acquire, release, suppressed }), [acquire, release, suppressed]);
 
   return (
     <FloatingNavSuppressContext.Provider value={value}>
@@ -68,9 +69,14 @@ export function useFloatingNavSuppress(): FloatingNavSuppressContextValue {
     return {
       acquire: () => {},
       release: () => {},
+      suppressed: false,
     };
   }
   return ctx;
+}
+
+export function useFloatingNavSuppressed(): boolean {
+  return useFloatingNavSuppress().suppressed;
 }
 
 /** While `active`, the floating nav is hidden; cleans up on deactivate or unmount. */
