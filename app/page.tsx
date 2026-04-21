@@ -155,6 +155,8 @@ function HomeInner() {
   );
   /** Holds panel (full-width two-pane view) — hide nav for focus. */
   useSuppressFloatingNavWhile(panelMode === "holds");
+  /** Add panel — hide the mobile floating nav so it doesn't overlap the source-step buttons. */
+  useSuppressFloatingNavWhile(panelMode === "add");
 
   useEffect(() => {
     if (panelMode !== "add" || !addPanelHasUnsaved) {

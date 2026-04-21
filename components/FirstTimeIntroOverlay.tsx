@@ -171,12 +171,12 @@ function RecordVisual({ compact = false }: { compact?: IntroVisualCompact }) {
     >
       <div className={`flex min-h-0 flex-1 flex-col ${compact ? "px-3 pb-1 pt-2" : "px-4 pb-1 pt-3 sm:px-5 sm:pb-2 sm:pt-5"}`}>
         {!compact && (
-          <div>
+          <div className="hidden sm:block">
             <h1 className="font-lector text-lg tracking-tight text-zinc-100">Add record(s)</h1>
             <p className="mt-1 text-xs text-zinc-500">Paste a URL or upload a file to continue.</p>
           </div>
         )}
-        <div className={`flex min-h-0 flex-1 flex-col justify-end ${compact ? "mt-0" : "mt-2 sm:mt-4"}`}>
+        <div className={`flex min-h-0 flex-1 flex-col justify-end ${compact ? "mt-0" : "mt-0 sm:mt-4"}`}>
           <div className={`space-y-2 ${compact ? "pb-2" : "pb-2 sm:pb-4"}`}>
             <motion.div
               className={`relative overflow-hidden rounded-md border border-zinc-800 bg-zinc-950 ${
