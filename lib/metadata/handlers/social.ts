@@ -24,10 +24,26 @@ import {
 
 const FETCH_TIMEOUT_MS = 20_000;
 
+/** TikTok / X oEmbed often returns 400–403 for bot-like or missing client headers. */
+const OEMBED_BROWSER_HEADERS: Record<string, string> = {
+  "User-Agent":
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+  Accept: "application/json,text/plain,*/*;q=0.8",
+};
+
 function fetchSocial(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   return fetch(input, {
     ...init,
     signal: init?.signal ?? AbortSignal.timeout(FETCH_TIMEOUT_MS),
+  });
+}
+
+function fetchOembedAsBrowser(endpoint: string, referer: string): Promise<Response> {
+  return fetchSocial(endpoint, {
+    headers: {
+      ...OEMBED_BROWSER_HEADERS,
+      Referer: referer,
+    },
   });
 }
 
@@ -88,6 +104,86 @@ function tweetPlainTextFromOembedHtml(html: string): string {
     .slice(0, 280);
 }
 
+/** `vm.tiktok.com` short links must resolve before oEmbed accepts `url`. */
+async function resolveTikTokShortLinkIfNeeded(input: string): Promise<string> {
+  const trimmed = input.trim();
+  try {
+    const u = new URL(trimmed);
+    if (!u.hostname.toLowerCase().endsWith("vm.tiktok.com")) return trimmed;
+    const res = await fetch(trimmed, {
+      method: "HEAD",
+      redirect: "follow",
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      headers: {
+        ...OEMBED_BROWSER_HEADERS,
+        Referer: "https://www.tiktok.com/",
+      },
+    });
+    return res.url || trimmed;
+  } catch {
+    return trimmed;
+  }
+}
+
+/** Canonical host + drop tracking query on /@handle/video/id (oEmbed often 400s on long query strings). */
+function normalizeTikTokPageUrl(input: string): string {
+  try {
+    const u = new URL(input.trim());
+    const host = u.hostname.toLowerCase();
+    if (host === "tiktok.com" || host === "www.tiktok.com" || host === "m.tiktok.com") {
+      u.hostname = "www.tiktok.com";
+      u.protocol = "https:";
+      if (/\/@[^/]+\/video\/\d+/.test(u.pathname)) u.search = "";
+    }
+    return u.href;
+  } catch {
+    return input.trim();
+  }
+}
+
+function normalizeTwitterStatusUrl(input: string): string {
+  try {
+    const u = new URL(input.trim());
+    let host = u.hostname.toLowerCase();
+    if (host === "x.com") {
+      u.hostname = "twitter.com";
+      host = "twitter.com";
+    }
+    if (host === "mobile.twitter.com") u.hostname = "twitter.com";
+    if (/\/status\/\d+/.test(u.pathname)) u.search = "";
+    return u.href;
+  } catch {
+    return input.replace(/^(https?:\/\/)x\.com\b/i, "$1twitter.com");
+  }
+}
+
+/** True if yt-dlp returned anything we can show when oEmbed fails. */
+function probeUsableForSocialFallback(probe: YtDlpMediaProbe | null): probe is YtDlpMediaProbe {
+  if (!probe) return false;
+  return !!(
+    probe.title?.trim() ||
+    probe.description?.trim() ||
+    probe.id ||
+    probe.uploader?.trim() ||
+    probe.thumbnailUrl
+  );
+}
+
+async function fetchTwitterOembed(normalizedUrl: string): Promise<Response> {
+  const q = `omit_script=true&dnt=true&url=${encodeURIComponent(normalizedUrl)}`;
+  const endpoints = [
+    `https://publish.twitter.com/oembed?${q}`,
+    `https://cdn.syndication.twimg.com/oembed?${q}`,
+  ];
+  let last: Response | undefined;
+  for (const ep of endpoints) {
+    const res = await fetchOembedAsBrowser(ep, "https://twitter.com/");
+    last = res;
+    if (res.ok) return res;
+  }
+  return last!;
+}
+
 // ─── TikTok ───────────────────────────────────────────────────────────────────
 // https://developers.tiktok.com/doc/embed-content/
 
@@ -134,15 +230,16 @@ async function buildTikTokFromProbeOnly(
 }
 
 export async function fetchTikTokMetadata(url: string): Promise<CanonItemMetadata> {
-  const endpoint = `https://www.tiktok.com/oembed?url=${encodeURIComponent(url)}`;
+  const pageUrl = normalizeTikTokPageUrl(await resolveTikTokShortLinkIfNeeded(url));
+  const endpoint = `https://www.tiktok.com/oembed?url=${encodeURIComponent(pageUrl)}`;
   const [res, probe] = await Promise.all([
-    fetchSocial(endpoint, { headers: { "User-Agent": "Kanon/1.0" } }),
-    probeMediaPageWithYtDlp(url),
+    fetchOembedAsBrowser(endpoint, "https://www.tiktok.com/"),
+    probeMediaPageWithYtDlp(pageUrl),
   ]);
 
   if (!res.ok) {
-    if (probe && (probe.title || probe.description || probe.id)) {
-      return buildTikTokFromProbeOnly(url, probe);
+    if (probeUsableForSocialFallback(probe)) {
+      return buildTikTokFromProbeOnly(pageUrl, probe);
     }
     throw new Error(`TikTok oEmbed failed (${res.status})`);
   }
@@ -186,7 +283,7 @@ export async function fetchTikTokMetadata(url: string): Promise<CanonItemMetadat
     creator: stripCreatorSuffix(
       data.author_name?.trim() || probe?.uploader?.trim() || "Unknown"
     ),
-    link: url,
+    link: pageUrl,
     tags,
     thumbnail_url,
     thumbnail_base64,
@@ -239,15 +336,14 @@ async function buildTwitterFromProbeOnly(
 }
 
 export async function fetchTwitterMetadata(url: string): Promise<CanonItemMetadata> {
-  const normalizedUrl = url.replace(/^(https?:\/\/)x\.com/, "$1twitter.com");
-  const endpoint = `https://publish.twitter.com/oembed?url=${encodeURIComponent(normalizedUrl)}&omit_script=true`;
+  const normalizedUrl = normalizeTwitterStatusUrl(url);
   const [res, probe] = await Promise.all([
-    fetchSocial(endpoint, { headers: { "User-Agent": "Kanon/1.0" } }),
+    fetchTwitterOembed(normalizedUrl),
     probeMediaPageWithYtDlp(normalizedUrl),
   ]);
 
   if (!res.ok) {
-    if (probe && (probe.title || probe.description || probe.id)) {
+    if (probeUsableForSocialFallback(probe)) {
       return buildTwitterFromProbeOnly(normalizedUrl, probe);
     }
     throw new Error(`Twitter oEmbed failed (${res.status})`);
@@ -314,6 +410,38 @@ interface InstagramOEmbed {
   html?: string;
 }
 
+/**
+ * Instagram OG / embed titles look like: `Kehlani on Instagram: "thee album. 🔥"`
+ * Creator = text before ` on Instagram`; display caption = after the colon (quotes stripped), then hashtags → tags.
+ */
+function parseInstagramTitleLine(line: string): { creatorFromTitle?: string; caption: string } {
+  const trimmed = line.replace(/[\u200B-\u200D\uFEFF]/g, "").trim();
+  if (!trimmed) return { caption: "" };
+
+  const m = trimmed.match(/^(.+?)\s+on Instagram:\s*(.*)$/i);
+  if (!m) return { caption: trimmed };
+
+  const creatorFromTitle = m[1].trim();
+  let caption = m[2].trim();
+  const quotePairs: [string, string][] = [
+    ['"', '"'],
+    ["'", "'"],
+    ["\u201c", "\u201d"],
+    ["\u2018", "\u2019"],
+  ];
+  for (const [open, close] of quotePairs) {
+    if (caption.startsWith(open) && caption.endsWith(close)) {
+      caption = caption.slice(open.length, caption.length - close.length).trim();
+      break;
+    }
+  }
+
+  return {
+    creatorFromTitle: creatorFromTitle || undefined,
+    caption: caption || trimmed,
+  };
+}
+
 function buildInstagramMetadata(
   caption: string,
   authorName: string,
@@ -321,19 +449,25 @@ function buildInstagramMetadata(
   thumbnailUrl: string | undefined,
   raw: Record<string, unknown>
 ): CanonItemMetadata {
-  const { title, tags, fullCaption } = splitTitleAndHashtags(caption || "", 120);
+  const { creatorFromTitle, caption: captionForSplit } = parseInstagramTitleLine(caption || "");
+  const effectiveCreator =
+    creatorFromTitle && creatorFromTitle.length > 0
+      ? creatorFromTitle
+      : (authorName || "Unknown").trim() || "Unknown";
+
+  const { title, tags, fullCaption } = splitTitleAndHashtags(captionForSplit, 120);
 
   const sourceMetadata: SourceMetadata = {
     source_type: "instagram",
     site_name: "Instagram",
-    description: fullCaption.slice(0, 500) || caption || undefined,
+    description: fullCaption.slice(0, 500) || captionForSplit || caption || undefined,
     raw,
   };
 
   return {
     title: title || "Instagram Post",
     type: "other",
-    creator: stripCreatorSuffix(authorName || "Unknown"),
+    creator: stripCreatorSuffix(effectiveCreator),
     link,
     tags,
     thumbnail_url: thumbnailUrl,
