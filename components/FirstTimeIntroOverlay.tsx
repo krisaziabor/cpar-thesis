@@ -160,10 +160,33 @@ const RECORD_URLS = [
 
 function RecordVisual({ compact = false }: { compact?: IntroVisualCompact }) {
   const shouldReduceMotion = useReducedMotion();
-  // Three URLs appear in sequence, hold together, then loop.
-  const CYCLE = shouldReduceMotion ? 0 : 4.8;
-  const APPEAR_AT = [0.08, 0.26, 0.44] as const;
-  const FADE_START = 0.92;
+  const [visibleCount, setVisibleCount] = useState(shouldReduceMotion ? 3 : 0);
+
+  useEffect(() => {
+    if (shouldReduceMotion) {
+      setVisibleCount(3);
+      return;
+    }
+    let cancelled = false;
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    function schedule(cb: () => void, ms: number) {
+      timers.push(setTimeout(() => { if (!cancelled) cb(); }, ms));
+    }
+    function cycle() {
+      if (cancelled) return;
+      setVisibleCount(0);
+      schedule(() => setVisibleCount(1), 400);
+      schedule(() => setVisibleCount(2), 1250);
+      schedule(() => setVisibleCount(3), 2100);
+      schedule(() => setVisibleCount(0), 4400);
+      schedule(cycle, 4800);
+    }
+    cycle();
+    return () => {
+      cancelled = true;
+      timers.forEach(clearTimeout);
+    };
+  }, [shouldReduceMotion]);
 
   return (
     <div
@@ -188,32 +211,20 @@ function RecordVisual({ compact = false }: { compact?: IntroVisualCompact }) {
           }`}
         >
           {RECORD_URLS.map((url, i) => {
-            const appear = APPEAR_AT[i];
+            const visible = i < visibleCount;
             return (
-              <motion.div
+              <div
                 key={url}
                 className={`relative overflow-hidden rounded-md border border-zinc-800 bg-zinc-950 ${
                   compact ? "px-2.5 py-2" : "px-3 py-2 sm:py-2.5"
                 }`}
-                initial={shouldReduceMotion ? { opacity: 1, y: 0 } : { opacity: 0, y: 6 }}
-                animate={
-                  shouldReduceMotion
-                    ? { opacity: 1, y: 0 }
-                    : {
-                        opacity: [0, 0, 1, 1, 0],
-                        y: [6, 6, 0, 0, 0],
-                      }
-                }
-                transition={
-                  shouldReduceMotion
-                    ? { duration: 0 }
-                    : {
-                        duration: CYCLE,
-                        times: [0, appear, appear + 0.06, FADE_START, 1],
-                        ease: EASE_OUT,
-                        repeat: Infinity,
-                      }
-                }
+                style={{
+                  opacity: visible ? 1 : 0,
+                  transform: visible ? "translateY(0px)" : "translateY(6px)",
+                  transition: shouldReduceMotion
+                    ? "none"
+                    : "opacity 320ms cubic-bezier(0.215, 0.61, 0.355, 1), transform 320ms cubic-bezier(0.215, 0.61, 0.355, 1)",
+                }}
               >
                 <span
                   className={`block truncate pr-6 font-sans text-zinc-300 ${
@@ -228,9 +239,9 @@ function RecordVisual({ compact = false }: { compact?: IntroVisualCompact }) {
                     compact ? "text-xs" : "text-sm"
                   }`}
                 >
-                  ↵
+                  &#x21B5;
                 </span>
-              </motion.div>
+              </div>
             );
           })}
         </div>
