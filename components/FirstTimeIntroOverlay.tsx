@@ -12,7 +12,7 @@ import {
   motion,
   useReducedMotion,
 } from "framer-motion";
-import { EASE_IN_OUT_CUBIC, EASE_OUT, MOTION_DURATION } from "@/lib/motion";
+import { EASE_OUT, MOTION_DURATION } from "@/lib/motion";
 
 const INTRO_GRADIENT: [string, string, string] = [
   "#C73C28",
@@ -152,16 +152,18 @@ function WaveVisual({ compact = false }: { compact?: IntroVisualCompact }) {
   );
 }
 
-/** Matches add-flow source step (`app/add/page.tsx` `inputCx`). */
-const ADD_SOURCE_INPUT_CX =
-  "w-full rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-200 outline-none transition-colors duration-150 ease-out placeholder:text-zinc-600";
+const RECORD_URLS = [
+  "https://music.apple.com/us/album/13mos",
+  "https://doi.org/10.1038/s41586-020-2649-2",
+  "https://www.instagram.com/stevebracknall/reel/DCyU00Ls3wa/",
+] as const;
 
 function RecordVisual({ compact = false }: { compact?: IntroVisualCompact }) {
   const shouldReduceMotion = useReducedMotion();
-  // URL clip reveals first; metadata card enters shortly after (opacity + y, ease-in-out), then fade — no exit y.
-  const CYCLE = shouldReduceMotion ? 0 : 4.0;
-  const urlClipHidden = "inset(0 100% 0 0)";
-  const urlClipVisible = "inset(0 0% 0 0)";
+  // Three URLs appear in sequence, hold together, then loop.
+  const CYCLE = shouldReduceMotion ? 0 : 4.8;
+  const APPEAR_AT = [0.08, 0.26, 0.44] as const;
+  const FADE_START = 0.92;
 
   return (
     <div
@@ -169,159 +171,68 @@ function RecordVisual({ compact = false }: { compact?: IntroVisualCompact }) {
         compact ? "rounded-xl" : "rounded-3xl"
       }`}
     >
-      <div className={`flex min-h-0 flex-1 flex-col ${compact ? "px-3 pb-1 pt-2" : "px-4 pb-1 pt-3 sm:px-5 sm:pb-2 sm:pt-5"}`}>
+      <div
+        className={`flex min-h-0 flex-1 flex-col ${
+          compact ? "px-3 pb-3 pt-3" : "px-4 pb-4 pt-4 sm:px-5 sm:pb-5 sm:pt-5"
+        }`}
+      >
         {!compact && (
           <div className="hidden sm:block">
             <h1 className="font-lector text-lg tracking-tight text-zinc-100">Add record(s)</h1>
             <p className="mt-1 text-xs text-zinc-500">Paste a URL or upload a file to continue.</p>
           </div>
         )}
-        <div className={`flex min-h-0 flex-1 flex-col justify-end ${compact ? "mt-0" : "mt-0 sm:mt-4"}`}>
-          <div className={`space-y-2 ${compact ? "pb-2" : "pb-2 sm:pb-4"}`}>
-            <motion.div
-              className={`relative overflow-hidden rounded-md border border-zinc-800 bg-zinc-950 ${
-                compact ? "p-2.5" : "p-3"
-              }`}
-              initial={false}
-              animate={
-                shouldReduceMotion
-                  ? { opacity: 1 }
-                  : {
-                      opacity: [0, 0, 0, 1, 1, 1, 0],
-                      y: compact
-                        ? [6, 6, 6, 1, 1, 1, 1]
-                        : [14, 14, 14, 0, 0, 0, 0],
-                    }
-              }
-              transition={
-                shouldReduceMotion
-                  ? { duration: 0 }
-                  : {
-                      duration: CYCLE,
-                      times: [0, 0.32, 0.53, 0.62, 0.78, 0.96, 1],
-                      ease: [
-                        "linear",
-                        "linear",
-                        EASE_IN_OUT_CUBIC,
-                        "linear",
-                        "linear",
-                        EASE_OUT,
-                      ],
-                      repeat: Infinity,
-                    }
-              }
-            >
-              <div className={`flex items-start ${compact ? "gap-2" : "gap-3"}`}>
-                <div
-                  className={`flex-none overflow-hidden rounded-sm border border-zinc-800 bg-zinc-900/80 ${
-                    compact ? "h-16 w-16" : "h-14 w-14 sm:h-20 sm:w-20"
-                  }`}
-                >
-                  <img
-                    src="/intro/amine-13mos.png"
-                    alt=""
-                    draggable={false}
-                    className="h-full w-full object-cover"
-                  />
-                </div>
-                <div
-                  className={`flex min-w-0 flex-1 flex-col justify-center py-0.5 ${
-                    compact ? "min-h-16" : "min-h-14 sm:min-h-20"
-                  }`}
-                >
-                  <p
-                    className={`truncate font-lector text-zinc-100 ${
-                      compact ? "text-xs font-medium" : "text-sm"
-                    }`}
-                  >
-                    13MOS
-                  </p>
-                  <p
-                    className={`mt-0.5 truncate font-sans text-zinc-500 ${
-                      compact ? "text-[10px]" : "mt-1 text-[11px]"
-                    }`}
-                  >
-                    Aminé · 2025
-                  </p>
-                </div>
-              </div>
-            </motion.div>
-          </div>
-        </div>
-      </div>
-
-      <div
-        className={`shrink-0 border-t border-zinc-900 ${compact ? "space-y-2 px-3 pb-3 pt-2.5" : "space-y-2 px-4 pb-3 pt-2.5 sm:space-y-3 sm:px-5 sm:pb-5 sm:pt-4"}`}
-      >
-        <div className="relative">
-          <div
-            className={`${ADD_SOURCE_INPUT_CX} pointer-events-none overflow-hidden pr-9 font-sans ${
-              compact ? "!py-1.5 !text-[11px]" : ""
-            }`}
-            aria-hidden
-          >
-            <motion.span
-              className="inline-block whitespace-nowrap align-bottom"
-              initial={false}
-              animate={
-                shouldReduceMotion
-                  ? { clipPath: urlClipVisible }
-                  : {
-                      clipPath: [
-                        urlClipHidden,
-                        urlClipHidden,
-                        urlClipHidden,
-                        urlClipHidden,
-                        urlClipVisible,
-                        urlClipVisible,
-                        urlClipVisible,
-                      ],
-                    }
-              }
-              transition={
-                shouldReduceMotion
-                  ? { duration: 0 }
-                  : {
-                      duration: CYCLE,
-                      times: [0, 0.06, 0.1, 0.455, 0.52, 0.96, 1],
-                      ease: [
-                        "linear",
-                        "linear",
-                        "linear",
-                        EASE_IN_OUT_CUBIC,
-                        "linear",
-                        "linear",
-                      ],
-                      repeat: Infinity,
-                    }
-              }
-            >
-              https://music.apple.com/us/album/13mos
-            </motion.span>
-          </div>
-          <span
-            aria-hidden
-            className={`pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-500 ${
-              compact ? "text-xs" : "text-sm"
-            }`}
-          >
-            ↵
-          </span>
-        </div>
         <div
-          className={`rounded-md border border-zinc-800 bg-zinc-950 text-center ${
-            compact ? "px-2 py-2" : "px-4 py-3"
+          className={`flex min-h-0 flex-1 flex-col justify-center ${
+            compact ? "gap-2" : "gap-2 sm:mt-4 sm:gap-3"
           }`}
         >
-          <p className={`font-sans font-medium text-zinc-500 ${compact ? "text-[11px]" : "text-sm"}`}>
-            Upload file
-          </p>
-          {!compact && (
-            <p className="mt-1 text-xs text-zinc-600">Drag and drop image/PDF here, or click.</p>
-          )}
-          {compact && (
-            <p className="mt-0.5 text-[9px] leading-tight text-zinc-600">Drop or browse</p>
-          )}
+          {RECORD_URLS.map((url, i) => {
+            const appear = APPEAR_AT[i];
+            return (
+              <motion.div
+                key={url}
+                className={`relative overflow-hidden rounded-md border border-zinc-800 bg-zinc-950 ${
+                  compact ? "px-2.5 py-2" : "px-3 py-2 sm:py-2.5"
+                }`}
+                initial={false}
+                animate={
+                  shouldReduceMotion
+                    ? { opacity: 1, y: 0 }
+                    : {
+                        opacity: [0, 0, 1, 1, 0],
+                        y: [6, 6, 0, 0, 0],
+                      }
+                }
+                transition={
+                  shouldReduceMotion
+                    ? { duration: 0 }
+                    : {
+                        duration: CYCLE,
+                        times: [0, appear, appear + 0.06, FADE_START, 1],
+                        ease: ["linear", EASE_OUT, "linear", EASE_OUT],
+                        repeat: Infinity,
+                      }
+                }
+              >
+                <span
+                  className={`block truncate pr-6 font-sans text-zinc-300 ${
+                    compact ? "text-[11px]" : "text-xs sm:text-sm"
+                  }`}
+                >
+                  {url}
+                </span>
+                <span
+                  aria-hidden
+                  className={`pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-500 ${
+                    compact ? "text-xs" : "text-sm"
+                  }`}
+                >
+                  ↵
+                </span>
+              </motion.div>
+            );
+          })}
         </div>
       </div>
     </div>
