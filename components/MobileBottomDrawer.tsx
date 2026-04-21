@@ -26,6 +26,7 @@ import { useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { useAuth } from "@/lib/auth-context";
+import { isLabPathname } from "@/lib/lab-paths";
 import { useNavGuard } from "@/lib/nav-guard-context";
 import { useNavStatus } from "@/lib/nav-status-context";
 import { useFloatingNavSuppressed } from "@/lib/floating-nav-suppress-context";
@@ -205,9 +206,10 @@ export default function MobileBottomDrawer() {
     pathname === "/colophon" ||
     pathname === "/epigraph" ||
     pathname === "/onboarding" ||
-    pathname === "/onboarding-lab" ||
-    pathname === "/admin"
-  ) return null;
+    pathname === "/admin" ||
+    isLabPathname(pathname)
+  )
+    return null;
 
   const bottomInset = "calc(1rem + env(safe-area-inset-bottom, 0px))";
 

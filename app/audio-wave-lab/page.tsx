@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
+import { AdminOnlyLabGate } from "@/components/AdminOnlyLabGate";
 
 function hexToRgb(hex: string): [number, number, number] {
   return [
@@ -242,6 +243,7 @@ export default function AudioWaveLabPage() {
   const allValid = colors.every(isValidHex);
 
   return (
+    <AdminOnlyLabGate>
     <div className="min-h-screen bg-black text-white p-8 font-mono">
       <div className="max-w-3xl mx-auto space-y-10">
 
@@ -354,6 +356,7 @@ export default function AudioWaveLabPage() {
 
       </div>
     </div>
+    </AdminOnlyLabGate>
   );
 }
 

@@ -25,6 +25,7 @@ import {
   currentStep,
 } from "./installation-onboarding";
 import { getUserProfile } from "./users";
+import { isLabPathname } from "./lab-paths";
 import type { OnboardingStep } from "./types";
 
 const ONBOARDING_EXEMPT_PATHS = ["/login", "/onboarding", "/admin", "/colophon", "/epigraph"];
@@ -165,9 +166,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    const exempt = ONBOARDING_EXEMPT_PATHS.some(
-      (p) => pathname === p || pathname.startsWith(p + "/")
-    );
+    const exempt =
+      ONBOARDING_EXEMPT_PATHS.some((p) => pathname === p || pathname.startsWith(p + "/")) ||
+      isLabPathname(pathname);
     if (!exempt) {
       router.replace("/onboarding");
     }

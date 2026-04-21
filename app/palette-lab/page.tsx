@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useId } from "react";
+import { AdminOnlyLabGate } from "@/components/AdminOnlyLabGate";
 
 // ── Gradient utilities (inlined from fallback-avatar/utils.ts) ────────────────
 
@@ -147,6 +148,7 @@ export default function PaletteLabPage() {
   const allValid = colors.every(isValidHex);
 
   return (
+    <AdminOnlyLabGate>
     <div className="min-h-screen bg-[#0a0a0a] text-white p-8 font-mono">
       <div className="max-w-3xl mx-auto space-y-10">
 
@@ -318,5 +320,6 @@ export default function PaletteLabPage() {
 
       </div>
     </div>
+    </AdminOnlyLabGate>
   );
 }

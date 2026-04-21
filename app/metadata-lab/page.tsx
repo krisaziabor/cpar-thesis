@@ -3,6 +3,7 @@
 import { useState, useRef } from "react";
 import type { MetadataResult, SourceType } from "@/lib/metadata/types";
 import MusicPlayer from "@/components/MusicPlayer";
+import { AdminOnlyLabGate } from "@/components/AdminOnlyLabGate";
 import { useAuth } from "@/lib/auth-context";
 import { ref as storageRef, deleteObject } from "firebase/storage";
 import { storage } from "@/lib/firebase";
@@ -187,6 +188,7 @@ export default function MetadataLab() {
   }
 
   return (
+    <AdminOnlyLabGate>
     <div className="min-h-screen bg-gray-50 py-12 px-4">
       <div className="max-w-2xl mx-auto space-y-8">
         {/* Header */}
@@ -808,6 +810,7 @@ export default function MetadataLab() {
         </div>
       </div>
     </div>
+    </AdminOnlyLabGate>
   );
 }
 

@@ -7,6 +7,7 @@ import SyncedTranscript from "@/components/SyncedTranscript";
 import MarkdownEditor from "@/components/MarkdownEditor";
 import GradientSVG from "@/components/GradientSVG";
 import ColorWheel from "@/components/ColorWheel";
+import { AdminOnlyLabGate } from "@/components/AdminOnlyLabGate";
 import type { TimedWord } from "@/lib/types";
 
 /* ── Shared animation config ─────────────────────────────────────────────── */
@@ -335,6 +336,7 @@ export default function OnboardingLabPage() {
   };
 
   return (
+    <AdminOnlyLabGate>
     <div className="min-h-screen bg-black overflow-hidden">
       <style>{driftKeyframes}</style>
 
@@ -801,5 +803,6 @@ export default function OnboardingLabPage() {
         )}
       </AnimatePresence>
     </div>
+    </AdminOnlyLabGate>
   );
 }
