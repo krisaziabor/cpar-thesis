@@ -36,7 +36,6 @@ export function currentStep(
   if (data.accessibility_acknowledged_at == null) return "accessibility";
   if (needsProfileSetup && data.profile_setup_at == null) return "profile_setup";
   if (data.media_opt_in_at == null) return "media_opt_in";
-  if (data.contact_submitted_at == null) return "contact";
   if (data.avatar_colors_at == null) return "avatar_colors";
   return "complete";
 }

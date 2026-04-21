@@ -9,7 +9,6 @@ import {
   submitAccessibility,
   submitProfileSetup,
   submitMediaOptIn,
-  submitContactAndComplete,
   submitAvatarColors,
 } from "@/lib/installation-onboarding";
 import { ensureUserProfile } from "@/lib/users";
@@ -47,7 +46,6 @@ interface StepTranscript {
 const STEP_AUDIO_MAP: Record<string, string> = {
   profile_setup: "profile-setup",
   media_opt_in: "media-opt-in",
-  contact: "contact",
   color_consumed: "color-consumed",
   color_made: "color-made",
   color_changed: "color-changed",
@@ -185,11 +183,6 @@ const FORM_STEPS: { key: OnboardingStep; fallbackText: string }[] = [
     fallbackText:
       "Your voice recordings and media can be projected across the installation\u2019s three panels during the exhibition. This is entirely optional \u2014 your contributions to the library remain regardless.",
   },
-  {
-    key: "contact",
-    fallbackText:
-      "Kris may reach out about the installation and will email you when Kanon goes live. How would you prefer to be contacted?",
-  },
 ];
 
 const COLOR_STEPS = [
@@ -249,7 +242,6 @@ const ALL_STEPS: OnboardingStep[] = [
   "accessibility",
   "profile_setup",
   "media_opt_in",
-  "contact",
   "avatar_colors",
   "complete",
 ];
@@ -270,8 +262,6 @@ export default function OnboardingPage() {
   /* ── Per-step form state ───────────────────────────────────────────────── */
   const profileInputRef = useRef<HTMLInputElement>(null);
   const [profileName, setProfileName] = useState("");
-  const [contactMethod, setContactMethod] = useState<"email" | "text">("email");
-  const [phoneNumber, setPhoneNumber] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
   /* ── Color picking state ───────────────────────────────────────────────── */
@@ -350,18 +340,6 @@ export default function OnboardingPage() {
   async function handleMediaOptIn(optIn: boolean) {
     setSubmitting(true);
     await submitMediaOptIn(activeEmail, activeName, optIn);
-    await refreshOnboarding();
-    setSubmitting(false);
-  }
-
-  async function handleContactSubmit() {
-    if (contactMethod === "text" && !phoneNumber.trim()) return;
-    setSubmitting(true);
-    await submitContactAndComplete(
-      activeEmail,
-      contactMethod,
-      phoneNumber.trim() || undefined,
-    );
     await refreshOnboarding();
     setSubmitting(false);
   }
@@ -830,76 +808,6 @@ export default function OnboardingPage() {
                 </motion.div>
               )}
 
-              {/* ── Contact — vertical ──────────────────────────────────── */}
-              {activeStep === "contact" && (
-                <motion.div
-                  key="contact"
-                  {...m}
-                  className="w-[min(520px,calc(100vw-3rem))]"
-                >
-                  {transcript ? (
-                    <SyncedTranscript
-                      audioUrl={transcript.audio_url}
-                      words={transcript.words}
-                      onFinished={markListened}
-                    />
-                  ) : (
-                    <p className="font-sans text-xs leading-relaxed text-zinc-400">
-                      {FORM_STEPS[2].fallbackText}
-                    </p>
-                  )}
-                  <ListenGate locked={!hasListened}>
-                    <div className="mt-5 flex flex-col gap-3">
-                      <div className="flex items-center gap-4">
-                        <button
-                          onClick={() => setContactMethod("email")}
-                          className={`font-sans text-xs transition-colors ${
-                            contactMethod === "email"
-                              ? "text-zinc-200"
-                              : "text-zinc-500 hover:text-zinc-300"
-                          }`}
-                        >
-                          Email
-                        </button>
-                        <button
-                          onClick={() => setContactMethod("text")}
-                          className={`font-sans text-xs transition-colors ${
-                            contactMethod === "text"
-                              ? "text-zinc-200"
-                              : "text-zinc-500 hover:text-zinc-300"
-                          }`}
-                        >
-                          Text
-                        </button>
-                      </div>
-
-                      {contactMethod === "text" && (
-                        <input
-                          type="tel"
-                          value={phoneNumber}
-                          onChange={(e) => setPhoneNumber(e.target.value)}
-                          placeholder="Phone number"
-                          className="w-full border-b border-zinc-800 bg-transparent pb-1.5 font-sans text-xs text-zinc-300 placeholder:text-zinc-500 focus:outline-none"
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") void handleContactSubmit();
-                          }}
-                        />
-                      )}
-
-                      <button
-                        disabled={
-                          submitting ||
-                          (contactMethod === "text" && !phoneNumber.trim())
-                        }
-                        onClick={() => void handleContactSubmit()}
-                        className="self-start font-sans text-xs text-zinc-300 transition-colors hover:text-zinc-50 disabled:cursor-not-allowed disabled:opacity-30"
-                      >
-                        {submitting ? "Saving\u2026" : "Continue"}
-                      </button>
-                    </div>
-                  </ListenGate>
-                </motion.div>
-              )}
             </AnimatePresence>
           </div>
         )}
