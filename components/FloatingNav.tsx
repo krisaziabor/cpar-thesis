@@ -6,6 +6,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import Image from "next/image";
 import { useAuth } from "@/lib/auth-context";
+import { isLabPathname } from "@/lib/lab-paths";
 import { useNavGuard } from "@/lib/nav-guard-context";
 import { useNavStatus, type NavStatusMessage, type NavStatusPhase } from "@/lib/nav-status-context";
 import { useSequenceReplayNonce, useSequenceTimings } from "@/lib/sequence-dialkit";
@@ -169,7 +170,16 @@ export default function FloatingNav() {
   const isHoldingActive = (pathname === "/" && panel === "holds") || pathname.startsWith("/kanon");
   const holdingHref = "/?panel=holds";
 
-  if (!user || pathname === "/login" || pathname === "/colophon" || pathname === "/epigraph" || pathname === "/onboarding" || pathname === "/onboarding-lab" || pathname === "/admin") return null;
+  if (
+    !user ||
+    pathname === "/login" ||
+    pathname === "/colophon" ||
+    pathname === "/epigraph" ||
+    pathname === "/onboarding" ||
+    pathname === "/admin" ||
+    isLabPathname(pathname)
+  )
+    return null;
 
   const enterDelay = pathname === "/" && !shouldReduceMotion
     ? Math.max(0, timings.bottomStartMs + timings.navDelayMs) / 1000

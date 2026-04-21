@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import FirstTimeIntroOverlay from "@/components/FirstTimeIntroOverlay";
+import { AdminOnlyLabGate } from "@/components/AdminOnlyLabGate";
 
 type Mode = "fullscreen" | "card" | "closed";
 
@@ -9,6 +10,7 @@ export default function IntroLabPage() {
   const [mode, setMode] = useState<Mode>("closed");
 
   return (
+    <AdminOnlyLabGate>
     <div className="min-h-screen bg-black">
       {/* Faux graph dots in the background — stands in for the real graph
           so the card variant has something meaningful behind it. */}
@@ -75,5 +77,6 @@ export default function IntroLabPage() {
         onClose={() => setMode("closed")}
       />
     </div>
+    </AdminOnlyLabGate>
   );
 }

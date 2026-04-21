@@ -5,6 +5,7 @@ import { useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { useAuth } from "@/lib/auth-context";
+import { isLabPathname } from "@/lib/lab-paths";
 import { useSequenceReplayNonce, useSequenceTimings } from "@/lib/sequence-dialkit";
 import { EASE_OUT, MOTION_DURATION } from "@/lib/motion";
 import GradientSVG from "@/components/GradientSVG";
@@ -25,7 +26,14 @@ export default function UtilityDock() {
     "friend";
   const userInitial = displayName.charAt(0).toUpperCase();
 
-  if (!user || pathname === "/login" || pathname === "/onboarding" || pathname === "/onboarding-lab" || pathname === "/admin") return null;
+  if (
+    !user ||
+    pathname === "/login" ||
+    pathname === "/onboarding" ||
+    pathname === "/admin" ||
+    isLabPathname(pathname)
+  )
+    return null;
 
   const enterDelay = pathname === "/" && !shouldReduceMotion
     ? Math.max(0, timings.bottomStartMs + timings.utilityDelayMs) / 1000

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useCallback, useEffect } from "react";
+import { AdminOnlyLabGate } from "@/components/AdminOnlyLabGate";
 import SyncedTranscript from "@/components/SyncedTranscript";
 import type { TimedWord } from "@/lib/types";
 
@@ -152,6 +153,7 @@ export default function TranscriptLabPage() {
   const preview = previewSlot ? slots[previewSlot] : null;
 
   return (
+    <AdminOnlyLabGate>
     <div className="min-h-screen bg-black p-6">
       <div className="mx-auto max-w-3xl space-y-6">
         <div>
@@ -284,5 +286,6 @@ export default function TranscriptLabPage() {
         )}
       </div>
     </div>
+    </AdminOnlyLabGate>
   );
 }
