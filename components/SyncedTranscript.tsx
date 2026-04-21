@@ -58,6 +58,8 @@ interface SyncedTranscriptProps {
   compact?: boolean;
   /** When true, hides the built-in Play/Pause and Restart buttons. */
   hideControls?: boolean;
+  /** When true, renders Play/Restart as white at reduced opacity (for use on gradient/dark full-bleed backgrounds). */
+  lightControls?: boolean;
   /** Tailwind text-size class applied to the transcript paragraph (default "text-sm"). */
   textSize?: string;
   /**
@@ -86,6 +88,7 @@ const SyncedTranscript = forwardRef<SyncedTranscriptHandle, SyncedTranscriptProp
       autoPlay,
       compact,
       hideControls,
+      lightControls,
       textSize = "text-sm",
       scrollParentRef,
       scrollOpaqueBottomRatio = 0.56,
@@ -307,14 +310,14 @@ const SyncedTranscript = forwardRef<SyncedTranscriptHandle, SyncedTranscriptProp
           <div className="mt-3 flex gap-3">
             <button
               onClick={togglePlay}
-              className="font-sans text-xs text-zinc-500 transition-colors hover:text-zinc-300"
+              className={`font-sans text-xs transition-colors ${lightControls ? "text-white/40 hover:text-white/70" : "text-zinc-500 hover:text-zinc-300"}`}
               aria-label={playing ? "Pause" : "Play"}
             >
               {playing ? "Pause" : "Play"}
             </button>
             <button
               onClick={restart}
-              className="font-sans text-xs text-zinc-500 transition-colors hover:text-zinc-300"
+              className={`font-sans text-xs transition-colors ${lightControls ? "text-white/40 hover:text-white/70" : "text-zinc-500 hover:text-zinc-300"}`}
               aria-label="Restart"
             >
               Restart

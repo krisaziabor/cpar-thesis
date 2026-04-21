@@ -68,8 +68,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
 
-  async function loadOnboarding(email: string, selfRegistered: boolean) {
-    const data = await getOnboarding(email);
+  async function loadOnboarding(email: string, selfRegistered: boolean, fromServer = false) {
+    const data = await getOnboarding(email, { fromServer });
     const step = currentStep(data, selfRegistered);
     setOnboardingStep(step);
     return step;
@@ -175,7 +175,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function refreshOnboarding() {
     if (user?.email) {
-      await loadOnboarding(user.email, !firstName);
+      await loadOnboarding(user.email, !firstName, true);
       try {
         const profile = await getUserProfile(user.email);
         if (profile?.avatar_colors) setAvatarColors(profile.avatar_colors);

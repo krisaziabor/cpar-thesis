@@ -1,6 +1,7 @@
 import {
   doc,
   getDoc,
+  getDocFromServer,
   onSnapshot,
   setDoc,
   serverTimestamp,
@@ -43,10 +44,13 @@ export function currentStep(
 
 /** Fetch the user's onboarding doc (null if they haven't started). */
 export async function getOnboarding(
-  email: string
+  email: string,
+  { fromServer = false } = {}
 ): Promise<InstallationOnboarding | null> {
   if (!db) return null;
-  const snap = await getDoc(docRef(email));
+  const snap = fromServer
+    ? await getDocFromServer(docRef(email))
+    : await getDoc(docRef(email));
   if (!snap.exists()) return null;
   return { id: snap.id, ...snap.data() } as InstallationOnboarding;
 }

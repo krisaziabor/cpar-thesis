@@ -45,6 +45,7 @@ export default function LoginPage() {
   const [gatedFirstName, setGatedFirstName] = useState<string | null>(null);
   const [isNewUser, setIsNewUser] = useState(false);
   const [signingIn, setSigningIn] = useState(false);
+  const [sendingLink, setSendingLink] = useState(false);
   const [localError, setLocalError] = useState("");
   const [transientNotice, setTransientNotice] = useState("");
 
@@ -187,6 +188,7 @@ export default function LoginPage() {
       return;
     }
 
+    setSendingLink(true);
     try {
       const res = await fetch("/api/auth/send-magic-link", {
         method: "POST",
@@ -195,6 +197,7 @@ export default function LoginPage() {
       });
       const data = (await res.json().catch(() => ({}))) as { error?: string };
       if (!res.ok) {
+        setSendingLink(false);
         setLocalError(
           typeof data.error === "string" ? data.error : "Failed to send sign-in link.",
         );
@@ -203,6 +206,7 @@ export default function LoginPage() {
       localStorage.setItem(EMAIL_STORAGE_KEY, gatedEmail);
       setStage("sent");
     } catch (err: unknown) {
+      setSendingLink(false);
       setLocalError(err instanceof Error ? err.message : "Failed to send sign-in link.");
     }
   }
@@ -286,18 +290,19 @@ export default function LoginPage() {
                 <div className="flex w-full flex-row flex-wrap items-center gap-x-4 gap-y-3">
                   <button
                     type="button"
-                    onClick={() => void handleGoogleSignIn(gatedEmail)}
-                    className="flex shrink-0 items-center gap-2 font-sans text-sm text-zinc-300 transition-colors hover:text-zinc-50 sm:text-xs"
+                    disabled={sendingLink}
+                    onClick={() => void handleSendMagicLink()}
+                    className="shrink-0 font-sans text-sm text-zinc-300 transition-colors hover:text-zinc-50 disabled:opacity-50 sm:text-xs"
                   >
-                    <GoogleIcon />
-                    {isNewUser ? "Sign up with Google" : "Continue with Google"}
+                    {sendingLink ? "Sending…" : isNewUser ? "Send sign-up link" : "Send magic link"}
                   </button>
                   <button
                     type="button"
-                    onClick={() => void handleSendMagicLink()}
-                    className="shrink-0 font-sans text-sm text-zinc-500 transition-colors hover:text-zinc-300 sm:text-xs"
+                    onClick={() => void handleGoogleSignIn(gatedEmail)}
+                    className="flex shrink-0 items-center gap-2 font-sans text-sm text-zinc-500 transition-colors hover:text-zinc-300 sm:text-xs"
                   >
-                    {isNewUser ? "Send sign-up link" : "Send magic link"}
+                    <GoogleIcon />
+                    {isNewUser ? "Sign up with Google" : "Continue with Google"}
                   </button>
                 </div>
                 <button
