@@ -263,12 +263,12 @@ export default function ConnectPanel({
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search by title, creator, or tag..."
-              className="w-full rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-200 outline-none transition-colors placeholder:text-zinc-600 focus:border-zinc-600"
+              className="w-full rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2.5 text-sm text-zinc-200 outline-none transition-colors placeholder:text-zinc-600 focus:border-zinc-600"
             />
             <button
               type="button"
               onClick={() => setHoldFilter((v) => !v)}
-              className={`rounded border px-2.5 py-1.5 text-xs transition-colors ${
+              className={`rounded border px-2.5 py-2 text-xs transition-colors ${
                 holdFilter
                   ? "border-zinc-500 bg-zinc-800 text-zinc-100"
                   : "border-zinc-800 text-zinc-500 hover:border-zinc-600 hover:text-zinc-400"
@@ -342,7 +342,7 @@ export default function ConnectPanel({
                   type="button"
                   onClick={goToRecord}
                   disabled={!canRecord}
-                  className="rounded border border-zinc-700 px-3 py-1.5 text-xs text-zinc-200 transition-colors hover:border-zinc-500 hover:text-zinc-50 disabled:opacity-40"
+                  className="rounded border border-zinc-700 px-3 py-2 text-xs text-zinc-200 transition-colors hover:border-zinc-500 hover:text-zinc-50 disabled:opacity-40"
                 >
                   Continue to record
                 </button>

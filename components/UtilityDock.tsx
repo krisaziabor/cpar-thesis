@@ -55,7 +55,8 @@ export default function UtilityDock() {
         ease: EASE_OUT,
         delay: enterDelay,
       }}
-      className="fixed bottom-6 left-6 z-50"
+      className="hidden sm:block fixed left-6 z-50"
+      style={{ bottom: "calc(1.5rem + env(safe-area-inset-bottom, 0px))" }}
     >
       <AnimatePresence initial={false}>
         {expanded && (
@@ -126,7 +127,7 @@ export default function UtilityDock() {
         type="button"
         onClick={() => setExpanded((prev) => !prev)}
         aria-label={expanded ? "Collapse utility menu" : "Expand utility menu"}
-        className="grid h-9 w-9 place-items-center overflow-hidden rounded-full border border-zinc-800 bg-zinc-950 text-xs text-zinc-300 shadow-[0_4px_24px_rgba(0,0,0,0.5)] transition-colors hover:bg-zinc-900 hover:text-zinc-100"
+        className="grid h-11 w-11 place-items-center overflow-hidden rounded-full border border-zinc-800 bg-zinc-950 text-xs text-zinc-300 shadow-[0_4px_24px_rgba(0,0,0,0.5)] transition-colors hover:bg-zinc-900 hover:text-zinc-100"
       >
         {expanded ? (
           "×"

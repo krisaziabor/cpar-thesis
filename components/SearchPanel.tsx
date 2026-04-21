@@ -60,7 +60,7 @@ export default function SearchPanel() {
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         placeholder="Search the library..."
-        className="w-full rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-200 outline-none transition-colors placeholder:text-zinc-600 focus:border-zinc-600"
+        className="w-full rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2.5 text-sm text-zinc-200 outline-none transition-colors placeholder:text-zinc-600 focus:border-zinc-600"
       />
 
       {loading && <p className="text-xs text-zinc-600">Loading library...</p>}

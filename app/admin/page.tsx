@@ -192,10 +192,11 @@ function UsersTab({
         placeholder="Search users…"
         value={search}
         onChange={(e) => setSearch(e.target.value)}
-        className="w-full rounded border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-200 placeholder:text-zinc-600 outline-none focus:border-zinc-600"
+        className="w-full rounded border border-zinc-800 bg-zinc-950 px-3 py-2.5 text-sm text-zinc-200 placeholder:text-zinc-600 outline-none focus:border-zinc-600"
       />
 
-      <div className="overflow-x-auto rounded border border-zinc-800">
+      {/* Desktop table */}
+      <div className="hidden overflow-x-auto rounded border border-zinc-800 md:block">
         <table className="w-full text-left text-sm">
           <thead>
             <tr className="border-b border-zinc-800 text-xs text-zinc-500 uppercase tracking-wider">
@@ -268,6 +269,59 @@ function UsersTab({
           <p className="px-4 py-6 text-center text-xs text-zinc-600">
             No users match your search.
           </p>
+        )}
+      </div>
+
+      {/* Mobile card list */}
+      <div className="space-y-2 md:hidden">
+        {filtered.length === 0 ? (
+          <p className="px-3 py-6 text-center text-xs text-zinc-600">
+            No users match your search.
+          </p>
+        ) : (
+          filtered.map((w) => {
+            const ob = onboardingMap.get(w.email);
+            const name = ob?.user_name ?? w.name ?? null;
+            const onboardingStatus = ob?.completed_at
+              ? "Complete"
+              : ob
+              ? "In progress"
+              : "Not started";
+            return (
+              <div
+                key={w.email}
+                className="space-y-1 rounded border border-zinc-800 px-3 py-3"
+              >
+                <p className="truncate text-sm text-zinc-200">{w.email}</p>
+                {name && <p className="text-xs text-zinc-500">{name}</p>}
+                <div className="flex flex-wrap items-center gap-2">
+                  <span
+                    className={`inline-block rounded px-1.5 py-0.5 text-xs ${
+                      w.role === "admin"
+                        ? "bg-amber-900/40 text-amber-300"
+                        : "bg-zinc-800 text-zinc-400"
+                    }`}
+                  >
+                    {w.role}
+                  </span>
+                  <span
+                    className={`text-xs ${
+                      onboardingStatus === "Complete"
+                        ? "text-emerald-400"
+                        : onboardingStatus === "In progress"
+                        ? "text-amber-400"
+                        : "text-zinc-600"
+                    }`}
+                  >
+                    {onboardingStatus}
+                  </span>
+                  <span className="text-xs text-zinc-500">
+                    {itemCountByUser.get(w.email) ?? 0} records · {saveCountByUser.get(w.email) ?? 0} holds
+                  </span>
+                </div>
+              </div>
+            );
+          })
         )}
       </div>
     </div>
@@ -446,7 +500,7 @@ function RequestsTab({
           key={req.id}
           className="rounded border border-zinc-800 px-4 py-3.5"
         >
-          <div className="flex items-start justify-between gap-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
             <div className="min-w-0 space-y-1">
               <p className="text-sm font-medium text-zinc-200">
                 <Link
@@ -464,7 +518,7 @@ function RequestsTab({
                 <p className="text-xs text-red-500">{errors[req.id]}</p>
               )}
             </div>
-            <div className="flex shrink-0 items-center gap-3">
+            <div className="flex shrink-0 items-center gap-4 sm:gap-3">
               <button
                 onClick={() => handleResolve(req, "approved")}
                 disabled={resolving[req.id]}
@@ -559,7 +613,7 @@ export default function AdminPage() {
   return (
     <div className="min-h-screen bg-black text-zinc-200">
       {/* Header */}
-      <header className="border-b border-zinc-800 px-6 py-3">
+      <header className="border-b border-zinc-800 px-3 py-3 sm:px-6">
         <div className="mx-auto flex max-w-6xl items-center justify-between">
           <Link
             href="/"
@@ -567,8 +621,8 @@ export default function AdminPage() {
           >
             Kanon
           </Link>
-          <div className="flex items-center gap-4">
-            <span className="text-xs text-zinc-500">
+          <div className="flex items-center gap-3 sm:gap-4">
+            <span className="hidden text-xs text-zinc-500 sm:block">
               {user.email}
               <span className="ml-1 text-zinc-600">· admin</span>
             </span>
@@ -582,14 +636,14 @@ export default function AdminPage() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-6xl px-6 py-6">
+      <main className="mx-auto max-w-6xl px-3 py-6 sm:px-6">
         {/* Tab bar */}
         <div className="mb-6 flex items-center gap-1 border-b border-zinc-800 overflow-x-auto">
           {TABS.map((t) => (
             <button
               key={t.id}
               onClick={() => setTab(t.id)}
-              className={`whitespace-nowrap px-3 py-2 text-sm transition-colors ${
+              className={`min-h-[44px] whitespace-nowrap px-3 py-2 text-sm transition-colors ${
                 tab === t.id
                   ? "border-b-2 border-zinc-200 text-zinc-50 -mb-px"
                   : "text-zinc-500 hover:text-zinc-300"

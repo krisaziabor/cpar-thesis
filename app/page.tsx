@@ -68,6 +68,9 @@ function HomeInner() {
   const [dataLoading, setDataLoading] = useState(() => items.length === 0);
   const [addProgressPercent, setAddProgressPercent] = useState(100 / 3);
   const [isNarrativePlaying, setIsNarrativePlaying] = useState(false);
+  const [isTouchDevice] = useState(
+    () => typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches
+  );
 
   const [firstTimeIntro, setFirstTimeIntro] = useState<FirstTimeIntroState>(() => {
     if (typeof window === "undefined") return { open: false, variant: "card" };
@@ -459,7 +462,7 @@ function HomeInner() {
   const holdStop = Math.min(1, (timings.topLeftFadeInMs + timings.topLeftHoldMs) / introTotalMs);
 
   return (
-    <div className="flex h-screen flex-col bg-black">
+    <div className="flex h-dvh flex-col bg-black">
       <div className="fixed left-0 right-0 top-6 z-30 flex flex-col items-center">
         {!shouldReduceMotion && (
           <motion.h1
@@ -492,10 +495,10 @@ function HomeInner() {
             zoomOnPinch={true}
             zoomOnDoubleClick={false}
             panOnDrag={true}
-            panOnScroll={true}
-            panOnScrollMode={PanOnScrollMode.Vertical}
+            panOnScroll={isTouchDevice ? false : true}
+            panOnScrollMode={isTouchDevice ? undefined : PanOnScrollMode.Vertical}
             fitView={true}
-            fitViewOptions={{ padding: 0.6, minZoom: 0.95 }}
+            fitViewOptions={{ padding: isTouchDevice ? 0.2 : 0.6, minZoom: 0.95 }}
             onNodeClick={(_, node) => {
               if (isConnectSelecting && !connectPanelOpen) {
                 toggleConnectSelection(node.id);

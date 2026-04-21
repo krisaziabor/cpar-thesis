@@ -115,12 +115,12 @@ export default function ActivityPage() {
 
   return (
     <div className="min-h-screen bg-white dark:bg-black">
-      <header className="border-b border-zinc-200 px-6 py-3 dark:border-zinc-800">
+      <header className="border-b border-zinc-200 px-4 py-3 dark:border-zinc-800 sm:px-6">
         <div className="mx-auto flex max-w-5xl items-center justify-between">
           <span className="font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
             Kanon
           </span>
-          <nav className="flex items-center gap-1">
+          <nav className="hidden items-center gap-1 sm:flex">
             <span className="px-3 py-1 text-sm text-zinc-300 dark:text-zinc-700 cursor-not-allowed select-none">
               Graph
             </span>
@@ -142,14 +142,14 @@ export default function ActivityPage() {
               </Link>
             )}
           </nav>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3 sm:gap-4">
             <Link
               href="/add"
-              className="rounded border border-zinc-900 px-3 py-1 text-sm font-medium text-zinc-900 hover:bg-zinc-900 hover:text-white dark:border-zinc-100 dark:text-zinc-100 dark:hover:bg-zinc-100 dark:hover:text-zinc-900"
+              className="hidden rounded border border-zinc-900 px-3 py-1 text-sm font-medium text-zinc-900 hover:bg-zinc-900 hover:text-white dark:border-zinc-100 dark:text-zinc-100 dark:hover:bg-zinc-100 dark:hover:text-zinc-900 sm:inline-flex"
             >
               + Add
             </Link>
-            <span className="font-mono text-xs text-zinc-400">
+            <span className="hidden font-mono text-xs text-zinc-400 sm:block">
               {user.email}
               {role === "admin" && (
                 <span className="ml-1 text-zinc-300 dark:text-zinc-600">
@@ -167,7 +167,7 @@ export default function ActivityPage() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-5xl px-6 py-6">
+      <main className="mx-auto max-w-5xl px-4 py-6 sm:px-6">
         <p className="mb-4 font-mono text-xs text-zinc-400">
           {dataLoading ? "loading…" : `${activity.length} event${activity.length !== 1 ? "s" : ""}`}
         </p>
@@ -184,7 +184,7 @@ export default function ActivityPage() {
           {activity.map((a) => (
             <div
               key={a.key}
-              className="flex items-start justify-between border-b border-zinc-100 px-4 py-3 last:border-0 dark:border-zinc-900"
+              className="flex items-start justify-between border-b border-zinc-100 px-3 py-3 last:border-0 dark:border-zinc-900 sm:px-4"
             >
               <div className="flex items-start gap-3">
                 <span className="mt-0.5 w-14 shrink-0 rounded border border-zinc-200 px-1.5 py-0.5 text-center font-mono text-xs text-zinc-400 dark:border-zinc-800">

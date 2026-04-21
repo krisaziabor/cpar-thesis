@@ -8,14 +8,6 @@ function easeOutScroll(t: number): number {
   return 1 - (1 - t) ** 2.35;
 }
 
-const BLUR_MASK_BOTTOM = `linear-gradient(to bottom, hsla(0,0%,100%,0) 0%, hsla(0,0%,100%,0) 10%, hsla(0,0%,100%,0.06) 24%, hsla(0,0%,100%,0.28) 44%, hsla(0,0%,100%,0.62) 64%, hsla(0,0%,100%,0.9) 82%, hsl(0,0%,100%) 100%)`;
-
-const DIM_MASK_BOTTOM = `linear-gradient(to bottom, hsla(0,0%,100%,0) 0%, hsla(0,0%,100%,0) 6%, hsla(0,0%,100%,0.18) 32%, hsla(0,0%,100%,0.55) 58%, hsla(0,0%,100%,0.92) 80%, hsl(0,0%,100%) 100%)`;
-
-/** Mirrored masks for the top band (strong near viewport top). */
-const BLUR_MASK_TOP = `linear-gradient(to bottom, hsl(0,0%,100%) 0%, hsla(0,0%,100%,0.9) 18%, hsla(0,0%,100%,0.62) 36%, hsla(0,0%,100%,0.28) 56%, hsla(0,0%,100%,0.06) 76%, hsla(0,0%,100%,0) 90%, hsla(0,0%,100%,0) 100%)`;
-
-const DIM_MASK_TOP = `linear-gradient(to bottom, hsl(0,0%,100%) 0%, hsla(0,0%,100%,0.92) 20%, hsla(0,0%,100%,0.55) 42%, hsla(0,0%,100%,0.18) 68%, hsla(0,0%,100%,0) 94%, hsla(0,0%,100%,0) 100%)`;
 
 type Props = {
   /** Frosted + dim strip at the bottom of the viewport */
@@ -64,20 +56,7 @@ export default function ViewportScrollFades({ bottom = true, top = true }: Props
             opacity: topStrength,
           }}
         >
-          <div
-            className="absolute inset-0 bg-white/[0.03] [-webkit-backdrop-filter:blur(14px)] [backdrop-filter:blur(14px)]"
-            style={{
-              maskImage: BLUR_MASK_TOP,
-              WebkitMaskImage: BLUR_MASK_TOP,
-            }}
-          />
-          <div
-            className="absolute inset-0 bg-gradient-to-b from-black via-black/35 to-transparent"
-            style={{
-              maskImage: DIM_MASK_TOP,
-              WebkitMaskImage: DIM_MASK_TOP,
-            }}
-          />
+          <div className="absolute inset-0 bg-gradient-to-b from-black via-black/35 to-transparent" />
         </div>
       )}
 
@@ -86,20 +65,7 @@ export default function ViewportScrollFades({ bottom = true, top = true }: Props
           aria-hidden
           className="pointer-events-none fixed inset-x-0 bottom-0 z-10 h-[min(42vh,26rem)]"
         >
-          <div
-            className="absolute inset-0 bg-white/[0.03] [-webkit-backdrop-filter:blur(14px)] [backdrop-filter:blur(14px)]"
-            style={{
-              maskImage: BLUR_MASK_BOTTOM,
-              WebkitMaskImage: BLUR_MASK_BOTTOM,
-            }}
-          />
-          <div
-            className="absolute inset-0 bg-gradient-to-t from-black via-black/35 to-transparent"
-            style={{
-              maskImage: DIM_MASK_BOTTOM,
-              WebkitMaskImage: DIM_MASK_BOTTOM,
-            }}
-          />
+          <div className="absolute inset-0 bg-gradient-to-t from-black via-black/35 to-transparent" />
         </div>
       )}
     </>

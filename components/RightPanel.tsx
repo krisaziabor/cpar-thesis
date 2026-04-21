@@ -53,6 +53,13 @@ export default function RightPanel({
   const shouldReduceMotion = useReducedMotion();
   const backButtonRef = useRef<HTMLButtonElement>(null);
   const [backTooltipPos, setBackTooltipPos] = useState<{ left: number; top: number } | null>(null);
+  const [viewportWidth, setViewportWidth] = useState(typeof window !== "undefined" ? window.innerWidth : 1200);
+
+  useEffect(() => {
+    function onResize() { setViewportWidth(window.innerWidth); }
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
 
   function showBackTooltip() {
     const el = backButtonRef.current;
@@ -75,10 +82,15 @@ export default function RightPanel({
   return (
     /* No backdrop — panel floats over canvas so other nodes remain clickable */
     <motion.div
-      className="fixed bottom-4 right-4 top-4 z-50 flex flex-col overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-950 shadow-[0_20px_60px_rgba(0,0,0,0.7)]"
-      style={{ maxWidth: "95vw" }}
-      initial={shouldReduceMotion ? false : { opacity: 0, x: 24, width: 460 }}
-      animate={{ opacity: 1, x: 0, width: wide ? wideWidth : 460 }}
+      className="fixed z-50 flex flex-col overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-950 shadow-[0_20px_60px_rgba(0,0,0,0.7)]"
+      style={{
+        maxWidth: "calc(100vw - 2rem)",
+        top: "max(1rem, env(safe-area-inset-top, 0px))",
+        right: "max(1rem, env(safe-area-inset-right, 0px))",
+        bottom: "max(1rem, env(safe-area-inset-bottom, 0px))",
+      }}
+      initial={shouldReduceMotion ? false : { opacity: 0, x: 24, width: Math.min(460, viewportWidth - 32) }}
+      animate={{ opacity: 1, x: 0, width: wide ? wideWidth : Math.min(460, viewportWidth - 32) }}
       exit={shouldReduceMotion ? { opacity: 1, x: 0 } : { opacity: 0, x: 24 }}
       transition={{
         duration: shouldReduceMotion ? 0 : MOTION_DURATION.panel,
@@ -94,7 +106,7 @@ export default function RightPanel({
       )}
 
       {/* Header */}
-      <div className="relative z-10 flex shrink-0 items-center justify-between border-b border-zinc-800 px-5 py-3">
+      <div className="relative z-10 flex shrink-0 items-center justify-between border-b border-zinc-800 px-3 py-3 sm:px-5">
         {typeof progressPercent === "number" && (
           <div
             className="pointer-events-none absolute bottom-[-1px] left-0 h-px bg-zinc-100 transition-[width] duration-250 ease-[ease]"
@@ -118,7 +130,7 @@ export default function RightPanel({
                   onMouseEnter={showBackTooltip}
                   onMouseLeave={() => setBackTooltipPos(null)}
                   aria-label={backLabel ? `Back to ${backLabel}` : "Go back"}
-                  className="text-base leading-none text-zinc-500 transition-colors hover:text-zinc-200"
+                  className="flex h-11 w-11 items-center justify-center text-base leading-none text-zinc-500 transition-colors hover:text-zinc-200"
                 >
                   ←
                 </button>
@@ -136,7 +148,7 @@ export default function RightPanel({
           )}
           <button
             onClick={onClose}
-            className="shrink-0 text-base leading-none text-zinc-500 hover:text-zinc-200"
+            className="flex h-11 w-11 shrink-0 items-center justify-center text-base leading-none text-zinc-500 hover:text-zinc-200"
           >
             ✕
           </button>

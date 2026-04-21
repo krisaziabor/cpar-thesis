@@ -241,6 +241,10 @@ function UserCard({
 export default function HoldsPanel({ currentUserEmail, initialUserEmail }: HoldsPanelProps) {
   const shouldReduceMotion = useReducedMotion();
   const { navigatePanel } = usePanelHistory();
+  const [isMobile] = useState(
+    () => typeof window !== "undefined" && window.innerWidth < 900
+  );
+  const [mobileTab, setMobileTab] = useState<"left" | "right">("left");
 
   // ── Shared data ───────────────────────────────────────────
   const [items, setItems] = useState<Item[]>([]);
@@ -395,10 +399,29 @@ export default function HoldsPanel({ currentUserEmail, initialUserEmail }: Holds
   }
 
   return (
-    <div className="relative flex h-full overflow-hidden">
+    <div className="relative flex h-full flex-col overflow-hidden">
+      {isMobile && (
+        <div className="flex shrink-0 border-b border-white/10">
+          <button
+            type="button"
+            onClick={() => setMobileTab("left")}
+            className={`flex-1 py-2.5 text-xs transition-colors ${mobileTab === "left" ? "text-white/90" : "text-white/35 hover:text-white/60"}`}
+          >
+            My Hold
+          </button>
+          <button
+            type="button"
+            onClick={() => setMobileTab("right")}
+            className={`flex-1 py-2.5 text-xs transition-colors ${mobileTab === "right" ? "text-white/90" : "text-white/35 hover:text-white/60"}`}
+          >
+            Everyone's
+          </button>
+        </div>
+      )}
+      <div className="relative flex min-h-0 flex-1 overflow-hidden">
 
       {/* ── Left pane — My Hold ──────────────────────────────── */}
-      <div className="relative z-10 min-w-0 flex-1 overflow-y-auto scrollbar-hide">
+      <div className={`relative z-10 min-w-0 flex-1 overflow-y-auto scrollbar-hide${isMobile && mobileTab !== "left" ? " hidden" : ""}`}>
         <div className="flex flex-col gap-6 px-6 py-6">
 
           <div className="flex items-center justify-between">
@@ -425,7 +448,7 @@ export default function HoldsPanel({ currentUserEmail, initialUserEmail }: Holds
                       type="button"
                       disabled={removingItems}
                       onClick={() => void removeSelected()}
-                      className="text-xs text-red-400 transition-colors hover:text-red-300 disabled:opacity-50"
+                      className="-mx-1 px-1 py-1.5 text-xs text-red-400 transition-colors hover:text-red-300 disabled:opacity-50"
                     >
                       Remove {selectedToRemove.size}
                     </button>
@@ -434,7 +457,7 @@ export default function HoldsPanel({ currentUserEmail, initialUserEmail }: Holds
                     type="button"
                     disabled={removingItems}
                     onClick={() => { setIsRemoving(false); setSelectedToRemove(new Set()); }}
-                    className="text-xs text-white/40 transition-colors hover:text-white/70 disabled:opacity-50"
+                    className="-mx-1 px-1 py-1.5 text-xs text-white/40 transition-colors hover:text-white/70 disabled:opacity-50"
                   >
                     Done
                   </button>
@@ -448,7 +471,7 @@ export default function HoldsPanel({ currentUserEmail, initialUserEmail }: Holds
                   exit={{ opacity: 0 }}
                   transition={{ duration: MOTION_DURATION.standard, ease: EASE_OUT }}
                   onClick={() => setIsRemoving(true)}
-                  className="text-xs text-white/40 transition-colors hover:text-white/70"
+                  className="-mx-1 px-1 py-1.5 text-xs text-white/40 transition-colors hover:text-white/70"
                 >
                   Edit
                 </motion.button>
@@ -598,7 +621,7 @@ export default function HoldsPanel({ currentUserEmail, initialUserEmail }: Holds
 
       {/* ── Right pane — Everyone's Holds ────────────────────── */}
       <motion.div
-        className="relative z-10 flex w-[420px] shrink-0 flex-col overflow-hidden border-l border-white/10 bg-black"
+        className={`relative z-10 flex flex-col overflow-hidden border-l border-white/10 bg-black${isMobile ? " flex-1" : " w-[420px] shrink-0"}${isMobile && mobileTab !== "right" ? " hidden" : ""}`}
         initial={shouldReduceMotion ? false : { opacity: 0, x: 8 }}
         animate={{ opacity: 1, x: 0 }}
         transition={{
@@ -618,13 +641,13 @@ export default function HoldsPanel({ currentUserEmail, initialUserEmail }: Holds
               value={userSearch}
               onChange={(e) => setUserSearch(e.target.value)}
               placeholder="Search contributors..."
-              className="w-full rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2 font-sans text-xs text-zinc-200 placeholder-zinc-600 outline-none focus:border-zinc-600"
+              className="w-full rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2.5 font-sans text-xs text-zinc-200 placeholder-zinc-600 outline-none focus:border-zinc-600"
             />
             {userSearch && (
               <button
                 type="button"
                 onClick={() => setUserSearch("")}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-zinc-500 transition-colors hover:text-zinc-300"
+                className="absolute right-0 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center text-xs text-zinc-500 transition-colors hover:text-zinc-300"
               >
                 ×
               </button>
@@ -659,6 +682,7 @@ export default function HoldsPanel({ currentUserEmail, initialUserEmail }: Holds
           )}
         </div>
       </motion.div>
+      </div>
     </div>
   );
 }

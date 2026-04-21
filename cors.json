@@ -1,5 +1,24 @@
 [
   {
+    "origin": [
+      "http://10.66.218.65",
+      "http://10.66.218.65:3000",
+      "https://10.66.218.65"
+    ],
+    "method": ["GET", "PUT", "POST", "DELETE"],
+    "maxAgeSeconds": 3600,
+    "responseHeader": [
+      "Content-Type",
+      "Authorization",
+      "Content-Length",
+      "Content-Range",
+      "Accept-Ranges",
+      "User-Agent",
+      "Cache-Control",
+      "ETag"
+    ]
+  },
+  {
     "origin": ["*"],
     "method": ["GET", "PUT", "POST", "DELETE"],
     "maxAgeSeconds": 3600,

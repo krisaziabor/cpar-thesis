@@ -659,7 +659,7 @@ export default function OnboardingPage() {
             transition={{ duration: 0.2 }}
             className="fixed inset-0 z-10 flex items-center justify-center"
           >
-            <div className="flex w-[min(860px,calc(100vw-3rem))] items-center gap-20">
+            <div className="flex w-[min(860px,calc(100vw-3rem))] flex-col items-center gap-10 sm:flex-row sm:gap-20">
               <div className="flex flex-1 flex-col items-start gap-6">
                 <div className="flex gap-2">
                   {[0, 1, 2].map((i) => {

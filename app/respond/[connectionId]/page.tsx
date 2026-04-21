@@ -41,7 +41,7 @@ export default function RespondPage() {
 
   return (
     <div className="min-h-screen bg-white dark:bg-black">
-      <header className="border-b border-zinc-200 px-6 py-3 dark:border-zinc-800">
+      <header className="border-b border-zinc-200 px-4 py-3 dark:border-zinc-800 sm:px-6">
         <div className="mx-auto flex max-w-xl items-center justify-between">
           <Link
             href={`/connections/${connectionId}`}
@@ -56,7 +56,7 @@ export default function RespondPage() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-xl px-6 py-10">
+      <main className="mx-auto max-w-xl px-4 py-6 sm:px-6 sm:py-10">
         <div className="flex flex-col gap-6">
           <div>
             <h1 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">
@@ -68,7 +68,7 @@ export default function RespondPage() {
           </div>
 
           {/* Connection summary */}
-          <div className="border border-zinc-200 px-4 py-3 dark:border-zinc-800">
+          <div className="border border-zinc-200 px-3 py-3 dark:border-zinc-800 sm:px-4">
             <p className="font-mono text-xs text-zinc-400">responding to</p>
             <div className="mt-1 flex flex-wrap items-center gap-2">
               {items.map((item, i) => (
@@ -103,7 +103,7 @@ export default function RespondPage() {
                 router.push(`/connections/${connectionId}`)
               }
               disabled={!audioUrl}
-              className="border border-zinc-900 px-4 py-2 text-sm font-medium text-zinc-900 hover:bg-zinc-900 hover:text-white disabled:opacity-40 dark:border-zinc-100 dark:text-zinc-100 dark:hover:bg-zinc-100 dark:hover:text-zinc-900"
+              className="w-full border border-zinc-900 px-4 py-2.5 text-sm font-medium text-zinc-900 hover:bg-zinc-900 hover:text-white disabled:opacity-40 dark:border-zinc-100 dark:text-zinc-100 dark:hover:bg-zinc-100 dark:hover:text-zinc-900 sm:w-auto"
             >
               submit response
             </button>
