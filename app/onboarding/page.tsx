@@ -221,6 +221,27 @@ const AMBIENT = {
   fadeInDuration: 4,
 };
 
+/** Mobile-tuned ambient config — disables continuous drift + cuts blur/filter cost. */
+const AMBIENT_MOBILE = {
+  ...AMBIENT,
+  blurCSS: 40,
+  saturation: 1,
+  drift: false,
+};
+
+function useIsMobileViewport(query = "(max-width: 640px)"): boolean {
+  const [matches, setMatches] = useState(false);
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.matchMedia) return;
+    const mql = window.matchMedia(query);
+    const update = () => setMatches(mql.matches);
+    update();
+    mql.addEventListener("change", update);
+    return () => mql.removeEventListener("change", update);
+  }, [query]);
+  return matches;
+}
+
 const REVEAL = { textFade: { duration: 0.4 } };
 const CARD = {
   yOffset: 6,
@@ -258,6 +279,8 @@ export default function OnboardingPage() {
   } = useAuth();
   const router = useRouter();
   const shouldReduceMotion = useReducedMotion();
+  const isMobile = useIsMobileViewport();
+  const ambient = isMobile ? AMBIENT_MOBILE : { ...AMBIENT, drift: true };
 
   /* ── Per-step form state ───────────────────────────────────────────────── */
   const profileInputRef = useRef<HTMLInputElement>(null);
@@ -433,7 +456,7 @@ export default function OnboardingPage() {
             transition={
               shouldReduceMotion
                 ? { duration: 0 }
-                : { duration: AMBIENT.fadeInDuration, ease: EASE }
+                : { duration: ambient.fadeInDuration, ease: EASE }
             }
             className="pointer-events-none fixed inset-0 z-0"
           >
@@ -442,23 +465,23 @@ export default function OnboardingPage() {
               animate={{
                 scaleY:
                   revealStage >= 3
-                    ? AMBIENT.endHeight / 100
-                    : AMBIENT.startHeight / 100,
+                    ? ambient.endHeight / 100
+                    : ambient.startHeight / 100,
                 scaleX:
                   revealStage >= 3
-                    ? AMBIENT.endWidth / 100
-                    : AMBIENT.startWidth / 100,
+                    ? ambient.endWidth / 100
+                    : ambient.startWidth / 100,
               }}
               transition={
                 shouldReduceMotion
                   ? { duration: 0 }
                   : {
                       scaleY: {
-                        duration: AMBIENT.growDuration,
-                        ease: AMBIENT.growEase,
+                        duration: ambient.growDuration,
+                        ease: ambient.growEase,
                       },
                       scaleX: {
-                        duration: AMBIENT.growDuration * 0.55,
+                        duration: ambient.growDuration * 0.55,
                         ease: [0.215, 0.61, 0.355, 1],
                       },
                     }
@@ -477,19 +500,23 @@ export default function OnboardingPage() {
                 style={{
                   position: "absolute",
                   inset: 0,
-                  filter: `blur(${AMBIENT.blurCSS}px) saturate(${AMBIENT.saturation})`,
-                  opacity: AMBIENT.opacity,
-                  animation: shouldReduceMotion
-                    ? "none"
-                    : `ambientDrift ${AMBIENT.driftDuration}s ease-in-out infinite`,
-                  willChange: "transform",
+                  filter:
+                    ambient.saturation === 1
+                      ? `blur(${ambient.blurCSS}px)`
+                      : `blur(${ambient.blurCSS}px) saturate(${ambient.saturation})`,
+                  opacity: ambient.opacity,
+                  animation:
+                    shouldReduceMotion || !ambient.drift
+                      ? "none"
+                      : `ambientDrift ${ambient.driftDuration}s ease-in-out infinite`,
+                  willChange: ambient.drift ? "transform" : "auto",
                 }}
               >
                 <GradientSVG
                   colors={colors}
                   seed={seed}
-                  size={AMBIENT.svgSize}
-                  blurDeviation={AMBIENT.blurInternal}
+                  size={ambient.svgSize}
+                  blurDeviation={ambient.blurInternal}
                 />
               </div>
             </motion.div>
