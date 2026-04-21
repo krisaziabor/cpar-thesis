@@ -207,6 +207,8 @@ export default function MobileBottomDrawer() {
     pathname === "/epigraph" ||
     pathname === "/onboarding" ||
     pathname === "/admin" ||
+    pathname === "/installation" ||
+    pathname.startsWith("/installation/") ||
     isLabPathname(pathname)
   )
     return null;

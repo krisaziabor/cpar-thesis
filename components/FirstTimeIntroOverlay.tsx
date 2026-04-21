@@ -195,7 +195,7 @@ function RecordVisual({ compact = false }: { compact?: IntroVisualCompact }) {
                 className={`relative overflow-hidden rounded-md border border-zinc-800 bg-zinc-950 ${
                   compact ? "px-2.5 py-2" : "px-3 py-2 sm:py-2.5"
                 }`}
-                initial={false}
+                initial={shouldReduceMotion ? { opacity: 1, y: 0 } : { opacity: 0, y: 6 }}
                 animate={
                   shouldReduceMotion
                     ? { opacity: 1, y: 0 }
@@ -210,7 +210,7 @@ function RecordVisual({ compact = false }: { compact?: IntroVisualCompact }) {
                     : {
                         duration: CYCLE,
                         times: [0, appear, appear + 0.06, FADE_START, 1],
-                        ease: ["linear", EASE_OUT, "linear", EASE_OUT],
+                        ease: EASE_OUT,
                         repeat: Infinity,
                       }
                 }
