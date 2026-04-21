@@ -125,9 +125,19 @@ export default function RecordingInterface({
 
   async function startRecording() {
     setMicError("");
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setMicError("Audio recording is not available. On iPhone, make sure you're using Safari (not a PWA or in-app browser) and the site is loaded over HTTPS.");
+      return;
+    }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
+
+      if (typeof MediaRecorder === "undefined") {
+        stream.getTracks().forEach((t) => t.stop());
+        setMicError("Audio recording is not supported in this browser. Please update Safari.");
+        return;
+      }
 
       const audioCtx = new AudioContext();
       audioCtxRef.current = audioCtx;
@@ -172,8 +182,15 @@ export default function RecordingInterface({
 
       recorder.start();
       mediaRecorderRef.current = recorder;
-    } catch {
-      setMicError("Microphone access is required. Check browser permissions.");
+    } catch (err: unknown) {
+      const errName = err instanceof Error ? err.name : "";
+      if (errName === "NotAllowedError" || errName === "PermissionDeniedError") {
+        setMicError("Microphone blocked. On iPhone: Settings → Privacy & Security → Microphone → enable Safari. Then reload and try again.");
+      } else if (errName === "NotFoundError" || errName === "DevicesNotFoundError") {
+        setMicError("No microphone found on this device.");
+      } else {
+        setMicError("Could not access microphone. Check your browser permissions.");
+      }
     }
   }
 

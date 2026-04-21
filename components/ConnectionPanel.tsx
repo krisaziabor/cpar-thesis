@@ -107,6 +107,10 @@ export default function ConnectionPanel({
   const searchParams = useSearchParams();
   const { navigatePanel } = usePanelHistory();
   const shouldReduceMotion = useReducedMotion();
+  const [isMobile] = useState(
+    () => typeof window !== "undefined" && window.innerWidth < 900
+  );
+  const [mobileTab, setMobileTab] = useState<"left" | "right">("left");
 
   const [connection, setConnection] = useState<Connection | null | undefined>(
     undefined
@@ -287,9 +291,28 @@ export default function ConnectionPanel({
   const baseDelay = shouldReduceMotion ? 0 : 0.08;
 
   return (
-    <div className="relative flex h-full overflow-hidden">
+    <div className="relative flex h-full flex-col overflow-hidden">
+      {isMobile && (
+        <div className="flex shrink-0 border-b border-white/10">
+          <button
+            type="button"
+            onClick={() => setMobileTab("left")}
+            className={`flex-1 py-2.5 text-xs transition-colors ${mobileTab === "left" ? "text-white/90" : "text-white/35 hover:text-white/60"}`}
+          >
+            Records
+          </button>
+          <button
+            type="button"
+            onClick={() => setMobileTab("right")}
+            className={`flex-1 py-2.5 text-xs transition-colors ${mobileTab === "right" ? "text-white/90" : "text-white/35 hover:text-white/60"}`}
+          >
+            Transcript
+          </button>
+        </div>
+      )}
+      <div className="relative flex min-h-0 flex-1 overflow-hidden">
       {/* ── Left pane — connected records ─────────────────────────── */}
-      <div className="relative z-10 flex-1 min-w-0">
+      <div className={`relative z-10 flex-1 min-w-0${isMobile && mobileTab !== "left" ? " hidden" : ""}`}>
         <div
           ref={leftPaneRef}
           onScroll={updateLeftPaneFades}
@@ -485,7 +508,7 @@ export default function ConnectionPanel({
 
       {/* ── Right pane — transcript + Respond ─────────────────────── */}
       <motion.div
-        className="relative z-10 flex w-[420px] shrink-0 flex-col overflow-hidden border-l border-white/10 bg-black"
+        className={`relative z-10 flex flex-col overflow-hidden border-l border-white/10 bg-black${isMobile ? " flex-1" : " w-[420px] shrink-0"}${isMobile && mobileTab !== "right" ? " hidden" : ""}`}
         initial={shouldReduceMotion ? false : { opacity: 0, x: 8 }}
         animate={{ opacity: 1, x: 0 }}
         transition={{
@@ -510,7 +533,7 @@ export default function ConnectionPanel({
 
         {/* Transcript — vertically centered, masked, word-by-word animated */}
         <div className="relative min-h-0 flex-1">
-          <div className="absolute inset-0 flex items-center justify-center px-8">
+          <div className="absolute inset-0 flex items-center justify-center px-6">
             <div className="w-full max-w-sm">
               <div
                 ref={transcriptScrollRef}
@@ -528,7 +551,7 @@ export default function ConnectionPanel({
                     scrollOpaqueBottomRatio={TRANSCRIPT_MASK_OPAQUE_FRAC - 0.04}
                     audioUrl={connection.audio_url}
                     words={timedWords}
-                    autoPlay
+                    autoPlay={!isMobile}
                     compact
                     hideControls
                     textSize="text-sm"
@@ -624,6 +647,7 @@ export default function ConnectionPanel({
           </button>
         </div>
       </motion.div>
+      </div>
     </div>
   );
 }

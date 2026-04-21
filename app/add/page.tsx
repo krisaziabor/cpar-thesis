@@ -1419,7 +1419,7 @@ function AddItemPageInner({
         )}
       </AnimatePresence>
 
-      <main className={step === "record" ? "h-full" : "mx-auto max-w-xl px-6 pb-8 pt-6"}>
+      <main className={step === "record" ? "h-full" : hideHeader ? "flex h-full min-h-0 flex-col overflow-y-auto mx-auto max-w-xl px-6 pt-6" : "mx-auto max-w-xl px-6 pb-8 pt-6"}>
         <AnimatePresence initial={false} mode="wait">
         {step === "source" && (
           <motion.section
@@ -1428,7 +1428,7 @@ function AddItemPageInner({
             animate={{ opacity: 1, y: 0 }}
             exit={shouldReduceMotion ? { opacity: 1, y: 0 } : { opacity: 0, y: -6 }}
             transition={{ duration: shouldReduceMotion ? 0 : MOTION_DURATION.standard, ease: EASE_OUT }}
-            className="flex h-[calc(100vh-9rem)] flex-col"
+            className={`flex ${hideHeader ? "flex-1 min-h-0" : "h-[calc(100vh-9rem)]"} flex-col`}
           >
             <div className="flex flex-1 flex-col space-y-5 min-h-0">
               <div>
