@@ -101,26 +101,22 @@ export async function submitProfileSetup(
   icon?: string
 ): Promise<void> {
   if (!db) return;
-  await Promise.all([
-    setDoc(
-      docRef(email),
-      {
-        user_email: email,
-        user_name: name,
-        profile_name: name,
-        ...(icon ? { profile_icon: icon } : {}),
-        profile_setup_at: serverTimestamp(),
-        created_at: serverTimestamp(),
-        updated_at: serverTimestamp(),
-      },
-      { merge: true }
-    ),
-    setDoc(
-      doc(db, "whitelist", email.trim().toLowerCase()),
-      { name },
-      { merge: true }
-    ),
-  ]);
+  // Note: we intentionally do NOT write to whitelist here.
+  // Firestore rules block update on whitelist documents; the name is stored
+  // in installation_onboarding and users collections instead.
+  await setDoc(
+    docRef(email),
+    {
+      user_email: email,
+      user_name: name,
+      profile_name: name,
+      ...(icon ? { profile_icon: icon } : {}),
+      profile_setup_at: serverTimestamp(),
+      created_at: serverTimestamp(),
+      updated_at: serverTimestamp(),
+    },
+    { merge: true }
+  );
 }
 
 /** Step 1 — save media opt-in decision. */
