@@ -9,13 +9,10 @@ import {
   submitAccessibility,
   submitProfileSetup,
   submitMediaOptIn,
-  submitBookText,
-  skipBookText,
   submitContactAndComplete,
   submitAvatarColors,
 } from "@/lib/installation-onboarding";
 import { ensureUserProfile } from "@/lib/users";
-import MarkdownEditor from "@/components/MarkdownEditor";
 import SyncedTranscript from "@/components/SyncedTranscript";
 import GradientSVG from "@/components/GradientSVG";
 import ColorWheel from "@/components/ColorWheel";
@@ -50,7 +47,6 @@ interface StepTranscript {
 const STEP_AUDIO_MAP: Record<string, string> = {
   profile_setup: "profile-setup",
   media_opt_in: "media-opt-in",
-  book_text: "book-text",
   contact: "contact",
   color_consumed: "color-consumed",
   color_made: "color-made",
@@ -190,11 +186,6 @@ const FORM_STEPS: { key: OnboardingStep; fallbackText: string }[] = [
       "Your voice recordings and media can be projected across the installation\u2019s three panels during the exhibition. This is entirely optional \u2014 your contributions to the library remain regardless.",
   },
   {
-    key: "book_text",
-    fallbackText:
-      "The installation includes a physical book \u2014 a collection of texts that resonate deeply with each contributor. Write or paste a piece of text you\u2019d like included.",
-  },
-  {
     key: "contact",
     fallbackText:
       "Kris may reach out about the installation and will email you when Kanon goes live. How would you prefer to be contacted?",
@@ -258,7 +249,6 @@ const ALL_STEPS: OnboardingStep[] = [
   "accessibility",
   "profile_setup",
   "media_opt_in",
-  "book_text",
   "contact",
   "avatar_colors",
   "complete",
@@ -280,10 +270,6 @@ export default function OnboardingPage() {
   /* ── Per-step form state ───────────────────────────────────────────────── */
   const profileInputRef = useRef<HTMLInputElement>(null);
   const [profileName, setProfileName] = useState("");
-  const [bookTitle, setBookTitle] = useState("");
-  const [bookDate, setBookDate] = useState("");
-  const [bookText, setBookText] = useState("");
-  const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [contactMethod, setContactMethod] = useState<"email" | "text">("email");
   const [phoneNumber, setPhoneNumber] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -364,27 +350,6 @@ export default function OnboardingPage() {
   async function handleMediaOptIn(optIn: boolean) {
     setSubmitting(true);
     await submitMediaOptIn(activeEmail, activeName, optIn);
-    await refreshOnboarding();
-    setSubmitting(false);
-  }
-
-  async function handleBookTextSubmit() {
-    if (!bookTitle.trim() || !bookText.trim()) return;
-    setSubmitting(true);
-    await submitBookText(
-      activeEmail,
-      bookTitle.trim(),
-      bookDate.trim() || undefined,
-      bookText,
-      pdfFile,
-    );
-    await refreshOnboarding();
-    setSubmitting(false);
-  }
-
-  async function handleBookSkip() {
-    setSubmitting(true);
-    await skipBookText(activeEmail);
     await refreshOnboarding();
     setSubmitting(false);
   }
@@ -865,98 +830,6 @@ export default function OnboardingPage() {
                 </motion.div>
               )}
 
-              {/* ── Book text — side-by-side with large editor ──────────── */}
-              {activeStep === "book_text" && (
-                <motion.div
-                  key="book_text"
-                  {...m}
-                  className="flex max-w-[calc(100vw-3rem)] items-start gap-20"
-                >
-                  <div className="w-[340px] shrink-0 pt-1">
-                    {transcript ? (
-                      <SyncedTranscript
-                        audioUrl={transcript.audio_url}
-                        words={transcript.words}
-                        onFinished={markListened}
-                      />
-                    ) : (
-                      <p className="font-sans text-xs leading-relaxed text-zinc-400">
-                        {FORM_STEPS[2].fallbackText}
-                      </p>
-                    )}
-                  </div>
-                  <ListenGate locked={!hasListened}>
-                    <div className="flex w-[min(520px,calc(100vw-28rem))] flex-col gap-3">
-                      <div className="flex items-center gap-3">
-                        <input
-                          type="text"
-                          value={bookTitle}
-                          onChange={(e) => setBookTitle(e.target.value)}
-                          placeholder="Title of the piece"
-                          className="min-w-0 flex-1 border-b border-zinc-800 bg-transparent pb-1.5 font-sans text-xs text-zinc-300 placeholder:text-zinc-500 focus:outline-none"
-                        />
-                        <input
-                          type="text"
-                          value={bookDate}
-                          onChange={(e) => setBookDate(e.target.value)}
-                          placeholder="Date (optional)"
-                          className="w-[130px] border-b border-zinc-800 bg-transparent pb-1.5 font-sans text-xs text-zinc-300 placeholder:text-zinc-500 focus:outline-none"
-                        />
-                      </div>
-
-                      <MarkdownEditor
-                        value={bookText}
-                        onChange={setBookText}
-                        placeholder="Paste or write your text here"
-                      />
-
-                      <div className="flex items-center justify-between">
-                        <label className="cursor-pointer font-sans text-[11px] text-zinc-500 transition-colors hover:text-zinc-300">
-                          <input
-                            type="file"
-                            accept=".pdf"
-                            className="hidden"
-                            onChange={(e) =>
-                              setPdfFile(e.target.files?.[0] ?? null)
-                            }
-                          />
-                          {pdfFile
-                            ? pdfFile.name
-                            : "Attach a formatted PDF (optional)"}
-                        </label>
-                        {pdfFile && (
-                          <button
-                            onClick={() => setPdfFile(null)}
-                            className="text-[11px] text-zinc-600 transition-colors hover:text-zinc-400"
-                          >
-                            ✕
-                          </button>
-                        )}
-                      </div>
-
-                      <div className="flex items-center gap-4">
-                        <button
-                          disabled={
-                            !bookTitle.trim() || !bookText.trim() || submitting
-                          }
-                          onClick={() => void handleBookTextSubmit()}
-                          className="font-sans text-xs text-zinc-300 transition-colors hover:text-zinc-50 disabled:cursor-not-allowed disabled:opacity-30"
-                        >
-                          {submitting ? "Submitting\u2026" : "Submit text"}
-                        </button>
-                        <button
-                          disabled={submitting}
-                          onClick={() => void handleBookSkip()}
-                          className="font-sans text-xs text-zinc-500 transition-colors hover:text-zinc-300 disabled:opacity-40"
-                        >
-                          Skip for now
-                        </button>
-                      </div>
-                    </div>
-                  </ListenGate>
-                </motion.div>
-              )}
-
               {/* ── Contact — vertical ──────────────────────────────────── */}
               {activeStep === "contact" && (
                 <motion.div
@@ -972,7 +845,7 @@ export default function OnboardingPage() {
                     />
                   ) : (
                     <p className="font-sans text-xs leading-relaxed text-zinc-400">
-                      {FORM_STEPS[3].fallbackText}
+                      {FORM_STEPS[2].fallbackText}
                     </p>
                   )}
                   <ListenGate locked={!hasListened}>
