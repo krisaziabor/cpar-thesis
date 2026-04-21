@@ -31,6 +31,8 @@ export default function UtilityDock() {
     pathname === "/login" ||
     pathname === "/onboarding" ||
     pathname === "/admin" ||
+    pathname === "/installation" ||
+    pathname.startsWith("/installation/") ||
     isLabPathname(pathname)
   )
     return null;
