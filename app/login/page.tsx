@@ -230,15 +230,15 @@ export default function LoginPage() {
       {/* ── Centered content area ────────────────────────────────────────── */}
       <div className="flex min-h-screen flex-col items-center justify-center px-6">
         <div className="flex w-[min(380px,calc(100vw-3rem))] flex-col items-start gap-2">
-          <p className="whitespace-pre-line font-lector text-sm leading-relaxed text-zinc-400">
-            {"A social network, library, installation, book, and practice.\nThesis for Computing and the Arts at Yale University.\nWork of Kristopher Aziabor."}
+          <p className="whitespace-pre-line font-sans text-base leading-relaxed text-zinc-400 sm:text-sm">
+            {"A network, library, installation, book, and practice.\nThesis for Computing and the Arts at Yale University.\nWork of Kristopher Aziabor."}
           </p>
         </div>
 
         {/* ── Form area ─────────────────────────────────────────────────── */}
         <div className="mt-6 flex w-[min(380px,calc(100vw-3rem))] flex-col items-start gap-3">
         {isAuthTransitioning ? (
-          <p className="font-sans text-xs text-zinc-400">
+          <p className="font-sans text-sm text-zinc-400 sm:text-xs">
             {stage === "verifying" ? "Signing you in\u2026" : "Loading\u2026"}
           </p>
         ) : (
@@ -259,11 +259,11 @@ export default function LoginPage() {
                   }}
                   placeholder="Enter your email"
                   required
-                  className="w-full bg-transparent font-sans text-xs text-zinc-300 placeholder:text-zinc-500 focus:outline-none border-b border-zinc-800 pb-2"
+                  className="w-full bg-transparent font-sans text-base text-zinc-300 placeholder:text-zinc-500 focus:outline-none border-b border-zinc-800 py-3 sm:text-xs"
                 />
                 <button
                   type="submit"
-                  className="font-sans text-xs text-zinc-300 transition-colors hover:text-zinc-50"
+                  className="-mx-1 px-1 py-2 font-sans text-sm text-zinc-300 transition-colors hover:text-zinc-50 sm:text-xs"
                 >
                   Continue
                 </button>
@@ -276,7 +276,7 @@ export default function LoginPage() {
                 {...animProps}
                 className="flex w-full flex-col items-start gap-4"
               >
-                <p className="font-lector text-sm" style={{ color: "lab(65.6464 1.53497 -5.42429)" }}>
+                <p className="font-sans text-base sm:text-sm" style={{ color: "lab(65.6464 1.53497 -5.42429)" }}>
                   {isNewUser
                     ? "Create your account"
                     : gatedFirstName
@@ -287,7 +287,7 @@ export default function LoginPage() {
                   <button
                     type="button"
                     onClick={() => void handleGoogleSignIn(gatedEmail)}
-                    className="flex shrink-0 items-center gap-2 font-sans text-xs text-zinc-300 transition-colors hover:text-zinc-50"
+                    className="flex shrink-0 items-center gap-2 font-sans text-sm text-zinc-300 transition-colors hover:text-zinc-50 sm:text-xs"
                   >
                     <GoogleIcon />
                     {isNewUser ? "Sign up with Google" : "Continue with Google"}
@@ -295,7 +295,7 @@ export default function LoginPage() {
                   <button
                     type="button"
                     onClick={() => void handleSendMagicLink()}
-                    className="shrink-0 font-sans text-xs text-zinc-500 transition-colors hover:text-zinc-300"
+                    className="shrink-0 font-sans text-sm text-zinc-500 transition-colors hover:text-zinc-300 sm:text-xs"
                   >
                     {isNewUser ? "Send sign-up link" : "Send magic link"}
                   </button>
@@ -309,7 +309,7 @@ export default function LoginPage() {
                     setGatedFirstName(null);
                     setIsNewUser(false);
                   }}
-                  className="font-sans text-xs text-zinc-500 transition-colors hover:text-zinc-300"
+                  className="font-sans text-sm text-zinc-500 transition-colors hover:text-zinc-300 sm:text-xs"
                 >
                   Use a different email
                 </button>
@@ -322,16 +322,16 @@ export default function LoginPage() {
                 {...animProps}
                 className="flex w-full flex-col items-start gap-4"
               >
-                <p className="font-sans text-xs text-zinc-300">
+                <p className="font-sans text-sm text-zinc-300 sm:text-xs">
                   Magic link sent to {gatedEmail}.
                 </p>
-                <p className="font-sans text-xs text-zinc-500">
+                <p className="font-sans text-sm text-zinc-500 sm:text-xs">
                   Check your email (spam included)
                 </p>
                 <div className="flex items-center gap-4">
                   <button
                     onClick={() => void handleGoogleSignIn(gatedEmail)}
-                    className="font-sans text-xs text-zinc-400 transition-colors hover:text-zinc-50"
+                    className="font-sans text-sm text-zinc-400 transition-colors hover:text-zinc-50 sm:text-xs"
                   >
                     Switch to Google Sign-In
                   </button>
@@ -343,7 +343,7 @@ export default function LoginPage() {
                       setGatedFirstName(null);
                       setIsNewUser(false);
                     }}
-                    className="font-sans text-xs text-zinc-400 transition-colors hover:text-zinc-50"
+                    className="font-sans text-sm text-zinc-400 transition-colors hover:text-zinc-50 sm:text-xs"
                   >
                     Use a different email
                   </button>
@@ -354,11 +354,11 @@ export default function LoginPage() {
         )}
 
         {transientNotice && (
-          <p className="text-xs text-red-400">{transientNotice}</p>
+          <p className="text-sm text-red-400 sm:text-xs">{transientNotice}</p>
         )}
 
         {error && (
-          <p className="text-xs text-red-400">{error}</p>
+          <p className="text-sm text-red-400 sm:text-xs">{error}</p>
         )}
       </div>
       </div>

@@ -282,7 +282,7 @@ export default function ActivityPanel() {
               key={option}
               type="button"
               onClick={() => setFilter(option)}
-              className={`rounded border px-2.5 py-1 text-[11px] transition-colors ${
+              className={`rounded border px-2.5 py-1.5 text-[11px] transition-colors ${
                 active
                   ? "border-zinc-600 bg-zinc-900 text-zinc-200"
                   : "border-zinc-800 text-zinc-500 hover:border-zinc-700 hover:text-zinc-300"

@@ -408,12 +408,15 @@ function VideoMediaPlayer({ url, title, videoHandleRef }: { url: string; title: 
     video.addEventListener("ended", syncState);
     video.addEventListener("volumechange", syncState);
 
-    // HTML autoplay is unreliable until data is ready; muted + playsInline keeps policy happy.
     const attemptAutoplay = () => {
       void video.play().catch(() => {});
     };
-    if (video.readyState >= 3) attemptAutoplay();
-    else video.addEventListener("canplay", attemptAutoplay, { once: true });
+    if (video.readyState >= 1) {
+      attemptAutoplay();
+    } else {
+      video.addEventListener("loadedmetadata", attemptAutoplay, { once: true });
+      video.addEventListener("canplay", attemptAutoplay, { once: true });
+    }
 
     return () => {
       video.removeEventListener("timeupdate", syncState);
@@ -423,6 +426,7 @@ function VideoMediaPlayer({ url, title, videoHandleRef }: { url: string; title: 
       video.removeEventListener("pause", syncState);
       video.removeEventListener("ended", syncState);
       video.removeEventListener("volumechange", syncState);
+      video.removeEventListener("loadedmetadata", attemptAutoplay);
       video.removeEventListener("canplay", attemptAutoplay);
       if (videoHandleRef) videoHandleRef.current = null;
     };
@@ -479,7 +483,7 @@ function VideoMediaPlayer({ url, title, videoHandleRef }: { url: string; title: 
           src={url}
           aria-label={title}
           className="w-full block bg-zinc-900 cursor-pointer"
-          preload="metadata"
+          preload="auto"
           autoPlay
           muted
           playsInline
@@ -677,6 +681,9 @@ export default function ItemPanel({
   const goToRespond = useCallback(() => {
     navigatePanel(`/?item=${encodeURIComponent(itemId)}&panel=respond`, "Narrative");
   }, [navigatePanel, itemId]);
+  const [isMobile] = useState(
+    () => typeof window !== "undefined" && window.innerWidth < 900
+  );
   const [item, setItem] = useState<Item | null | undefined>(undefined);
   const [allItems, setAllItems] = useState<Item[]>([]);
   const [connections, setConnections] = useState<Array<Connection & { itemIds: string[] }>>([]);
@@ -1140,6 +1147,19 @@ export default function ItemPanel({
           {/* ── Right pane — "record added by" strap + transcript + respond ── */}
           <div className="relative z-10 flex w-[420px] shrink-0 flex-col overflow-hidden border-l border-white/10 bg-black">
 
+            {/* Back button — mobile only */}
+            {isMobile && (
+              <div className="shrink-0 border-b border-white/10 px-6 py-2.5">
+                <button
+                  type="button"
+                  onClick={toggleListening}
+                  className="font-sans text-xs text-white/40 transition-colors hover:text-white/80"
+                >
+                  ← Back
+                </button>
+              </div>
+            )}
+
             {/* Creator strap */}
             <div className="shrink-0 px-6 pt-6">
               <p className="font-sans text-[11px] uppercase tracking-wide text-white/35">
@@ -1156,7 +1176,7 @@ export default function ItemPanel({
 
             {/* Transcript / response viewer — flex-1 centered */}
             <div className="relative min-h-0 flex-1">
-              <div className="absolute inset-0 flex items-center justify-center px-8">
+              <div className="absolute inset-0 flex items-center justify-center px-6">
                 <div className="w-full max-w-sm">
                   <AnimatePresence mode="wait" initial={false}>
                     {activeListening.kind === "narrative" ? (

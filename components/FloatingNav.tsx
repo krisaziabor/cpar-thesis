@@ -142,6 +142,17 @@ export default function FloatingNav() {
   const { navigateWithGuard } = useNavGuard();
   const { currentMessage } = useNavStatus();
   const [expanded, setExpanded] = useState(false);
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
+
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    function onResize() {
+      setKeyboardVisible(vv!.height < window.innerHeight * 0.75);
+    }
+    vv.addEventListener("resize", onResize);
+    return () => vv.removeEventListener("resize", onResize);
+  }, []);
 
   const panel = searchParams.get("panel");
   const connectPanelOpen = searchParams.get("connectPanel") === "1";
@@ -195,7 +206,7 @@ export default function FloatingNav() {
     <motion.div
       key={pathname === "/" ? `floating-nav-${replayNonce}` : "floating-nav"}
       initial={shouldReduceMotion ? false : { opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
+      animate={{ opacity: keyboardVisible ? 0 : 1, y: keyboardVisible ? 8 : 0 }}
       exit={
         shouldReduceMotion
           ? { opacity: 0 }
@@ -206,7 +217,11 @@ export default function FloatingNav() {
         ease: EASE_OUT,
         delay: enterDelay,
       }}
-      className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2"
+      className="hidden sm:block fixed left-1/2 z-50 -translate-x-1/2"
+      style={{
+        bottom: "calc(1.5rem + env(safe-area-inset-bottom, 0px))",
+        pointerEvents: keyboardVisible ? "none" : undefined,
+      }}
     >
       <motion.div
         layout
@@ -258,21 +273,21 @@ export default function FloatingNav() {
                 <div className="flex items-center justify-between gap-2">
                   <button
                     onClick={handleConnectCancel}
-                    className="text-xs text-zinc-500 transition-colors hover:text-zinc-200"
+                    className="-mx-1 px-1 py-2 text-xs text-zinc-500 transition-colors hover:text-zinc-200"
                   >
                     Cancel
                   </button>
                   <div className="flex items-center gap-2">
                     <button
                       onClick={handleConnectSearchOpen}
-                      className="px-2 py-1 text-xs text-zinc-500 transition-colors hover:text-zinc-200"
+                      className="px-2 py-2 text-xs text-zinc-500 transition-colors hover:text-zinc-200"
                     >
                       Search & select
                     </button>
                     <button
                       onClick={handleConnectConfirm}
                       disabled={selectedConnectIds.length < 2}
-                      className="rounded border border-zinc-700 px-2.5 py-1 text-xs text-zinc-300 transition-colors hover:border-zinc-500 hover:text-zinc-100 disabled:opacity-40"
+                      className="rounded border border-zinc-700 px-2.5 py-2 text-xs text-zinc-300 transition-colors hover:border-zinc-500 hover:text-zinc-100 disabled:opacity-40"
                     >
                       Confirm
                     </button>
@@ -297,7 +312,7 @@ export default function FloatingNav() {
             >
               <button
                 onClick={() => handleTabPress(isAddActive, "/?panel=add")}
-                className={`px-4 py-2.5 text-sm transition-colors hover:bg-zinc-900 hover:text-zinc-50 ${
+                className={`min-h-[44px] px-4 py-2.5 text-sm transition-colors hover:bg-zinc-900 hover:text-zinc-50 ${
                   isAddActive ? "font-medium text-zinc-300" : "text-zinc-400"
                 }`}
               >
@@ -305,7 +320,7 @@ export default function FloatingNav() {
               </button>
               <button
                 onClick={() => handleTabPress(isConnectActive, "/?panel=connect")}
-                className={`px-4 py-2.5 text-sm transition-colors hover:bg-zinc-900 hover:text-zinc-50 ${
+                className={`min-h-[44px] px-4 py-2.5 text-sm transition-colors hover:bg-zinc-900 hover:text-zinc-50 ${
                   isConnectActive ? "font-medium text-zinc-300" : "text-zinc-400"
                 }`}
               >
@@ -313,7 +328,7 @@ export default function FloatingNav() {
               </button>
               <button
                 onClick={() => handleTabPress(isSearchActive, "/?panel=search")}
-                className={`px-4 py-2.5 text-sm transition-colors hover:bg-zinc-900 hover:text-zinc-50 ${
+                className={`min-h-[44px] px-4 py-2.5 text-sm transition-colors hover:bg-zinc-900 hover:text-zinc-50 ${
                   isSearchActive ? "font-medium text-zinc-300" : "text-zinc-400"
                 }`}
               >
@@ -321,7 +336,7 @@ export default function FloatingNav() {
               </button>
               <button
                 onClick={() => handleTabPress(isHoldingActive, holdingHref)}
-                className={`px-4 py-2.5 text-sm whitespace-nowrap transition-colors hover:bg-zinc-900 hover:text-zinc-50 ${
+                className={`min-h-[44px] whitespace-nowrap px-4 py-2.5 text-sm transition-colors hover:bg-zinc-900 hover:text-zinc-50 ${
                   isHoldingActive ? "font-medium text-zinc-300" : "text-zinc-400"
                 }`}
               >
@@ -329,7 +344,7 @@ export default function FloatingNav() {
               </button>
               <button
                 onClick={() => handleTabPress(isActivityActive, "/?panel=activity")}
-                className={`px-4 py-2.5 text-sm whitespace-nowrap transition-colors hover:bg-zinc-900 hover:text-zinc-50 ${
+                className={`min-h-[44px] whitespace-nowrap px-4 py-2.5 text-sm transition-colors hover:bg-zinc-900 hover:text-zinc-50 ${
                   isActivityActive ? "font-medium text-zinc-300" : "text-zinc-400"
                 }`}
               >
@@ -338,7 +353,7 @@ export default function FloatingNav() {
               <button
                 onClick={() => setExpanded(false)}
                 aria-label="Collapse navigation"
-                className="px-3 py-2.5 text-xs leading-none text-zinc-500 transition-colors hover:bg-zinc-900 hover:text-zinc-200"
+                className="min-h-[44px] px-3 py-2.5 text-xs leading-none text-zinc-500 transition-colors hover:bg-zinc-900 hover:text-zinc-200"
               >
                 ×
               </button>

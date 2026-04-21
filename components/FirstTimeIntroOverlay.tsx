@@ -55,17 +55,20 @@ function WaveVisual({ compact = false }: { compact?: IntroVisualCompact }) {
           { ci: 2, ph: Math.PI * 1.4, sp: 0.0006, cy: 0.92, rs: 0.78, ba: 0.34 },
         ]
       : [
-          { ci: 0, ph: 0, sp: 0.0005, cy: 1.15, rs: 1.0, ba: 0.34 },
-          { ci: 1, ph: Math.PI * 0.7, sp: 0.00038, cy: 1.45, rs: 0.9, ba: 0.28 },
-          { ci: 2, ph: Math.PI * 1.4, sp: 0.00058, cy: 0.95, rs: 0.78, ba: 0.24 },
+          { ci: 0, ph: 0, sp: 0.0005, cy: 1.15, rs: 1.0, ba: 0.68 },
+          { ci: 1, ph: Math.PI * 0.7, sp: 0.00038, cy: 1.45, rs: 0.9, ba: 0.56 },
+          { ci: 2, ph: Math.PI * 1.4, sp: 0.00058, cy: 0.95, rs: 0.78, ba: 0.48 },
         ];
     const rgb = INTRO_GRADIENT.map(hexToRgb);
 
     function resize() {
       if (!canvas) return;
+      const W = canvas.offsetWidth;
+      const H = canvas.offsetHeight;
+      if (!W || !H) return;
       const dpr = window.devicePixelRatio ?? 1;
-      canvas.width  = canvas.offsetWidth  * dpr;
-      canvas.height = canvas.offsetHeight * dpr;
+      canvas.width  = W * dpr;
+      canvas.height = H * dpr;
       const ctx = canvas.getContext("2d");
       if (ctx) ctx.scale(dpr, dpr);
     }
@@ -127,14 +130,14 @@ function WaveVisual({ compact = false }: { compact?: IntroVisualCompact }) {
         compact ? "rounded-xl" : "rounded-3xl"
       }`}
     >
-      <div className="absolute inset-0 overflow-hidden">
-        <canvas
-          ref={canvasRef}
-          className="h-full w-full"
-          style={{
-            filter: compact ? "blur(28px) saturate(1.22)" : "blur(36px) saturate(1.12)",
-          }}
-        />
+      {/* Filter on a div, not on canvas — iOS Safari drops canvas renders when filter is applied directly */}
+      <div
+        className="absolute inset-0"
+        style={{
+          filter: compact ? "blur(28px) saturate(1.22)" : "blur(36px) saturate(1.12)",
+        }}
+      >
+        <canvas ref={canvasRef} className="h-full w-full" />
       </div>
       <div
         aria-hidden
@@ -166,15 +169,15 @@ function RecordVisual({ compact = false }: { compact?: IntroVisualCompact }) {
         compact ? "rounded-xl" : "rounded-3xl"
       }`}
     >
-      <div className={`flex min-h-0 flex-1 flex-col ${compact ? "px-3 pb-1 pt-2" : "px-5 pb-2 pt-5"}`}>
+      <div className={`flex min-h-0 flex-1 flex-col ${compact ? "px-3 pb-1 pt-2" : "px-4 pb-1 pt-3 sm:px-5 sm:pb-2 sm:pt-5"}`}>
         {!compact && (
           <div>
             <h1 className="font-lector text-lg tracking-tight text-zinc-100">Add record(s)</h1>
             <p className="mt-1 text-xs text-zinc-500">Paste a URL or upload a file to continue.</p>
           </div>
         )}
-        <div className={`flex min-h-0 flex-1 flex-col justify-end ${compact ? "mt-0" : "mt-4"}`}>
-          <div className={`space-y-2 ${compact ? "pb-2" : "pb-4"}`}>
+        <div className={`flex min-h-0 flex-1 flex-col justify-end ${compact ? "mt-0" : "mt-2 sm:mt-4"}`}>
+          <div className={`space-y-2 ${compact ? "pb-2" : "pb-2 sm:pb-4"}`}>
             <motion.div
               className={`relative overflow-hidden rounded-md border border-zinc-800 bg-zinc-950 ${
                 compact ? "p-2.5" : "p-3"
@@ -211,7 +214,7 @@ function RecordVisual({ compact = false }: { compact?: IntroVisualCompact }) {
               <div className={`flex items-start ${compact ? "gap-2" : "gap-3"}`}>
                 <div
                   className={`flex-none overflow-hidden rounded-sm border border-zinc-800 bg-zinc-900/80 ${
-                    compact ? "h-16 w-16" : "h-20 w-20"
+                    compact ? "h-16 w-16" : "h-14 w-14 sm:h-20 sm:w-20"
                   }`}
                 >
                   <img
@@ -223,7 +226,7 @@ function RecordVisual({ compact = false }: { compact?: IntroVisualCompact }) {
                 </div>
                 <div
                   className={`flex min-w-0 flex-1 flex-col justify-center py-0.5 ${
-                    compact ? "min-h-16" : "min-h-20"
+                    compact ? "min-h-16" : "min-h-14 sm:min-h-20"
                   }`}
                 >
                   <p
@@ -248,7 +251,7 @@ function RecordVisual({ compact = false }: { compact?: IntroVisualCompact }) {
       </div>
 
       <div
-        className={`shrink-0 border-t border-zinc-900 ${compact ? "space-y-2 px-3 pb-3 pt-2.5" : "space-y-3 px-5 pb-5 pt-4"}`}
+        className={`shrink-0 border-t border-zinc-900 ${compact ? "space-y-2 px-3 pb-3 pt-2.5" : "space-y-2 px-4 pb-3 pt-2.5 sm:space-y-3 sm:px-5 sm:pb-5 sm:pt-4"}`}
       >
         <div className="relative">
           <div
@@ -376,7 +379,7 @@ function ConnectVisual({ compact = false }: { compact?: IntroVisualCompact }) {
             : "radial-gradient(ellipse at center, transparent 35%, rgba(0,0,0,0.5) 100%)",
         }}
       />
-      <div className={`relative z-10 flex h-full flex-col ${compact ? "p-3 pb-3" : "p-6"}`}>
+      <div className={`relative z-10 flex h-full flex-col ${compact ? "p-3 pb-3" : "p-4 sm:p-6"}`}>
         <motion.h2
           className={`font-lector tracking-tight text-zinc-100 ${
             compact ? "text-sm leading-tight" : "text-lg"
@@ -387,12 +390,12 @@ function ConnectVisual({ compact = false }: { compact?: IntroVisualCompact }) {
         >
           Record the connection
         </motion.h2>
-        <div className={compact ? "min-h-1 flex-1" : "flex-1"} />
+        <div className={compact ? "min-h-1 flex-1" : "min-h-2 flex-1 sm:min-h-4"} />
         <motion.div
           className={`flex flex-row flex-wrap items-end justify-start overflow-hidden ${
             compact
               ? "max-h-[min(58%,180px)] gap-x-3 gap-y-3"
-              : "max-h-[min(38vh,260px)] gap-x-5 gap-y-3"
+              : "max-h-[min(34vh,260px)] gap-x-4 gap-y-2 sm:max-h-[min(38vh,260px)] sm:gap-x-5 sm:gap-y-3"
           }`}
           initial={shouldReduceMotion ? false : { opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
@@ -416,13 +419,13 @@ function ConnectVisual({ compact = false }: { compact?: IntroVisualCompact }) {
                 className={
                   compact
                     ? "h-11 w-auto max-w-[3.35rem] shrink-0 bg-zinc-900 object-cover"
-                    : "h-[4.25rem] w-auto max-w-[5rem] shrink-0 bg-zinc-900 object-cover sm:h-[5.25rem] sm:max-w-[5.75rem]"
+                    : "h-12 w-auto max-w-[3.5rem] shrink-0 bg-zinc-900 object-cover sm:h-[4.25rem] sm:max-w-[5rem]"
                 }
               />
               <div className="min-w-0 flex-1">
                 <p
                   className={`font-lector leading-tight tracking-tight text-zinc-100 ${
-                    compact ? "line-clamp-2 text-[10px]" : "text-sm sm:text-[15px]"
+                    compact ? "line-clamp-2 text-[10px]" : "line-clamp-2 text-xs sm:text-sm sm:text-[15px]"
                   }`}
                 >
                   {r.title}
@@ -437,7 +440,7 @@ function ConnectVisual({ compact = false }: { compact?: IntroVisualCompact }) {
           ))}
         </motion.div>
         <motion.div
-          className={`flex items-baseline ${compact ? "mt-2 gap-2 pt-1.5" : "mt-5 gap-4"}`}
+          className={`flex items-baseline ${compact ? "mt-2 gap-2 pt-1.5" : "mt-3 gap-3 sm:mt-5 sm:gap-4"}`}
           initial={shouldReduceMotion ? false : { opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{
@@ -654,7 +657,7 @@ export default function FirstTimeIntroOverlay({
         {open && (
           <motion.div
             key="first-time-intro-card"
-            className="fixed bottom-6 right-6 z-[80] w-[360px] overflow-hidden rounded-2xl border border-white/10 bg-zinc-950/95 shadow-[0_20px_60px_rgba(0,0,0,0.6)] backdrop-blur-md"
+            className="fixed bottom-6 right-4 z-[80] w-[360px] max-w-[calc(100vw-2rem)] overflow-hidden rounded-2xl border border-white/10 bg-zinc-950/95 shadow-[0_20px_60px_rgba(0,0,0,0.6)] backdrop-blur-md"
             initial={{ opacity: 0, y: 16, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 12, scale: 0.98 }}
@@ -771,9 +774,9 @@ export default function FirstTimeIntroOverlay({
             Skip
           </button>
 
-          <div className="flex w-full max-w-5xl flex-col items-start gap-10 px-8">
+          <div className="flex w-full max-w-5xl flex-col items-start gap-4 px-5 sm:gap-10 sm:px-8">
             {/* Visual area */}
-            <div className="relative aspect-[16/9] w-full overflow-hidden rounded-3xl">
+            <div className="relative aspect-[4/3] w-full max-h-[52vh] overflow-hidden rounded-2xl sm:aspect-[16/9] sm:max-h-none sm:rounded-3xl">
               <AnimatePresence mode="wait" initial={false}>
                 <motion.div
                   key={current.id}
@@ -805,7 +808,7 @@ export default function FirstTimeIntroOverlay({
                     ease: EASE_OUT,
                   }}
                 >
-                  <h2 className="font-lector text-3xl leading-tight tracking-tight text-white/95">
+                  <h2 className="font-lector text-xl leading-tight tracking-tight text-white/95 sm:text-3xl">
                     {current.title}
                   </h2>
                   <p className="max-w-lg font-sans text-sm leading-relaxed text-white/60">

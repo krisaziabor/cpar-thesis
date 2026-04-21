@@ -109,7 +109,7 @@ export default function ConnectionDetailPage() {
 
   return (
     <div className="min-h-screen bg-white dark:bg-black">
-      <header className="border-b border-zinc-200 px-6 py-3 dark:border-zinc-800">
+      <header className="border-b border-zinc-200 px-4 py-3 dark:border-zinc-800 sm:px-6">
         <div className="mx-auto flex max-w-2xl items-center justify-between">
           <button
             onClick={() => window.history.back()}
@@ -139,7 +139,7 @@ export default function ConnectionDetailPage() {
             </button>
             <Link
               href={`/respond/${id}`}
-              className="rounded border border-zinc-900 px-3 py-1 text-sm font-medium text-zinc-900 hover:bg-zinc-900 hover:text-white dark:border-zinc-100 dark:text-zinc-100 dark:hover:bg-zinc-100 dark:hover:text-zinc-900"
+              className="rounded border border-zinc-900 px-3 py-1.5 text-sm font-medium text-zinc-900 hover:bg-zinc-900 hover:text-white dark:border-zinc-100 dark:text-zinc-100 dark:hover:bg-zinc-100 dark:hover:text-zinc-900"
             >
               + Respond
             </Link>
@@ -147,7 +147,7 @@ export default function ConnectionDetailPage() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-2xl px-6 py-10">
+      <main className="mx-auto max-w-2xl px-4 py-6 sm:px-6 sm:py-10">
         {/* Connected items */}
         <div className="flex flex-col gap-1">
           <p className="font-mono text-xs text-zinc-400">connection</p>

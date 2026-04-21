@@ -54,8 +54,17 @@ export default function AudioRecorder({
 
   async function startRecording() {
     setMicError("");
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setMicError("Audio recording is not available. Please open this page in Safari.");
+      return;
+    }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      if (typeof MediaRecorder === "undefined") {
+        stream.getTracks().forEach((t) => t.stop());
+        setMicError("Audio recording is not supported in this browser. Please update Safari.");
+        return;
+      }
       const mimeType = getSupportedMimeType();
       const recorder = mimeType
         ? new MediaRecorder(stream, { mimeType })
@@ -77,8 +86,15 @@ export default function AudioRecorder({
       setState("recording");
       setSeconds(0);
       timerRef.current = setInterval(() => setSeconds((s) => s + 1), 1000);
-    } catch {
-      setMicError("Microphone access is required. Check browser permissions.");
+    } catch (err: unknown) {
+      const errName = err instanceof Error ? err.name : "";
+      if (errName === "NotAllowedError" || errName === "PermissionDeniedError") {
+        setMicError("Microphone blocked. On iPhone: Settings → Privacy & Security → Microphone → enable Safari. Then reload and try again.");
+      } else if (errName === "NotFoundError" || errName === "DevicesNotFoundError") {
+        setMicError("No microphone found on this device.");
+      } else {
+        setMicError("Could not access microphone. Check your browser permissions.");
+      }
     }
   }
 
@@ -144,7 +160,7 @@ export default function AudioRecorder({
           <audio src={audioUrl} controls className="w-full" />
           <button
             onClick={reRecord}
-            className="text-xs text-zinc-400 underline underline-offset-2 hover:text-zinc-700 dark:hover:text-zinc-200"
+            className="-mx-2 px-2 py-2 text-xs text-zinc-400 underline underline-offset-2 hover:text-zinc-700 dark:hover:text-zinc-200"
           >
             re-record
           </button>

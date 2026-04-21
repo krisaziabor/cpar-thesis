@@ -103,7 +103,7 @@ export default function NewUserChecklistCard({
         ease: [0.215, 0.61, 0.355, 1],
         delay: enterDelay,
       }}
-      className="pointer-events-none fixed bottom-6 right-6 z-40 w-[22rem] max-w-[calc(100vw-2rem)]"
+      className="pointer-events-none hidden sm:block fixed bottom-6 right-6 z-40 w-[22rem]"
     >
       <div className="pointer-events-auto overflow-hidden rounded-lg border border-zinc-800 bg-zinc-950 font-sans shadow-[0_4px_24px_rgba(0,0,0,0.5)]">
         <button

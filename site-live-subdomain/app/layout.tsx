@@ -1,7 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Providers } from "./providers";
 import "./globals.css";
-import { Agentation } from "agentation";
 
 export const metadata: Metadata = {
   title: "Kanon",
@@ -11,7 +9,6 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  viewportFit: "cover",
 };
 
 export default function RootLayout({
@@ -21,10 +18,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="dark">
-      <body className="antialiased">
-        <Providers>{children}</Providers>
-        {process.env.NODE_ENV === "development" && <Agentation />}
-      </body>
+      <body className="antialiased">{children}</body>
     </html>
   );
 }

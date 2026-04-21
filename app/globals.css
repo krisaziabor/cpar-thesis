@@ -167,6 +167,13 @@ body {
   text-shadow: 0 0 12px rgba(255, 255, 255, 0.12);
 }
 
+/* h-dvh fallback for browsers that don't support dynamic viewport height */
+@supports not (height: 100dvh) {
+  .h-dvh {
+    height: 100vh;
+  }
+}
+
 /* Remove ReactFlow's default node chrome from item thumbnail nodes */
 .react-flow__node-itemThumbnail {
   background: transparent !important;
