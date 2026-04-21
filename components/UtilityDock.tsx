@@ -127,12 +127,16 @@ export default function UtilityDock() {
         type="button"
         onClick={() => setExpanded((prev) => !prev)}
         aria-label={expanded ? "Collapse utility menu" : "Expand utility menu"}
-        className="grid h-11 w-11 place-items-center overflow-hidden rounded-full border border-zinc-800 bg-zinc-950 text-xs text-zinc-300 shadow-[0_4px_24px_rgba(0,0,0,0.5)] transition-colors hover:bg-zinc-900 hover:text-zinc-100"
+        className={`grid h-11 w-11 place-items-center overflow-hidden rounded-full text-xs transition-colors shadow-[0_4px_24px_rgba(0,0,0,0.5)] ${
+          expanded || !avatarColors
+            ? "border border-zinc-800 bg-zinc-950 text-zinc-300 hover:bg-zinc-900 hover:text-zinc-100"
+            : ""
+        }`}
       >
         {expanded ? (
           "×"
         ) : avatarColors ? (
-          <GradientSVG colors={avatarColors} seed={user?.email ?? "kanon"} size={36} round blurDeviation={5} />
+          <GradientSVG colors={avatarColors} seed={user?.email ?? "kanon"} size={44} round blurDeviation={5} />
         ) : (
           userInitial
         )}

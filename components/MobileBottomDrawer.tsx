@@ -466,7 +466,9 @@ export default function MobileBottomDrawer() {
                     ? { opacity: 0 }
                     : { opacity: 0, scale: 0.85, transition: { duration: 0.1 } }
                 }
-                className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-full border border-zinc-800 bg-zinc-950 shadow-[0_4px_16px_rgba(0,0,0,0.5)]"
+                className={`flex h-9 w-9 items-center justify-center overflow-hidden rounded-full shadow-[0_4px_16px_rgba(0,0,0,0.5)] ${
+                  avatarColors ? "" : "border border-zinc-800 bg-zinc-950"
+                }`}
               >
                 {avatarColors ? (
                   <GradientSVG
@@ -496,7 +498,9 @@ export default function MobileBottomDrawer() {
                 }
                 className="flex w-full items-center justify-between rounded-md border border-zinc-800 bg-zinc-950 px-3.5 py-2.5 shadow-[0_4px_24px_rgba(0,0,0,0.5)] transition-colors hover:bg-zinc-900"
               >
-                <div className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-full border border-zinc-800 bg-zinc-900">
+                <div className={`flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-full ${
+                  avatarColors ? "" : "border border-zinc-800 bg-zinc-900"
+                }`}>
                   {avatarColors ? (
                     <GradientSVG
                       colors={avatarColors}
