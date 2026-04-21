@@ -779,12 +779,12 @@ export default function OnboardingPage() {
                 </motion.div>
               )}
 
-              {/* ── Profile setup — side-by-side ────────────────────────── */}
+              {/* ── Profile setup — stacked on mobile, side-by-side on sm+ ── */}
               {activeStep === "profile_setup" && (
                 <motion.div
                   key="profile_setup"
                   {...m}
-                  className="flex w-[min(680px,calc(100vw-3rem))] items-end gap-14"
+                  className="flex w-[min(680px,calc(100vw-3rem))] flex-col gap-8 sm:flex-row sm:items-end sm:gap-14"
                 >
                   <div className="flex-[3]">
                     {transcript ? (
@@ -799,7 +799,7 @@ export default function OnboardingPage() {
                       </p>
                     )}
                   </div>
-                  <ListenGate locked={!hasListened} className="flex-[2] min-w-[220px]">
+                  <ListenGate locked={!hasListened} className="flex-[2]">
                     <div className="flex flex-col items-start gap-1.5">
                       <input
                         ref={profileInputRef}
