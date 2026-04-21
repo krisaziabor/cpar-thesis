@@ -24,7 +24,7 @@ export async function fetchPdfMetadata(
 ): Promise<CanonItemMetadata> {
   const [pdfData, thumbnailBase64] = await Promise.all([
     extractPdfText(buffer),
-    generatePdfThumbnail(buffer),
+    renderPdfFirstPageDataUri(buffer),
   ]);
 
   const title =
@@ -95,7 +95,8 @@ async function extractPdfText(buffer: Buffer): Promise<PdfData> {
   }
 }
 
-async function generatePdfThumbnail(buffer: Buffer): Promise<string | undefined> {
+/** Renders page 1 of a PDF to a PNG data URI (~800px wide). Shared with DOI OA PDF thumbnails. */
+export async function renderPdfFirstPageDataUri(buffer: Buffer): Promise<string | undefined> {
   try {
     // mupdf is WASM-based — no native bindings, no canvas/Path2D compatibility
     // issues. It renders directly from the PDF data to a pixmap, then PNG.

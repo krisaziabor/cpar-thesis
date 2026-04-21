@@ -182,6 +182,14 @@ export async function probeMediaPageWithYtDlp(pageUrl: string): Promise<YtDlpMed
           ? j.n_entries
           : undefined;
 
+    const idRaw = j.id;
+    const id =
+      typeof idRaw === "string"
+        ? idRaw
+        : typeof idRaw === "number" && Number.isFinite(idRaw)
+          ? String(Math.trunc(idRaw))
+          : undefined;
+
     return {
       title,
       description,
@@ -193,7 +201,7 @@ export async function probeMediaPageWithYtDlp(pageUrl: string): Promise<YtDlpMed
       view_count: parseYtCount(j.view_count),
       like_count: parseYtCount(j.like_count),
       playlist_count: playlistCount,
-      id: typeof j.id === "string" ? j.id : undefined,
+      id,
       extractor: typeof j.extractor === "string" ? j.extractor : undefined,
       raw: j,
     };

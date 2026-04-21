@@ -1,7 +1,11 @@
 import type { CanonItemMetadata, ItemType, SourceMetadata } from "../types";
+import { isSafePublicHttpsUrl, fetchPublicImage } from "../fetch-public-image";
+import { renderPdfFirstPageDataUri } from "./pdf";
+import { fetchUrlMetadata } from "./url";
 
 const DOI_PATTERN = /10\.\d{4,9}\/[^\s"<>]+/i;
 const DOI_FETCH_TIMEOUT_MS = 25_000;
+const MAX_PDF_BYTES_FOR_THUMB = 25 * 1024 * 1024;
 
 // ─── DOI extraction ──────────────────────────────────────────────────────────
 
@@ -66,6 +70,11 @@ interface CrossRefDateParts {
   "date-parts"?: number[][];
 }
 
+interface CrossRefLink {
+  URL?: string;
+  "content-type"?: string;
+}
+
 interface CrossRefWork {
   title?: string | string[];
   author?: CrossRefAuthor[];
@@ -82,6 +91,7 @@ interface CrossRefWork {
   abstract?: string;
   subject?: string[];
   ISBN?: string[];
+  link?: CrossRefLink[];
 }
 
 const CROSSREF_TYPE_MAP: Record<string, ItemType> = {
@@ -94,6 +104,121 @@ const CROSSREF_TYPE_MAP: Record<string, ItemType> = {
   "dissertation": "article",
   "posted-content": "article",
 };
+
+function crossRefPdfCandidates(work: CrossRefWork): string[] {
+  const links = work.link;
+  if (!Array.isArray(links)) return [];
+  const out: string[] = [];
+  for (const L of links) {
+    const u = typeof L.URL === "string" ? L.URL.trim() : "";
+    if (!u || !isSafePublicHttpsUrl(u)) continue;
+    const ct = (L["content-type"] ?? "").toLowerCase();
+    if (ct.includes("pdf") || u.toLowerCase().includes(".pdf")) out.push(u);
+  }
+  return [...new Set(out)];
+}
+
+function openAlexPdfCandidates(work: OpenAlexWork): string[] {
+  const out: string[] = [];
+  const take = (u: string | undefined) => {
+    const t = u?.trim();
+    if (t && isSafePublicHttpsUrl(t)) out.push(t);
+  };
+  take(work.best_oa_location?.pdf_url);
+  take(work.primary_location?.pdf_url);
+  return [...new Set(out)];
+}
+
+async function fetchHttpsPdfBuffer(url: string): Promise<Buffer | null> {
+  if (!isSafePublicHttpsUrl(url)) return null;
+  try {
+    const res = await fetch(url, {
+      redirect: "follow",
+      signal: AbortSignal.timeout(DOI_FETCH_TIMEOUT_MS),
+      headers: {
+        "User-Agent": "Mozilla/5.0 (compatible; Kanon/1.0; +https://kanon.app)",
+        Accept: "application/pdf,application/octet-stream;q=0.9,*/*;q=0.8",
+      },
+    });
+    if (!res.ok) return null;
+    const buf = Buffer.from(await res.arrayBuffer());
+    if (buf.byteLength < 8 || buf.byteLength > MAX_PDF_BYTES_FOR_THUMB) return null;
+    if (buf.slice(0, 5).toString("latin1") !== "%PDF-") return null;
+    return buf;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Prefer the first page of an OA PDF when CrossRef / OpenAlex expose `application/pdf` links;
+ * otherwise use og:image from the resolved landing page (journal HTML).
+ */
+async function attachDoiArticleThumbnail(
+  meta: CanonItemMetadata,
+  pdfCandidates: string[]
+): Promise<CanonItemMetadata> {
+  const seen = new Set<string>();
+  for (const raw of pdfCandidates) {
+    const u = raw.trim();
+    if (!u || seen.has(u)) continue;
+    seen.add(u);
+    const buf = await fetchHttpsPdfBuffer(u);
+    if (!buf) continue;
+    const thumb = await renderPdfFirstPageDataUri(buf);
+    if (!thumb) continue;
+    const prevRaw =
+      typeof meta.source_metadata.raw === "object" && meta.source_metadata.raw
+        ? meta.source_metadata.raw
+        : {};
+    return {
+      ...meta,
+      thumbnail_url: undefined,
+      thumbnail_base64: thumb,
+      source_metadata: {
+        ...meta.source_metadata,
+        raw: {
+          ...prevRaw,
+          doi_thumbnail_source: "pdf-first-page",
+          doi_thumbnail_pdf_url: u,
+        },
+      },
+    };
+  }
+
+  const landing = meta.link?.trim();
+  if (landing && isSafePublicHttpsUrl(landing)) {
+    try {
+      const og = await fetchUrlMetadata(landing);
+      const img = og.thumbnail_url;
+      if (img && isSafePublicHttpsUrl(img)) {
+        const got = await fetchPublicImage(img, 12 * 1024 * 1024);
+        if (got) {
+          const prevRaw =
+            typeof meta.source_metadata.raw === "object" && meta.source_metadata.raw
+              ? meta.source_metadata.raw
+              : {};
+          return {
+            ...meta,
+            thumbnail_url: undefined,
+            thumbnail_base64: `data:${got.mimeType};base64,${got.buffer.toString("base64")}`,
+            source_metadata: {
+              ...meta.source_metadata,
+              raw: {
+                ...prevRaw,
+                doi_thumbnail_source: "landing-page-og-image",
+              },
+            },
+          };
+        }
+      }
+    } catch {
+      /* no landing-page preview */
+    }
+  }
+
+  return meta;
+}
 
 async function fetchCrossRefMetadata(doi: string): Promise<CanonItemMetadata> {
   const url = `https://api.crossref.org/works/${encodeURIComponent(doi)}`;
@@ -140,7 +265,7 @@ async function fetchCrossRefMetadata(doi: string): Promise<CanonItemMetadata> {
     raw: work as unknown as Record<string, unknown>,
   };
 
-  return {
+  const meta: CanonItemMetadata = {
     title,
     type,
     creator: creators,
@@ -148,6 +273,8 @@ async function fetchCrossRefMetadata(doi: string): Promise<CanonItemMetadata> {
     tags: (work.subject ?? []).slice(0, 8),
     source_metadata: sourceMetadata,
   };
+
+  return attachDoiArticleThumbnail(meta, crossRefPdfCandidates(work));
 }
 
 // ─── OpenAlex ────────────────────────────────────────────────────────────────
@@ -161,6 +288,14 @@ interface OpenAlexConcept {
   score?: number;
 }
 
+interface OpenAlexLocation {
+  pdf_url?: string;
+  source?: {
+    display_name?: string;
+    host_organization_name?: string;
+  };
+}
+
 interface OpenAlexWork {
   title?: string;
   abstract?: string;
@@ -169,12 +304,8 @@ interface OpenAlexWork {
   landing_page_url?: string;
   authorships?: OpenAlexAuthorship[];
   concepts?: OpenAlexConcept[];
-  primary_location?: {
-    source?: {
-      display_name?: string;
-      host_organization_name?: string;
-    };
-  };
+  primary_location?: OpenAlexLocation;
+  best_oa_location?: OpenAlexLocation;
 }
 
 async function fetchOpenAlexMetadata(doi: string): Promise<CanonItemMetadata> {
@@ -211,14 +342,21 @@ async function fetchOpenAlexMetadata(doi: string): Promise<CanonItemMetadata> {
     raw: work as unknown as Record<string, unknown>,
   };
 
-  return {
+  const link =
+    work.doi != null && String(work.doi).trim() !== ""
+      ? `https://doi.org/${doi}`
+      : (work.landing_page_url?.trim() || `https://doi.org/${doi}`);
+
+  const meta: CanonItemMetadata = {
     title: work.title ?? "Untitled",
     type: "article",
     creator: creators,
-    link: work.doi ? `https://doi.org/${doi}` : work.landing_page_url,
+    link,
     tags,
     source_metadata: sourceMetadata,
   };
+
+  return attachDoiArticleThumbnail(meta, openAlexPdfCandidates(work));
 }
 
 // ─── arXiv ───────────────────────────────────────────────────────────────────
@@ -247,7 +385,7 @@ async function fetchArxivMetadata(arxivId: string): Promise<CanonItemMetadata> {
     raw: { arxiv_id: arxivId },
   };
 
-  return {
+  const meta: CanonItemMetadata = {
     title,
     type: "article",
     creator: authors,
@@ -255,6 +393,8 @@ async function fetchArxivMetadata(arxivId: string): Promise<CanonItemMetadata> {
     tags: categories,
     source_metadata: sourceMetadata,
   };
+
+  return attachDoiArticleThumbnail(meta, [`https://arxiv.org/pdf/${arxivId}.pdf`]);
 }
 
 // ─── XML helpers (no extra dependency needed for arXiv Atom feed) ─────────────
