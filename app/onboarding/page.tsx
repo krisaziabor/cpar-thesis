@@ -592,6 +592,7 @@ export default function OnboardingPage() {
                     words={revealTranscript.words}
                     onPlayStart={handleRevealPlayStart}
                     onFinished={() => setRevealListened(true)}
+                    lightControls
                   />
                 )}
               </motion.div>
