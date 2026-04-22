@@ -14,12 +14,14 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import {
+  addAudioVersion,
   subscribeToItem,
   subscribeToItemResponses,
   subscribeToItems,
   subscribeToItemConnections,
   updateItem,
 } from "@/lib/items";
+import ReRecordModal from "@/components/ReRecordModal";
 import {
   saveToKanon,
   removeFromKanon,
@@ -98,7 +100,6 @@ function buildSourceMetadataRows(
     if (sm.duration_seconds != null) {
       push("Duration", formatDurationSec(sm.duration_seconds));
     }
-    push("Published", sm.published_date);
     return rows;
   }
   if (st === "instagram" || st === "tiktok" || st === "twitter") {
@@ -299,6 +300,22 @@ function formatDateShort(ts: unknown): string {
     });
   }
   return String(ts);
+}
+
+function YouTubeEmbed({ videoId, title }: { videoId: string; title: string }) {
+  const src = `https://www.youtube-nocookie.com/embed/${videoId}?rel=0&modestbranding=1`;
+  return (
+    <div className="relative aspect-[16/9] w-full overflow-hidden bg-black">
+      <iframe
+        src={src}
+        title={title}
+        className="absolute inset-0 h-full w-full"
+        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+        allowFullScreen
+        loading="lazy"
+      />
+    </div>
+  );
 }
 
 function guessMediaType(url: string): "image" | "pdf" | "video" {
@@ -699,6 +716,7 @@ export default function ItemPanel({
   const audioDurationRef = useRef(0);
   const transcriptScrollRef = useRef<HTMLDivElement>(null);
   const [mediaExpanded, setMediaExpanded] = useState(false);
+  const [reRecordOpen, setReRecordOpen] = useState(false);
 
   // Video sync: refs for panel <-> expanded handoff
   const inPanelVideoRef = useRef<HTMLVideoElement | null>(null);
@@ -945,10 +963,19 @@ export default function ItemPanel({
   const [nc1, nc2, nc3] = addedByColors ?? DEFAULT_GRADIENT_COLORS;
   const mediaType = item.media_url ? guessMediaType(item.media_url) : null;
 
-  // Determine top media: video/PDF take priority, then thumbnail, then image
-  const topIsVideo = mediaType === "video" && !!item.media_url;
+  // YouTube items are embedded via iframe rather than a <video> element — the
+  // video_id on source_metadata is populated by the youtube metadata handler.
+  const youtubeVideoId =
+    item.source_metadata?.source_type === "youtube"
+      ? item.source_metadata.video_id
+      : undefined;
+  const topIsYoutube = !!youtubeVideoId;
+
+  // Determine top media: YouTube iframe first, then video/PDF, then thumbnail/image
+  const topIsVideo = !topIsYoutube && mediaType === "video" && !!item.media_url;
   const topIsPdf = mediaType === "pdf" && !!item.media_url;
   const topThumbnail =
+    !topIsYoutube &&
     !topIsVideo &&
     !topIsPdf &&
     (item.thumbnail_url ?? (mediaType === "image" ? item.media_url : null));
@@ -1031,13 +1058,16 @@ export default function ItemPanel({
             {/* Scrollable content */}
             <div className="min-h-0 flex-1 overflow-y-auto">
               {/* Media — full bleed */}
+              {topIsYoutube && (
+                <YouTubeEmbed videoId={youtubeVideoId!} title={item.title} />
+              )}
               {topIsVideo && (
                 <VideoMediaPlayer url={item.media_url!} title={item.title} videoHandleRef={inPanelVideoRef} />
               )}
               {topIsPdf && (
                 <MinimalPdfViewer url={item.media_url!} title={item.title} />
               )}
-              {!topIsVideo && !topIsPdf && topThumbnail && (
+              {!topIsYoutube && !topIsVideo && !topIsPdf && topThumbnail && (
                 <div className="relative aspect-[16/9] w-full overflow-hidden bg-zinc-900">
                   <img
                     src={topThumbnail}
@@ -1247,6 +1277,18 @@ export default function ItemPanel({
                             >
                               Restart
                             </button>
+                            {user?.email && item.added_by === user.email && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  transcriptRef.current?.pause();
+                                  setReRecordOpen(true);
+                                }}
+                                className="font-sans text-xs text-white/50 transition-colors duration-150 ease-out hover:text-white/90"
+                              >
+                                Re-record
+                              </button>
+                            )}
                           </div>
                         )}
                       </motion.div>
@@ -1339,13 +1381,16 @@ export default function ItemPanel({
           transition={{ duration: 0.18, ease: [0.215, 0.61, 0.355, 1] }}
         >
           {/* ─── Top media — full bleed ──────────────────────────── */}
+          {topIsYoutube && (
+            <YouTubeEmbed videoId={youtubeVideoId!} title={item.title} />
+          )}
           {topIsVideo && (
             <VideoMediaPlayer url={item.media_url!} title={item.title} videoHandleRef={inPanelVideoRef} />
           )}
           {topIsPdf && (
             <MinimalPdfViewer url={item.media_url!} title={item.title} />
           )}
-          {!topIsVideo && topThumbnail && (
+          {!topIsYoutube && !topIsVideo && topThumbnail && (
             <img
               src={topThumbnail}
               alt={item.title}
@@ -1675,6 +1720,15 @@ export default function ItemPanel({
         </AnimatePresence>,
         document.body
       )}
+      <ReRecordModal
+        open={reRecordOpen}
+        title="narrative"
+        onClose={() => setReRecordOpen(false)}
+        onSave={async (blob) => {
+          if (!user?.email) throw new Error("Not signed in");
+          await addAudioVersion(itemId, blob, user.email);
+        }}
+      />
     </>
   );
 }

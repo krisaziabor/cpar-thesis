@@ -16,6 +16,10 @@ interface RightPanelProps {
   onClose: () => void;
   /** When provided, renders a fullscreen icon button next to the close button. */
   onFullScreen?: () => void;
+  /** When true, the fullscreen button is rendered but disabled (greyed out). */
+  fullScreenDisabled?: boolean;
+  /** Tooltip shown on hover when the fullscreen button is disabled. */
+  fullScreenDisabledHint?: string;
   children: React.ReactNode;
   /** When true the body area will not scroll; the child is responsible for its own overflow. */
   disableBodyScroll?: boolean;
@@ -42,6 +46,8 @@ export default function RightPanel({
   backLabel,
   onClose,
   onFullScreen,
+  fullScreenDisabled,
+  fullScreenDisabledHint,
   children,
   disableBodyScroll,
   wide,
@@ -53,6 +59,8 @@ export default function RightPanel({
   const shouldReduceMotion = useReducedMotion();
   const backButtonRef = useRef<HTMLButtonElement>(null);
   const [backTooltipPos, setBackTooltipPos] = useState<{ left: number; top: number } | null>(null);
+  const fullScreenButtonRef = useRef<HTMLButtonElement>(null);
+  const [fullScreenTooltipPos, setFullScreenTooltipPos] = useState<{ left: number; top: number } | null>(null);
   const [viewportWidth, setViewportWidth] = useState(typeof window !== "undefined" ? window.innerWidth : 1200);
 
   useEffect(() => {
@@ -66,6 +74,13 @@ export default function RightPanel({
     if (!el) return;
     const rect = el.getBoundingClientRect();
     setBackTooltipPos({ left: rect.left + rect.width / 2, top: rect.bottom + 8 });
+  }
+
+  function showFullScreenTooltip() {
+    const el = fullScreenButtonRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    setFullScreenTooltipPos({ left: rect.left + rect.width / 2, top: rect.bottom + 8 });
   }
 
   useEffect(() => {
@@ -154,14 +169,40 @@ export default function RightPanel({
           </button>
           {onFullScreen && (
             <button
-              onClick={onFullScreen}
+              ref={fullScreenButtonRef}
+              onClick={fullScreenDisabled ? undefined : onFullScreen}
+              onMouseEnter={
+                fullScreenDisabled && fullScreenDisabledHint
+                  ? showFullScreenTooltip
+                  : undefined
+              }
+              onMouseLeave={
+                fullScreenDisabled && fullScreenDisabledHint
+                  ? () => setFullScreenTooltipPos(null)
+                  : undefined
+              }
+              disabled={fullScreenDisabled}
               aria-label="Full screen"
-              className="shrink-0 text-zinc-500 hover:text-zinc-200 transition-colors"
+              aria-disabled={fullScreenDisabled}
+              className={`shrink-0 transition-colors ${
+                fullScreenDisabled
+                  ? "cursor-not-allowed text-zinc-700"
+                  : "text-zinc-500 hover:text-zinc-200"
+              }`}
             >
               <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <path d="M1 4.5V1H4.5M8.5 1H12V4.5M12 8.5V12H8.5M4.5 12H1V8.5" />
               </svg>
             </button>
+          )}
+          {fullScreenDisabled && fullScreenDisabledHint && fullScreenTooltipPos && createPortal(
+            <div
+              className="pointer-events-none fixed z-[9999] -translate-x-1/2 whitespace-nowrap rounded-md border border-zinc-700 bg-zinc-900 px-2.5 py-1.5 font-sans text-[11px] text-zinc-300 shadow-[0_8px_20px_rgba(0,0,0,0.5)]"
+              style={{ left: fullScreenTooltipPos.left, top: fullScreenTooltipPos.top }}
+            >
+              {fullScreenDisabledHint}
+            </div>,
+            document.body
           )}
           {title && (
             <span className="truncate font-lector text-sm tracking-tight text-zinc-400">

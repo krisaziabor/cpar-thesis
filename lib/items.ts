@@ -155,6 +155,19 @@ function queueConnectionTranscript(connectionId: string, audioUrl: string): void
   })();
 }
 
+function queueConnectionTimedTranscript(connectionId: string, audioUrl: string): void {
+  if (!db || !audioUrl) return;
+  void (async () => {
+    const words = await requestTimedTranscript(audioUrl);
+    if (!words) return;
+    try {
+      await updateDoc(doc(db, "connections", connectionId), { timed_transcript: words });
+    } catch {
+      // Best-effort background transcription; ignore write failures.
+    }
+  })();
+}
+
 function queueConnectionResponseTranscript(
   connectionId: string,
   responseId: string,
@@ -380,11 +393,112 @@ export async function updateItem(
   await updateDoc(doc(db, "items", id), cleaned);
 }
 
-/** Delete an item from Firestore and remove its audio from Storage. */
+/**
+ * Delete an item from Firestore and remove its audio from Storage. Also
+ * cascades: removes each audio version (doc + storage blob) and each response
+ * subcollection doc (plus its audio). Keeps Storage clean when admins prune.
+ */
 export async function deleteItem(item: Item): Promise<void> {
   if (!db) throw new Error("Firestore not initialised");
   if (item.voice_recording_url) await deleteItemAudio(item.voice_recording_url);
+
+  const [versionsSnap, responsesSnap] = await Promise.all([
+    getDocs(collection(db, "items", item.id, "audio_versions")),
+    getDocs(collection(db, "items", item.id, "responses")),
+  ]);
+
+  await Promise.all([
+    ...versionsSnap.docs.map(async (d) => {
+      const url = (d.data() as { url?: string }).url;
+      if (url) await deleteItemAudio(url);
+      await deleteDoc(d.ref);
+    }),
+    ...responsesSnap.docs.map(async (d) => {
+      const url = (d.data() as { audio_url?: string }).audio_url;
+      if (url) await deleteItemAudio(url);
+      await deleteDoc(d.ref);
+    }),
+  ]);
+
   await deleteDoc(doc(db, "items", item.id));
+}
+
+/** Admin/owner delete of a voice response on an item. */
+export async function deleteItemResponse(
+  itemId: string,
+  responseId: string,
+  audioUrl?: string
+): Promise<void> {
+  if (!db) throw new Error("Firestore not initialised");
+  if (audioUrl) await deleteItemAudio(audioUrl);
+  await deleteDoc(doc(db, "items", itemId, "responses", responseId));
+}
+
+/** Admin/owner delete of a voice response on a connection. */
+export async function deleteConnectionResponse(
+  connectionId: string,
+  responseId: string,
+  audioUrl?: string
+): Promise<void> {
+  if (!db) throw new Error("Firestore not initialised");
+  if (audioUrl) await deleteItemAudio(audioUrl);
+  await deleteDoc(doc(db, "connections", connectionId, "responses", responseId));
+}
+
+// ─── Ownership transfer (admin) ─────────────────────────────────────────────
+
+async function assertWhitelisted(email: string): Promise<void> {
+  if (!db) throw new Error("Firestore not initialised");
+  const normalised = email.trim().toLowerCase();
+  if (!normalised) throw new Error("Email required");
+  const snap = await getDoc(doc(db, "whitelist", normalised));
+  if (!snap.exists()) throw new Error(`${normalised} is not a whitelisted user`);
+}
+
+export async function transferItemOwnership(
+  itemId: string,
+  newOwnerEmail: string
+): Promise<void> {
+  if (!db) throw new Error("Firestore not initialised");
+  await assertWhitelisted(newOwnerEmail);
+  await updateDoc(doc(db, "items", itemId), {
+    added_by: newOwnerEmail.trim().toLowerCase(),
+  });
+}
+
+export async function transferConnectionOwnership(
+  connectionId: string,
+  newOwnerEmail: string
+): Promise<void> {
+  if (!db) throw new Error("Firestore not initialised");
+  await assertWhitelisted(newOwnerEmail);
+  await updateDoc(doc(db, "connections", connectionId), {
+    created_by: newOwnerEmail.trim().toLowerCase(),
+  });
+}
+
+export async function transferItemResponseOwnership(
+  itemId: string,
+  responseId: string,
+  newOwnerEmail: string
+): Promise<void> {
+  if (!db) throw new Error("Firestore not initialised");
+  await assertWhitelisted(newOwnerEmail);
+  await updateDoc(doc(db, "items", itemId, "responses", responseId), {
+    created_by: newOwnerEmail.trim().toLowerCase(),
+  });
+}
+
+export async function transferConnectionResponseOwnership(
+  connectionId: string,
+  responseId: string,
+  newOwnerEmail: string
+): Promise<void> {
+  if (!db) throw new Error("Firestore not initialised");
+  await assertWhitelisted(newOwnerEmail);
+  await updateDoc(doc(db, "connections", connectionId, "responses", responseId), {
+    created_by: newOwnerEmail.trim().toLowerCase(),
+  });
 }
 
 // ─── Drafts ───────────────────────────────────────────────────────────────────
@@ -565,7 +679,11 @@ export async function addAudioVersion(
   const url = await getDownloadURL(storageRef);
 
   await setDoc(versionRef, { url, created_at: serverTimestamp(), created_by: createdBy });
-  await updateDoc(doc(db, "items", itemId), { voice_recording_url: url });
+  await updateDoc(doc(db, "items", itemId), {
+    voice_recording_url: url,
+    transcript: "",
+    timed_transcript: [],
+  });
   queueItemTranscript(itemId, url);
   queueItemTimedTranscript(itemId, url);
 
@@ -716,9 +834,49 @@ export async function createConnection(
 
   await trackCreatedConnectionForUser(createdBy, itemIds);
 
-  if (audioUrl) queueConnectionTranscript(connectionRef.id, audioUrl);
+  if (audioUrl) {
+    queueConnectionTranscript(connectionRef.id, audioUrl);
+    queueConnectionTimedTranscript(connectionRef.id, audioUrl);
+  }
 
   return connectionRef.id;
+}
+
+/**
+ * Upload a new audio version for a connection. Mirrors `addAudioVersion` for
+ * items: writes an immutable doc to the `connections/{id}/audio_versions`
+ * subcollection, points `connection.audio_url` at the latest upload, and
+ * kicks off fresh plain + timed transcripts. Resets the old transcript fields
+ * first so stale text doesn't flash while the new one is still transcribing.
+ */
+export async function addConnectionAudioVersion(
+  connectionId: string,
+  blob: Blob,
+  createdBy: string
+): Promise<string> {
+  if (!db) throw new Error("Firestore not initialised");
+  if (!storage) throw new Error("Storage not initialised");
+
+  const mimeType = blob.type || "audio/webm";
+  const ext = mimeType.includes("mp4") ? "mp4"
+    : mimeType.includes("ogg") ? "ogg"
+    : "webm";
+
+  const versionRef = doc(collection(db, "connections", connectionId, "audio_versions"));
+  const storageRef = ref(storage, `audio/connections/${connectionId}/${versionRef.id}.${ext}`);
+  await uploadBytes(storageRef, blob, { contentType: mimeType });
+  const url = await getDownloadURL(storageRef);
+
+  await setDoc(versionRef, { url, created_at: serverTimestamp(), created_by: createdBy });
+  await updateDoc(doc(db, "connections", connectionId), {
+    audio_url: url,
+    transcript: "",
+    timed_transcript: [],
+  });
+  queueConnectionTranscript(connectionId, url);
+  queueConnectionTimedTranscript(connectionId, url);
+
+  return url;
 }
 
 /**
@@ -956,14 +1114,24 @@ export async function deleteConnection(connection: Connection): Promise<void> {
 
   if (connection.audio_url) await deleteItemAudio(connection.audio_url);
 
-  const [junctionSnap, responsesSnap] = await Promise.all([
+  const [junctionSnap, responsesSnap, versionsSnap] = await Promise.all([
     getDocs(query(collection(db, "connection_items"), where("connection_id", "==", connection.id))),
     getDocs(collection(db, "connections", connection.id, "responses")),
+    getDocs(collection(db, "connections", connection.id, "audio_versions")),
   ]);
 
   await Promise.all([
     ...junctionSnap.docs.map((d) => deleteDoc(d.ref)),
-    ...responsesSnap.docs.map((d) => deleteDoc(d.ref)),
+    ...responsesSnap.docs.map(async (d) => {
+      const url = (d.data() as { audio_url?: string }).audio_url;
+      if (url) await deleteItemAudio(url);
+      await deleteDoc(d.ref);
+    }),
+    ...versionsSnap.docs.map(async (d) => {
+      const url = (d.data() as { url?: string }).url;
+      if (url) await deleteItemAudio(url);
+      await deleteDoc(d.ref);
+    }),
   ]);
 
   await deleteDoc(doc(db, "connections", connection.id));

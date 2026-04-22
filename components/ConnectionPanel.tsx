@@ -12,11 +12,13 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { useAuth } from "@/lib/auth-context";
 import {
+  addConnectionAudioVersion,
   getConnectionItemIds,
   subscribeToConnection,
   subscribeToItems,
   subscribeToResponses,
 } from "@/lib/items";
+import ReRecordModal from "@/components/ReRecordModal";
 import { getUserProfile } from "@/lib/users";
 import { usePanelHistory } from "@/lib/panel-history-context";
 import {
@@ -129,6 +131,7 @@ export default function ConnectionPanel({
   const transcriptRef = useRef<SyncedTranscriptHandle>(null);
   const transcriptScrollRef = useRef<HTMLDivElement>(null);
   const [narrativePlaying, setNarrativePlaying] = useState(false);
+  const [reRecordOpen, setReRecordOpen] = useState(false);
 
   const leftPaneRef = useRef<HTMLDivElement>(null);
   const leftPaneContentRef = useRef<HTMLDivElement>(null);
@@ -259,13 +262,21 @@ export default function ConnectionPanel({
     navigatePanel(`/?${p.toString()}`, "Connection");
   }, [searchParams, connectionId, navigatePanel]);
 
-  const timedWords = useMemo(
-    () =>
-      connection?.transcript && audioDuration
-        ? buildPseudoTimedWords(connection.transcript, audioDuration)
-        : [],
-    [connection?.transcript, audioDuration]
-  );
+  // Prefer the real word-level timings from ElevenLabs Scribe when available.
+  // Older connections (created before timed transcription landed) fall back to
+  // a pseudo uniform distribution so the animation still plays — but this
+  // drifts against actual speech cadence.
+  const timedWords = useMemo(() => {
+    const real = connection?.timed_transcript;
+    if (Array.isArray(real) && real.length > 0) return real;
+    if (connection?.transcript && audioDuration) {
+      return buildPseudoTimedWords(connection.transcript, audioDuration);
+    }
+    return [];
+  }, [connection?.timed_transcript, connection?.transcript, audioDuration]);
+
+  const canReRecord =
+    !!user?.email && !!connection && connection.created_by === user.email;
 
   if (connection === undefined) {
     return (
@@ -605,6 +616,18 @@ export default function ConnectionPanel({
                   >
                     Restart
                   </button>
+                  {canReRecord && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        transcriptRef.current?.pause();
+                        setReRecordOpen(true);
+                      }}
+                      className="font-sans text-xs text-white/50 transition-colors duration-150 ease-out hover:text-white/90"
+                    >
+                      Re-record
+                    </button>
+                  )}
                 </div>
               )}
             </div>
@@ -648,6 +671,15 @@ export default function ConnectionPanel({
         </div>
       </motion.div>
       </div>
+      <ReRecordModal
+        open={reRecordOpen}
+        title="connection narrative"
+        onClose={() => setReRecordOpen(false)}
+        onSave={async (blob) => {
+          if (!user?.email) throw new Error("Not signed in");
+          await addConnectionAudioVersion(connectionId, blob, user.email);
+        }}
+      />
     </div>
   );
 }

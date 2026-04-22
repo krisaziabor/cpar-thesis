@@ -1968,7 +1968,7 @@ function AddItemPageInner({
                 </div>
             </div>
 
-            <div className="mt-auto space-y-3 border-t border-zinc-900 pb-3 pt-5">
+            <div className="mt-auto space-y-3 border-t border-zinc-900 pb-6 pt-5">
               {hasPendingDuplicateDecision && (
                 <p className="text-[11px] text-zinc-500">Resolve duplicate warning to continue adding records.</p>
               )}
@@ -2050,7 +2050,7 @@ function AddItemPageInner({
                 </div>
               </div>
 
-              <div className="pt-1">
+              <div className="pt-1 pb-5">
                 <button
                   type="button"
                   disabled={!canContinueFromSource || fetching || pendingSourceCards.length > 0 || hasPendingDuplicateDecision}
@@ -2284,7 +2284,7 @@ function AddItemPageInner({
               </div>
             </Field>
 
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 pb-5">
               <button
                 onClick={() => {
                   if (!canContinueDetails) return;

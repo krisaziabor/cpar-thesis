@@ -64,7 +64,7 @@ service cloud.firestore {
       allow create: if request.auth != null;
       // Author may update their own items; admins and authors may delete.
       allow update: if request.auth != null
-        && resource.data.added_by == request.auth.token.email;
+        && (resource.data.added_by == request.auth.token.email || isAdmin());
       allow delete: if request.auth != null
         && (resource.data.added_by == request.auth.token.email || isAdmin());
 
@@ -93,6 +93,16 @@ service cloud.firestore {
       }
       match /responses/{responseId} {
         allow read, write: if request.auth != null;
+      }
+      // Audio versions subcollection — only the connection's author may add
+      // new versions; version docs are immutable once created.
+      match /audio_versions/{versionId} {
+        allow read: if request.auth != null;
+        allow create: if request.auth != null
+          && get(/databases/$(database)/documents/connections/$(connectionId)).data.created_by
+             == request.auth.token.email;
+        allow delete: if isAdmin();
+        allow update: if false;
       }
     }
 
