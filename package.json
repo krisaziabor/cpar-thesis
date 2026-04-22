@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "email:dev": "email dev",
+    "prebuild": "node scripts/download-ytdlp.js",
     "build": "next build",
     "start": "next start",
     "lint": "eslint"

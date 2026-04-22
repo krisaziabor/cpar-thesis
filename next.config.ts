@@ -4,7 +4,7 @@ const nextConfig: NextConfig = {
   // Include the yt-dlp binary in Vercel's serverless function bundle.
   // Output file tracing traces JS imports but not binaries downloaded by postinstall.
   outputFileTracingIncludes: {
-    "/api/**": ["./node_modules/yt-dlp-exec/bin/**"],
+    "**": ["./node_modules/yt-dlp-exec/bin/**"],
   },
 
   // Native addon packages (.node binaries) must not be bundled — they must be
