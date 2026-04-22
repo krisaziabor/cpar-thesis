@@ -165,7 +165,9 @@ export async function probeMediaPageWithYtDlp(pageUrl: string): Promise<YtDlpMed
   let binaryPath: string;
   try {
     binaryPath = resolveYtDlpBinary();
-  } catch {
+    console.log("[yt-dlp-probe] binary resolved:", binaryPath);
+  } catch (err) {
+    console.warn("[yt-dlp-probe] binary not found:", err);
     return null;
   }
 
@@ -245,7 +247,13 @@ export async function probeMediaPageWithYtDlp(pageUrl: string): Promise<YtDlpMed
 export async function fetchThumbnailBytesViaYtDlp(
   pageUrl: string
 ): Promise<{ buffer: Buffer; mimeType: string } | null> {
-  const binaryPath = resolveYtDlpBinary();
+  let binaryPath: string;
+  try {
+    binaryPath = resolveYtDlpBinary();
+  } catch (err) {
+    console.warn("[yt-dlp-thumb] binary not found:", err);
+    return null;
+  }
   const tmpDir = await mkdtemp(path.join(tmpdir(), "kanon-thumb-"));
   const outBase = path.join(tmpDir, "thumb");
 
