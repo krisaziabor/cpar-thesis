@@ -28,7 +28,7 @@ const DEST = path.join(
 
 const URL =
   process.env.YOUTUBE_DL_HOST ||
-  "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp";
+  "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux";
 
 function download(url, dest, redirects) {
   if (redirects > 10) throw new Error("Too many redirects");
