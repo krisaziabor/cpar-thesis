@@ -6,7 +6,14 @@
 
 import { execFile } from "node:child_process";
 import { createRequire } from "node:module";
-import { existsSync, readFileSync, unlinkSync, readdirSync } from "node:fs";
+import {
+  existsSync,
+  readFileSync,
+  unlinkSync,
+  readdirSync,
+  copyFileSync,
+  chmodSync,
+} from "node:fs";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -57,28 +64,48 @@ function resolveYtDlpBinary(): string {
   const envPath = process.env.YOUTUBE_DL_PATH;
   if (envPath && existsSync(envPath)) return envPath;
 
+  let sourcePath: string | null = null;
+
   try {
     const requireFromRoot = createRequire(path.join(process.cwd(), "package.json"));
     const pkgDir = path.dirname(requireFromRoot.resolve("yt-dlp-exec/package.json"));
     const embedded = path.join(pkgDir, "bin", fileName);
-    if (existsSync(embedded)) return embedded;
+    if (existsSync(embedded)) sourcePath = embedded;
   } catch {
     // package not tree-visible from cwd
   }
 
-  const cwdCandidate = path.join(
-    process.cwd(),
-    "node_modules",
-    "yt-dlp-exec",
-    "bin",
-    fileName
-  );
-  if (existsSync(cwdCandidate)) return cwdCandidate;
+  if (!sourcePath) {
+    const cwdCandidate = path.join(
+      process.cwd(),
+      "node_modules",
+      "yt-dlp-exec",
+      "bin",
+      fileName
+    );
+    if (existsSync(cwdCandidate)) sourcePath = cwdCandidate;
+  }
 
-  throw new Error(
-    "yt-dlp binary not found. Run `npm install` (yt-dlp-exec downloads it on postinstall), " +
-      "set YOUTUBE_DL_PATH to your yt-dlp executable, or install yt-dlp on the system PATH."
-  );
+  if (!sourcePath) {
+    throw new Error(
+      "yt-dlp binary not found. Run `npm install` (yt-dlp-exec downloads it on postinstall), " +
+        "set YOUTUBE_DL_PATH to your yt-dlp executable, or install yt-dlp on the system PATH."
+    );
+  }
+
+  // On serverless runtimes (Vercel / Lambda) the deployment bundler may strip
+  // executable bits from files packed into the zip. Copy once to /tmp where we
+  // can guarantee chmod 755 and execution is permitted.
+  if (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME) {
+    const tmpBin = path.join(tmpdir(), fileName);
+    if (!existsSync(tmpBin)) {
+      copyFileSync(sourcePath, tmpBin);
+      chmodSync(tmpBin, 0o755);
+    }
+    return tmpBin;
+  }
+
+  return sourcePath;
 }
 
 function extToContentType(ext: string): string {
