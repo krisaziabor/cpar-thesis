@@ -602,6 +602,14 @@ function HomeInner() {
                 ? () => itemFullScreenTriggerRef.current?.()
                 : undefined
             }
+            fullScreenDisabled={
+              panelItem?.source_metadata?.source_type === "youtube"
+            }
+            fullScreenDisabledHint={
+              panelItem?.source_metadata?.source_type === "youtube"
+                ? "Fullscreen unavailable for YouTube records"
+                : undefined
+            }
             headerActions={
               canEditPanelItem ? (
                 <div className="flex items-center gap-3 font-sans text-sm">

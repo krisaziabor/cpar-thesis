@@ -62,6 +62,8 @@ export interface Connection {
   title?: string;
   audio_url: string;
   transcript: string;
+  /** Word-level timed transcript for synced playback (generated at upload time). */
+  timed_transcript?: TimedWord[];
   created_by: string;
   is_hidden: boolean;
   created_at: Timestamp;

@@ -12,17 +12,32 @@ import {
   subscribeToAllSaves,
   type WhitelistEntry,
 } from "@/lib/admin";
-import { subscribeToDeletionRequests, resolveDeletionRequest } from "@/lib/items";
+import {
+  subscribeToDeletionRequests,
+  resolveDeletionRequest,
+  deleteItem,
+  deleteConnection,
+  deleteItemResponse,
+  deleteConnectionResponse,
+  subscribeToItemResponses,
+  subscribeToResponses,
+  transferItemOwnership,
+  transferConnectionOwnership,
+  transferItemResponseOwnership,
+  transferConnectionResponseOwnership,
+} from "@/lib/items";
 import type {
   DeletionRequest,
   Feedback,
   InstallationOnboarding,
   Item,
   Connection,
+  ItemResponse,
+  Response as ConnectionResponse,
   KanonSave,
 } from "@/lib/types";
 
-type Tab = "overview" | "users" | "pieces" | "feedback" | "requests";
+type Tab = "overview" | "users" | "library" | "pieces" | "feedback" | "requests";
 
 function formatDate(ts: unknown): string {
   if (!ts) return "—";
@@ -455,6 +470,544 @@ function FeedbackTab({ feedback }: { feedback: Feedback[] }) {
   );
 }
 
+// ─── Library tab (admin delete for records, connections, responses) ─────────
+
+function ConfirmDelete({
+  label = "delete",
+  onConfirm,
+  disabled,
+}: {
+  label?: string;
+  onConfirm: () => Promise<void> | void;
+  disabled?: boolean;
+}) {
+  const [armed, setArmed] = useState(false);
+  const [pending, setPending] = useState(false);
+
+  useEffect(() => {
+    if (!armed) return;
+    const t = window.setTimeout(() => setArmed(false), 4000);
+    return () => window.clearTimeout(t);
+  }, [armed]);
+
+  async function handleClick() {
+    if (disabled || pending) return;
+    if (!armed) {
+      setArmed(true);
+      return;
+    }
+    setPending(true);
+    try {
+      await onConfirm();
+    } finally {
+      setPending(false);
+      setArmed(false);
+    }
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={handleClick}
+      disabled={disabled || pending}
+      className={`text-xs underline underline-offset-2 disabled:opacity-40 ${
+        armed
+          ? "text-red-400 hover:text-red-300"
+          : "text-zinc-500 hover:text-zinc-300"
+      }`}
+    >
+      {pending ? "deleting…" : armed ? "confirm?" : label}
+    </button>
+  );
+}
+
+function TransferOwnership({
+  currentOwner,
+  onTransfer,
+}: {
+  currentOwner: string;
+  onTransfer: (email: string) => Promise<void>;
+}) {
+  const [open, setOpen] = useState(false);
+  const [email, setEmail] = useState("");
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    const trimmed = email.trim().toLowerCase();
+    if (!trimmed || trimmed === currentOwner.toLowerCase()) {
+      setError("Enter a different whitelisted email.");
+      return;
+    }
+    setPending(true);
+    setError(null);
+    try {
+      await onTransfer(trimmed);
+      setOpen(false);
+      setEmail("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Transfer failed.");
+    } finally {
+      setPending(false);
+    }
+  }
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="text-xs text-zinc-500 underline underline-offset-2 hover:text-zinc-300"
+      >
+        transfer
+      </button>
+    );
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="flex items-center gap-1.5">
+      <input
+        type="email"
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+        placeholder="new owner email"
+        autoFocus
+        disabled={pending}
+        className="w-44 rounded border border-zinc-700 bg-zinc-950 px-2 py-1 text-xs text-zinc-200 placeholder:text-zinc-600 outline-none focus:border-zinc-500"
+      />
+      <button
+        type="submit"
+        disabled={pending}
+        className="text-xs text-emerald-400 underline underline-offset-2 hover:text-emerald-300 disabled:opacity-40"
+      >
+        {pending ? "…" : "save"}
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          setOpen(false);
+          setEmail("");
+          setError(null);
+        }}
+        disabled={pending}
+        className="text-xs text-zinc-500 underline underline-offset-2 hover:text-zinc-300"
+      >
+        cancel
+      </button>
+      {error && <span className="text-[10px] text-red-400">{error}</span>}
+    </form>
+  );
+}
+
+function ItemResponsesRow({
+  itemId,
+  onDelete,
+  onTransfer,
+}: {
+  itemId: string;
+  onDelete: (resp: ItemResponse) => Promise<void>;
+  onTransfer: (resp: ItemResponse, email: string) => Promise<void>;
+}) {
+  const [responses, setResponses] = useState<ItemResponse[]>([]);
+  useEffect(() => subscribeToItemResponses(itemId, setResponses), [itemId]);
+
+  if (responses.length === 0) {
+    return (
+      <p className="px-4 py-3 text-xs text-zinc-600">No responses.</p>
+    );
+  }
+  return (
+    <ul className="divide-y divide-zinc-900">
+      {responses.map((r) => (
+        <li
+          key={r.id}
+          className="flex items-start justify-between gap-3 px-4 py-2.5"
+        >
+          <div className="min-w-0 space-y-0.5">
+            <p className="text-xs text-zinc-500">{r.created_by}</p>
+            {r.transcript && (
+              <p className="line-clamp-2 text-xs text-zinc-400">
+                {r.transcript}
+              </p>
+            )}
+          </div>
+          <div className="flex shrink-0 items-center gap-3">
+            <TransferOwnership
+              currentOwner={r.created_by}
+              onTransfer={(email) => onTransfer(r, email)}
+            />
+            <ConfirmDelete onConfirm={() => onDelete(r)} />
+          </div>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function ConnectionResponsesRow({
+  connectionId,
+  onDelete,
+  onTransfer,
+}: {
+  connectionId: string;
+  onDelete: (resp: ConnectionResponse) => Promise<void>;
+  onTransfer: (resp: ConnectionResponse, email: string) => Promise<void>;
+}) {
+  const [responses, setResponses] = useState<ConnectionResponse[]>([]);
+  useEffect(() => subscribeToResponses(connectionId, setResponses), [connectionId]);
+
+  if (responses.length === 0) {
+    return (
+      <p className="px-4 py-3 text-xs text-zinc-600">No responses.</p>
+    );
+  }
+  return (
+    <ul className="divide-y divide-zinc-900">
+      {responses.map((r) => (
+        <li
+          key={r.id}
+          className="flex items-start justify-between gap-3 px-4 py-2.5"
+        >
+          <div className="min-w-0 space-y-0.5">
+            <p className="text-xs text-zinc-500">{r.created_by}</p>
+            {r.transcript && (
+              <p className="line-clamp-2 text-xs text-zinc-400">
+                {r.transcript}
+              </p>
+            )}
+          </div>
+          <div className="flex shrink-0 items-center gap-3">
+            <TransferOwnership
+              currentOwner={r.created_by}
+              onTransfer={(email) => onTransfer(r, email)}
+            />
+            <ConfirmDelete onConfirm={() => onDelete(r)} />
+          </div>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function LibraryTab({
+  items,
+  connections,
+}: {
+  items: Item[];
+  connections: Connection[];
+}) {
+  const [section, setSection] = useState<"records" | "connections">("records");
+  const [search, setSearch] = useState("");
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const [errors, setErrors] = useState<Record<string, string>>({});
+
+  function setError(id: string, message: string | null) {
+    setErrors((prev) => {
+      const next = { ...prev };
+      if (message) next[id] = message;
+      else delete next[id];
+      return next;
+    });
+  }
+
+  const filteredItems = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    if (!term) return items;
+    return items.filter(
+      (i) =>
+        i.title.toLowerCase().includes(term) ||
+        i.added_by.toLowerCase().includes(term) ||
+        (i.creator ?? "").toLowerCase().includes(term)
+    );
+  }, [items, search]);
+
+  const filteredConnections = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    if (!term) return connections;
+    return connections.filter(
+      (c) =>
+        (c.title ?? "").toLowerCase().includes(term) ||
+        c.created_by.toLowerCase().includes(term)
+    );
+  }, [connections, search]);
+
+  async function handleDeleteItem(item: Item) {
+    setError(item.id, null);
+    try {
+      await deleteItem(item);
+    } catch (err) {
+      setError(item.id, err instanceof Error ? err.message : "Delete failed.");
+    }
+  }
+
+  async function handleDeleteConnection(connection: Connection) {
+    setError(connection.id, null);
+    try {
+      await deleteConnection(connection);
+    } catch (err) {
+      setError(
+        connection.id,
+        err instanceof Error ? err.message : "Delete failed."
+      );
+    }
+  }
+
+  async function handleDeleteItemResponse(itemId: string, resp: ItemResponse) {
+    setError(resp.id, null);
+    try {
+      await deleteItemResponse(itemId, resp.id, resp.audio_url);
+    } catch (err) {
+      setError(resp.id, err instanceof Error ? err.message : "Delete failed.");
+    }
+  }
+
+  async function handleDeleteConnectionResponse(
+    connectionId: string,
+    resp: ConnectionResponse
+  ) {
+    setError(resp.id, null);
+    try {
+      await deleteConnectionResponse(connectionId, resp.id, resp.audio_url);
+    } catch (err) {
+      setError(resp.id, err instanceof Error ? err.message : "Delete failed.");
+    }
+  }
+
+  async function handleTransferItem(item: Item, email: string) {
+    setError(item.id, null);
+    await transferItemOwnership(item.id, email);
+  }
+
+  async function handleTransferConnection(connection: Connection, email: string) {
+    setError(connection.id, null);
+    await transferConnectionOwnership(connection.id, email);
+  }
+
+  async function handleTransferItemResponse(
+    itemId: string,
+    resp: ItemResponse,
+    email: string
+  ) {
+    await transferItemResponseOwnership(itemId, resp.id, email);
+  }
+
+  async function handleTransferConnectionResponse(
+    connectionId: string,
+    resp: ConnectionResponse,
+    email: string
+  ) {
+    await transferConnectionResponseOwnership(connectionId, resp.id, email);
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex gap-1 border-b border-zinc-800">
+          <button
+            onClick={() => setSection("records")}
+            className={`px-3 py-1.5 text-xs transition-colors ${
+              section === "records"
+                ? "border-b-2 border-zinc-200 text-zinc-50 -mb-px"
+                : "text-zinc-500 hover:text-zinc-300"
+            }`}
+          >
+            Records ({items.length})
+          </button>
+          <button
+            onClick={() => setSection("connections")}
+            className={`px-3 py-1.5 text-xs transition-colors ${
+              section === "connections"
+                ? "border-b-2 border-zinc-200 text-zinc-50 -mb-px"
+                : "text-zinc-500 hover:text-zinc-300"
+            }`}
+          >
+            Connections ({connections.length})
+          </button>
+        </div>
+        <input
+          type="text"
+          placeholder={section === "records" ? "Search records…" : "Search connections…"}
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="w-full rounded border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-200 placeholder:text-zinc-600 outline-none focus:border-zinc-600 sm:w-64"
+        />
+      </div>
+
+      {section === "records" && (
+        <div className="space-y-2">
+          {filteredItems.length === 0 ? (
+            <p className="rounded border border-zinc-800 px-4 py-6 text-center text-xs text-zinc-500">
+              No records match.
+            </p>
+          ) : (
+            filteredItems.map((item) => {
+              const isExpanded = expanded === `item-${item.id}`;
+              return (
+                <div
+                  key={item.id}
+                  className="overflow-hidden rounded border border-zinc-800"
+                >
+                  <div className="flex items-start justify-between gap-3 px-4 py-2.5">
+                    <button
+                      onClick={() =>
+                        setExpanded(isExpanded ? null : `item-${item.id}`)
+                      }
+                      className="min-w-0 flex-1 text-left"
+                    >
+                      <p className="truncate text-sm text-zinc-200">
+                        {item.title}
+                        {item.is_draft && (
+                          <span className="ml-2 rounded bg-zinc-800 px-1.5 py-0.5 text-[10px] text-zinc-400">
+                            draft
+                          </span>
+                        )}
+                      </p>
+                      <p className="truncate text-xs text-zinc-500">
+                        {item.creator || "—"} · {item.added_by} ·{" "}
+                        {formatDate(item.created_at)}
+                      </p>
+                      {errors[item.id] && (
+                        <p className="mt-1 text-xs text-red-500">
+                          {errors[item.id]}
+                        </p>
+                      )}
+                    </button>
+                    <div className="flex shrink-0 items-center gap-3">
+                      <Link
+                        href={`/?item=${item.id}`}
+                        className="text-xs text-zinc-500 underline underline-offset-2 hover:text-zinc-300"
+                      >
+                        view
+                      </Link>
+                      <TransferOwnership
+                        currentOwner={item.added_by}
+                        onTransfer={(email) => handleTransferItem(item, email)}
+                      />
+                      <ConfirmDelete onConfirm={() => handleDeleteItem(item)} />
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setExpanded(isExpanded ? null : `item-${item.id}`)
+                        }
+                        aria-label="Toggle responses"
+                        className="text-zinc-600 hover:text-zinc-400"
+                      >
+                        {isExpanded ? "▾" : "▸"}
+                      </button>
+                    </div>
+                  </div>
+                  {isExpanded && (
+                    <div className="border-t border-zinc-800 bg-zinc-950/60">
+                      <p className="px-4 pt-2.5 text-[10px] uppercase tracking-wider text-zinc-600">
+                        Responses
+                      </p>
+                      <ItemResponsesRow
+                        itemId={item.id}
+                        onDelete={(r) => handleDeleteItemResponse(item.id, r)}
+                        onTransfer={(r, email) =>
+                          handleTransferItemResponse(item.id, r, email)
+                        }
+                      />
+                    </div>
+                  )}
+                </div>
+              );
+            })
+          )}
+        </div>
+      )}
+
+      {section === "connections" && (
+        <div className="space-y-2">
+          {filteredConnections.length === 0 ? (
+            <p className="rounded border border-zinc-800 px-4 py-6 text-center text-xs text-zinc-500">
+              No connections match.
+            </p>
+          ) : (
+            filteredConnections.map((connection) => {
+              const isExpanded = expanded === `conn-${connection.id}`;
+              return (
+                <div
+                  key={connection.id}
+                  className="overflow-hidden rounded border border-zinc-800"
+                >
+                  <div className="flex items-start justify-between gap-3 px-4 py-2.5">
+                    <button
+                      onClick={() =>
+                        setExpanded(isExpanded ? null : `conn-${connection.id}`)
+                      }
+                      className="min-w-0 flex-1 text-left"
+                    >
+                      <p className="truncate text-sm text-zinc-200">
+                        {connection.title || "Untitled connection"}
+                      </p>
+                      <p className="truncate text-xs text-zinc-500">
+                        {connection.created_by} ·{" "}
+                        {formatDate(connection.created_at)}
+                      </p>
+                      {errors[connection.id] && (
+                        <p className="mt-1 text-xs text-red-500">
+                          {errors[connection.id]}
+                        </p>
+                      )}
+                    </button>
+                    <div className="flex shrink-0 items-center gap-3">
+                      <Link
+                        href={`/?panel=connection&connection=${connection.id}`}
+                        className="text-xs text-zinc-500 underline underline-offset-2 hover:text-zinc-300"
+                      >
+                        view
+                      </Link>
+                      <TransferOwnership
+                        currentOwner={connection.created_by}
+                        onTransfer={(email) =>
+                          handleTransferConnection(connection, email)
+                        }
+                      />
+                      <ConfirmDelete
+                        onConfirm={() => handleDeleteConnection(connection)}
+                      />
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setExpanded(
+                            isExpanded ? null : `conn-${connection.id}`
+                          )
+                        }
+                        aria-label="Toggle responses"
+                        className="text-zinc-600 hover:text-zinc-400"
+                      >
+                        {isExpanded ? "▾" : "▸"}
+                      </button>
+                    </div>
+                  </div>
+                  {isExpanded && (
+                    <div className="border-t border-zinc-800 bg-zinc-950/60">
+                      <p className="px-4 pt-2.5 text-[10px] uppercase tracking-wider text-zinc-600">
+                        Responses
+                      </p>
+                      <ConnectionResponsesRow
+                        connectionId={connection.id}
+                        onDelete={(r) =>
+                          handleDeleteConnectionResponse(connection.id, r)
+                        }
+                        onTransfer={(r, email) =>
+                          handleTransferConnectionResponse(connection.id, r, email)
+                        }
+                      />
+                    </div>
+                  )}
+                </div>
+              );
+            })
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Deletion requests tab ───────────────────────────────────────────────────
 
 function RequestsTab({
@@ -546,6 +1099,7 @@ function RequestsTab({
 const TABS: { id: Tab; label: string }[] = [
   { id: "overview", label: "Overview" },
   { id: "users", label: "Users" },
+  { id: "library", label: "Library" },
   { id: "pieces", label: "Written pieces" },
   { id: "feedback", label: "Feedback" },
   { id: "requests", label: "Deletion requests" },
@@ -686,6 +1240,9 @@ export default function AdminPage() {
                 items={items}
                 saves={saves}
               />
+            )}
+            {tab === "library" && (
+              <LibraryTab items={items} connections={connections} />
             )}
             {tab === "pieces" && <PiecesTab onboarding={onboarding} />}
             {tab === "feedback" && <FeedbackTab feedback={feedback} />}
