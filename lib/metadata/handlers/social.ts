@@ -522,6 +522,13 @@ async function attachInstagramProbeAndThumbnail(
       out.source_metadata.author_url ?? probe.uploaderUrl;
     (out.source_metadata.raw as Record<string, unknown>).ytdlp = probe.raw;
 
+    const channelHandle =
+      typeof probe.raw.channel === "string" ? probe.raw.channel.trim() : "";
+    const bestCreator = channelHandle || probe.uploader?.trim() || "";
+    if (bestCreator && (!out.creator || out.creator === "Instagram")) {
+      out.creator = stripCreatorSuffix(bestCreator);
+    }
+
     const cap = probe.description?.trim() || probe.title?.trim() || "";
     const descLen = out.source_metadata.description?.length ?? 0;
     if (cap.length > descLen) {
