@@ -15,9 +15,26 @@ interface LLMExtracted {
   author?: string;
 }
 
+// Matches PDF producer/creator software strings that are not real authors.
+const SOFTWARE_AUTHOR_RE =
+  /adobe|acrobat|distiller|ghostscript|pdftex|xetex|luatex|latex|pdfmaker|microsoft|word|excel|powerpoint|libreoffice|openoffice|inkscape|illustrator|quartz|pages|keynote|numbers|scribus|wkhtmltopdf|weasyprint|chromium|webkit|itext|fpdf|reportlab|aspose/i;
+
+function looksLikeSoftwareAuthor(author: string | undefined): boolean {
+  if (!author) return true;
+  return SOFTWARE_AUTHOR_RE.test(author);
+}
+
+function looksLikeGarbageTitle(title: string | undefined): boolean {
+  if (!title) return true;
+  if (title.includes("%") || title.includes("firebasestorage") || title.includes("scratch/")) return true;
+  if (title.length > 250) return true;
+  return false;
+}
+
 async function extractMetadataWithLLM(
   fullText: string,
-  filename: string
+  filename: string,
+  softwareAuthorHint: string | undefined,
 ): Promise<LLMExtracted> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return {};
@@ -25,17 +42,21 @@ async function extractMetadataWithLLM(
   const snippet = fullText.slice(0, 4_000).trim();
   if (!snippet) return {};
 
+  const softwareNote = softwareAuthorHint
+    ? `\nNote: the PDF metadata lists "${softwareAuthorHint}" as the author, but this appears to be the software that created the file, not the actual author. Ignore it and identify the real human or organizational author from the document text instead.`
+    : "";
+
   try {
     const client = new Anthropic({ apiKey });
     const response = await client.messages.create({
       model: "claude-haiku-4-5-20251001",
       max_tokens: 256,
       system:
-        "You are a bibliographic metadata extractor. Given the opening text of a document, identify its title and author/creator. Respond with ONLY a JSON object — no prose. Omit a field entirely if you cannot determine it confidently. Schema: { \"title\": \"string\", \"author\": \"string\" }",
+        `You are a bibliographic metadata extractor. Given the opening text of a document, identify its title and author/creator. The author must be a real person or organization — never PDF creation software (Adobe Acrobat, Microsoft Word, LaTeX, etc.). Respond with ONLY a JSON object — no prose. Omit a field entirely if you cannot determine it confidently. Schema: { "title": "string", "author": "string" }`,
       messages: [
         {
           role: "user",
-          content: `Filename: ${filename}\n\nDocument text (first ~4000 chars):\n${snippet}`,
+          content: `Filename: ${filename}${softwareNote}\n\nDocument text (first ~4000 chars):\n${snippet}`,
         },
       ],
     });
@@ -53,13 +74,6 @@ async function extractMetadataWithLLM(
   }
 }
 
-function looksLikeGarbageTitle(title: string | undefined): boolean {
-  if (!title) return true;
-  if (title.includes("%") || title.includes("firebasestorage") || title.includes("scratch/")) return true;
-  if (title.length > 250) return true;
-  return false;
-}
-
 export async function fetchPdfMetadata(
   buffer: Buffer,
   filename: string
@@ -70,12 +84,13 @@ export async function fetchPdfMetadata(
   ]);
 
   const rawTitle = looksLikeGarbageTitle(pdfData.title) ? undefined : pdfData.title;
-  const rawAuthor = pdfData.author;
+  const rawAuthor = looksLikeSoftwareAuthor(pdfData.author) ? undefined : pdfData.author;
+  const softwareAuthorHint = looksLikeSoftwareAuthor(pdfData.author) ? pdfData.author : undefined;
 
   // Use LLM to fill in missing title/author from the document body text.
   let llm: LLMExtracted = {};
   if (!rawTitle || !rawAuthor) {
-    llm = await extractMetadataWithLLM(pdfData.fullText, filename);
+    llm = await extractMetadataWithLLM(pdfData.fullText, filename, softwareAuthorHint);
   }
 
   const filenameTitle = filename.replace(/\.pdf$/i, "").replace(/[-_]/g, " ");
