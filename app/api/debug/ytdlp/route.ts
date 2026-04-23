@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { existsSync, statSync } from "node:fs";
+import { existsSync, statSync, readFileSync } from "node:fs";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import path from "node:path";
@@ -22,12 +22,20 @@ export async function GET() {
     platform: process.platform,
     cwd: process.cwd(),
     vercel: !!process.env.VERCEL,
+    youtube_dl_host_env: process.env.YOUTUBE_DL_HOST ?? null,
     candidates: Object.fromEntries(
       Object.entries(candidates).map(([k, v]) => {
         if (!v) return [k, { path: null, exists: false }];
         const exists = existsSync(v);
         const size = exists ? statSync(v).size : null;
-        return [k, { path: v, exists, size }];
+        const first_bytes = exists
+          ? readFileSync(v).subarray(0, 16).toString("hex")
+          : null;
+        const is_elf = first_bytes?.startsWith("7f454c46") ?? false;
+        const shebang = exists
+          ? readFileSync(v).subarray(0, 40).toString("utf8").split("\n")[0]
+          : null;
+        return [k, { path: v, exists, size, is_elf, shebang }];
       })
     ),
   };
