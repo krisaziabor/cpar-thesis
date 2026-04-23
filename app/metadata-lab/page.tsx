@@ -151,6 +151,18 @@ export default function MetadataLab() {
       let res: Response;
 
       if (tab === "file" && file) {
+        // Vercel serverless functions cap request bodies at ~4.5 MB. Reject
+        // larger uploads client-side with a real error instead of letting the
+        // platform return an HTML/plain-text 413 we'd fail to JSON-parse.
+        const VERCEL_BODY_LIMIT = 4.5 * 1024 * 1024;
+        if (file.size > VERCEL_BODY_LIMIT) {
+          setResult({
+            success: false,
+            error: `File is ${(file.size / 1024 / 1024).toFixed(1)} MB. Uploads are capped at 4.5 MB by the serverless runtime — host the PDF and paste its URL instead.`,
+          });
+          setLoading(false);
+          return;
+        }
         const fd = new FormData();
         fd.append("file", file);
         res = await fetch("/api/metadata", {
@@ -165,7 +177,18 @@ export default function MetadataLab() {
         });
       }
 
-      const data: MetadataResult = await res.json();
+      const raw = await res.text();
+      let data: MetadataResult;
+      try {
+        data = JSON.parse(raw) as MetadataResult;
+      } catch {
+        // Non-JSON body usually means an upstream rejection (Vercel 413 plain
+        // text, proxy HTML error page, etc). Surface status + snippet.
+        data = {
+          success: false,
+          error: `HTTP ${res.status}: ${raw.slice(0, 200).trim() || res.statusText}`,
+        };
+      }
       setResult(data);
     } catch (err) {
       setResult({

@@ -13,8 +13,6 @@ const nextConfig: NextConfig = {
     "@napi-rs/canvas",
     "canvas",
     "mupdf",
-    "pdf-parse",
-    "pdfjs-dist",
     "@distube/ytdl-core",
     // Ships a real yt-dlp binary under bin/ — must not be bundled or __dirname breaks (ENOENT).
     "yt-dlp-exec",
