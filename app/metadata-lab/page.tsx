@@ -7,6 +7,7 @@ import { AdminOnlyLabGate } from "@/components/AdminOnlyLabGate";
 import { useAuth } from "@/lib/auth-context";
 import { ref as storageRef, deleteObject } from "firebase/storage";
 import { storage } from "@/lib/firebase";
+import { deleteScratchUpload, uploadScratchFile } from "@/lib/media-upload";
 
 function isDownloadableUrl(url: string): boolean {
   try {
@@ -160,28 +161,38 @@ export default function MetadataLab() {
     setMediaPosterUrl(null);
     setMediaLabItemId(null);
 
+    // Track scratch upload so we can clean it up after extraction.
+    let scratchPath: string | null = null;
+
     try {
       let res: Response;
 
       if (tab === "file" && file) {
-        // Vercel serverless functions cap request bodies at ~4.5 MB. Reject
-        // larger uploads client-side with a real error instead of letting the
-        // platform return an HTML/plain-text 413 we'd fail to JSON-parse.
-        const VERCEL_BODY_LIMIT = 4.5 * 1024 * 1024;
+        // Vercel caps request bodies at ~4.5 MB. For larger files, upload to
+        // a scratch Storage path first and let the server fetch by URL.
+        const VERCEL_BODY_LIMIT = 4 * 1024 * 1024;
         if (file.size > VERCEL_BODY_LIMIT) {
-          setResult({
-            success: false,
-            error: `File is ${(file.size / 1024 / 1024).toFixed(1)} MB. Uploads are capped at 4.5 MB by the serverless runtime — host the PDF and paste its URL instead.`,
+          if (!user) {
+            setResult({ success: false, error: "Sign in to upload large files." });
+            setLoading(false);
+            return;
+          }
+          const ownerKey = user.email ?? user.uid;
+          const uploaded = await uploadScratchFile(file, ownerKey);
+          scratchPath = uploaded.storagePath;
+          res = await fetch("/api/metadata", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ url: uploaded.url }),
           });
-          setLoading(false);
-          return;
+        } else {
+          const fd = new FormData();
+          fd.append("file", file);
+          res = await fetch("/api/metadata", {
+            method: "POST",
+            body: fd,
+          });
         }
-        const fd = new FormData();
-        fd.append("file", file);
-        res = await fetch("/api/metadata", {
-          method: "POST",
-          body: fd,
-        });
       } else {
         res = await fetch("/api/metadata", {
           method: "POST",
@@ -209,6 +220,7 @@ export default function MetadataLab() {
         error: err instanceof Error ? err.message : "Network error",
       });
     } finally {
+      if (scratchPath) void deleteScratchUpload(scratchPath);
       setLoading(false);
     }
   }

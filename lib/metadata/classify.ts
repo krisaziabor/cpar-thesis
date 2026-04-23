@@ -107,6 +107,16 @@ export function classifyUrl(input: string): SourceType {
       return "news";
     }
 
+    // PDF by path extension. Handles direct `.pdf` URLs and Firebase Storage
+    // download URLs (…/o/files%2Fitems%2Fabc.pdf?alt=media&token=…) after
+    // URL decoding — covers the client-side-upload flow for large PDFs.
+    try {
+      const decoded = decodeURIComponent(pathname);
+      if (/\.pdf$/i.test(decoded)) return "pdf";
+    } catch {
+      if (/\.pdf$/i.test(pathname)) return "pdf";
+    }
+
     return "url";
   } catch {
     // Might be a raw DOI string like "10.1038/nature12373"

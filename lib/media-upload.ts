@@ -1,5 +1,34 @@
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
 import { storage } from "./firebase";
+
+/**
+ * Upload a PDF (or any file) to a scratch path so the server can fetch its
+ * URL for metadata extraction without hitting Vercel's ~4.5 MB request-body
+ * limit. Returns { url, storagePath } — callers should `deleteScratchUpload`
+ * the path once metadata extraction is done.
+ */
+export async function uploadScratchFile(
+  file: File,
+  uidOrEmail: string
+): Promise<{ url: string; storagePath: string }> {
+  if (!storage) throw new Error("Storage not initialised");
+  const ext = file.name.split(".").pop()?.toLowerCase() || "bin";
+  const safeOwner = uidOrEmail.replace(/[^a-zA-Z0-9._-]/g, "_");
+  const storagePath = `scratch/metadata/${safeOwner}/${Date.now()}-${Math.random().toString(36).slice(2, 10)}.${ext}`;
+  const storageRef = ref(storage, storagePath);
+  await uploadBytes(storageRef, file, { contentType: file.type || "application/octet-stream" });
+  const url = await getDownloadURL(storageRef);
+  return { url, storagePath };
+}
+
+export async function deleteScratchUpload(storagePath: string): Promise<void> {
+  if (!storage) return;
+  try {
+    await deleteObject(ref(storage, storagePath));
+  } catch {
+    // Best-effort; scratch files are harmless if left behind.
+  }
+}
 
 interface UploadFromProxyOptions {
   /** Resize to max 800px wide and encode WebP (proxy route). */
