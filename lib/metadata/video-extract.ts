@@ -9,6 +9,7 @@ import { createRequire } from "node:module";
 import {
   existsSync,
   readFileSync,
+  writeFileSync,
   unlinkSync,
   readdirSync,
   copyFileSync,
@@ -40,22 +41,77 @@ interface YtDlpProbe {
 }
 
 /**
- * Optional Netscape cookie file or browser cookie jar for age-gated / flaky pages.
- * Precedence: `YT_DLP_COOKIES_FILE` (path on disk) over `YT_DLP_COOKIES_FROM_BROWSER` (e.g. `chrome`).
- * Serverless: browser mode often unavailable; prefer exporting cookies to a file.
+ * Resolve a cookie file for yt-dlp. Precedence:
+ *   1. `YT_DLP_COOKIES_FILE` — explicit path on disk.
+ *   2. `YT_DLP_COOKIES_CONTENT` — raw Netscape cookies.txt contents; we
+ *      materialize them under /tmp on first use (the only writable path on
+ *      Vercel / Lambda). Use this for serverless deploys where you can't
+ *      ship a cookie file but can set an env var.
+ * Returns the resolved path, or undefined if neither is configured.
+ */
+let materializedCookiePath: string | undefined;
+function resolveCookieFile(): string | undefined {
+  const explicit = process.env.YT_DLP_COOKIES_FILE?.trim();
+  if (explicit && existsSync(explicit)) return explicit;
+
+  const content = process.env.YT_DLP_COOKIES_CONTENT;
+  if (content && content.trim().length > 0) {
+    if (materializedCookiePath && existsSync(materializedCookiePath)) {
+      return materializedCookiePath;
+    }
+    const target = path.join(tmpdir(), "yt-dlp-cookies.txt");
+    writeFileSync(target, content, { mode: 0o600 });
+    materializedCookiePath = target;
+    return target;
+  }
+  return undefined;
+}
+
+/**
+ * Global args for every yt-dlp invocation: cookies (when available) plus a
+ * realistic UA to reduce bot-detection blocks on Instagram / X.
  */
 export function ytDlpGlobalArgs(): string[] {
   const args: string[] = [];
-  const cookieFile = process.env.YT_DLP_COOKIES_FILE?.trim();
-  if (cookieFile && existsSync(cookieFile)) {
+  const cookieFile = resolveCookieFile();
+  if (cookieFile) {
     args.push("--cookies", cookieFile);
-    return args;
+  } else {
+    const fromBrowser = process.env.YT_DLP_COOKIES_FROM_BROWSER?.trim();
+    if (fromBrowser) args.push("--cookies-from-browser", fromBrowser);
   }
-  const fromBrowser = process.env.YT_DLP_COOKIES_FROM_BROWSER?.trim();
-  if (fromBrowser) {
-    args.push("--cookies-from-browser", fromBrowser);
-  }
+  // A desktop UA string dramatically improves Instagram success on server IPs.
+  args.push(
+    "--user-agent",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36"
+  );
   return args;
+}
+
+/** Platforms yt-dlp cannot reach anonymously from datacenter IPs. */
+function requiresAuth(url: string): boolean {
+  try {
+    const h = new URL(url).hostname.toLowerCase();
+    return /(?:^|\.)(?:instagram\.com|facebook\.com|twitter\.com|x\.com)$/.test(h);
+  } catch {
+    return false;
+  }
+}
+
+function hasCookies(): boolean {
+  return Boolean(resolveCookieFile() || process.env.YT_DLP_COOKIES_FROM_BROWSER?.trim());
+}
+
+function authErrorMessage(url: string, stderr: string): string {
+  const host = (() => {
+    try { return new URL(url).hostname.replace(/^www\./, ""); } catch { return "this site"; }
+  })();
+  return (
+    `${host} requires an authenticated session to download. ` +
+    `Export cookies from a logged-in browser (Netscape format) and set ` +
+    `YT_DLP_COOKIES_CONTENT (raw file contents) or YT_DLP_COOKIES_FILE (path). ` +
+    `Original yt-dlp error: ${stderr.slice(0, 200)}`
+  );
 }
 
 function resolveYtDlpBinary(): string {
@@ -313,20 +369,35 @@ export async function fetchThumbnailBytesViaYtDlp(
 export async function downloadVideo(url: string): Promise<DownloadedVideo> {
   const binaryPath = resolveYtDlpBinary();
 
+  if (requiresAuth(url) && !hasCookies()) {
+    throw new Error(authErrorMessage(url, "no cookies configured"));
+  }
+
   // Probe first to get ext + size without downloading
-  const { stdout: probeStdout } = await execFileAsync(
-    binaryPath,
-    [
-      ...ytDlpGlobalArgs(),
-      "--dump-single-json",
-      "--no-playlist",
-      "--no-warnings",
-      "-f",
-      "best[ext=mp4][vcodec!=none]/best[ext=mp4]/best",
-      url,
-    ],
-    { maxBuffer: 32 * 1024 * 1024, timeout: 60_000 }
-  );
+  let probeStdout: string;
+  try {
+    ({ stdout: probeStdout } = await execFileAsync(
+      binaryPath,
+      [
+        ...ytDlpGlobalArgs(),
+        "--dump-single-json",
+        "--no-playlist",
+        "--no-warnings",
+        "-f",
+        "best[ext=mp4][vcodec!=none]/best[ext=mp4]/best",
+        url,
+      ],
+      { maxBuffer: 32 * 1024 * 1024, timeout: 60_000 }
+    ));
+  } catch (err) {
+    const stderr = err instanceof Error && "stderr" in err
+      ? String((err as { stderr: unknown }).stderr ?? err.message)
+      : String(err);
+    if (/login required|rate-limit|not available|cookies/i.test(stderr) && requiresAuth(url)) {
+      throw new Error(authErrorMessage(url, stderr));
+    }
+    throw err;
+  }
 
   const probe = JSON.parse(probeStdout.trim()) as YtDlpProbe;
   const fileSizeBytes = probe.filesize ?? probe.filesize_approx;
@@ -344,20 +415,30 @@ export async function downloadVideo(url: string): Promise<DownloadedVideo> {
   const outTemplate = path.join(tmpDir, `video.%(ext)s`);
 
   try {
-    await execFileAsync(
-      binaryPath,
-      [
-        ...ytDlpGlobalArgs(),
-        "--no-playlist",
-        "--no-warnings",
-        "-f",
-        "best[ext=mp4][vcodec!=none]/best[ext=mp4]/best",
-        "-o",
-        outTemplate,
-        url,
-      ],
-      { maxBuffer: 32 * 1024 * 1024, timeout: 300_000 }
-    );
+    try {
+      await execFileAsync(
+        binaryPath,
+        [
+          ...ytDlpGlobalArgs(),
+          "--no-playlist",
+          "--no-warnings",
+          "-f",
+          "best[ext=mp4][vcodec!=none]/best[ext=mp4]/best",
+          "-o",
+          outTemplate,
+          url,
+        ],
+        { maxBuffer: 32 * 1024 * 1024, timeout: 300_000 }
+      );
+    } catch (err) {
+      const stderr = err instanceof Error && "stderr" in err
+        ? String((err as { stderr: unknown }).stderr ?? err.message)
+        : String(err);
+      if (/login required|rate-limit|not available|cookies/i.test(stderr) && requiresAuth(url)) {
+        throw new Error(authErrorMessage(url, stderr));
+      }
+      throw err;
+    }
 
     // Find the downloaded file (ext may differ from probe if format changed)
     const files = readdirSync(tmpDir);

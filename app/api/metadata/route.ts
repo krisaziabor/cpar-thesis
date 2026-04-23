@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { runMetadataPipeline } from "@/lib/metadata/pipeline";
 
-// Force Node.js runtime — required for pdf-parse, canvas, ytdl-core
+// Force Node.js runtime — required for mupdf (WASM), canvas, ytdl-core
 export const runtime = "nodejs";
 
 // Allow up to 60 s for PDF thumbnail generation + external API calls

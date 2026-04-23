@@ -1,14 +1,5 @@
 import type { CanonItemMetadata, SourceMetadata } from "../types";
 
-interface RawPdfInfo {
-  Title?: string;
-  Author?: string;
-  Creator?: string;
-  Subject?: string;
-  Keywords?: string;
-  [key: string]: unknown;
-}
-
 interface PdfData {
   title?: string;
   author?: string;
@@ -23,7 +14,7 @@ export async function fetchPdfMetadata(
   filename: string
 ): Promise<CanonItemMetadata> {
   const [pdfData, thumbnailBase64] = await Promise.all([
-    extractPdfText(buffer),
+    extractPdfData(buffer),
     renderPdfFirstPageDataUri(buffer),
   ]);
 
@@ -57,49 +48,59 @@ export async function fetchPdfMetadata(
   };
 }
 
-async function extractPdfText(buffer: Buffer): Promise<PdfData> {
-  // pdf.js may transfer `data` into a worker. Use a dedicated copy so (1) we don't race with
-  // `generatePdfThumbnail(buffer)` on the same backing ArrayBuffer, and (2) Node is less likely
-  // to reject `Buffer` in transfer lists on newer runtimes.
-  const data = new Uint8Array(buffer.length);
-  data.set(buffer);
+// mupdf (WASM) handles both metadata/text extraction and thumbnailing without
+// requiring browser globals like DOMMatrix (which pdf.js / pdf-parse v2 need
+// and which aren't present in Node / Vercel runtimes).
+async function extractPdfData(buffer: Buffer): Promise<PdfData> {
+  const mupdf = (await import("mupdf")).default;
+  const doc = mupdf.Document.openDocument(buffer, "application/pdf");
 
-  // pdf-parse v2+ exports PDFParse (class); v1 was a single function — default is absent in v2 CJS.
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { PDFParse } = require("pdf-parse") as typeof import("pdf-parse");
+  const title = safeGetMeta(doc, "info:Title");
+  const author = safeGetMeta(doc, "info:Author");
+  const subject = safeGetMeta(doc, "info:Subject");
+  const keywords = safeGetMeta(doc, "info:Keywords");
+  const creator = safeGetMeta(doc, "info:Creator");
 
-  const parser = new PDFParse({ data });
+  const pageCount = doc.countPages();
+
+  // Cap text extraction to avoid blowing the 60s function timeout on huge PDFs.
+  // 50k-char slice downstream means reading ~200 pages is plenty.
+  const MAX_PAGES_FOR_TEXT = 200;
+  const pagesToRead = Math.min(pageCount, MAX_PAGES_FOR_TEXT);
+
+  const chunks: string[] = [];
+  for (let i = 0; i < pagesToRead; i++) {
+    try {
+      const page = doc.loadPage(i);
+      const text = page.toStructuredText().asText();
+      if (text) chunks.push(text);
+    } catch {
+      /* skip unreadable page */
+    }
+  }
+
+  return {
+    title: title || undefined,
+    author: author || creator || undefined,
+    subject: subject || undefined,
+    keywords: keywords || undefined,
+    pageCount,
+    fullText: chunks.join("\n"),
+  };
+}
+
+function safeGetMeta(doc: { getMetaData: (k: string) => string | undefined }, key: string): string | undefined {
   try {
-    // Do not run getInfo + getText in parallel: both touch worker transfer/load and race →
-    // "Cannot transfer object of unsupported type" (Node worker_threads / pdf.js).
-    const infoResult = await parser.getInfo();
-    const textResult = await parser.getText();
-    const info: RawPdfInfo = (infoResult.info ?? {}) as RawPdfInfo;
-
-    const title = (info.Title ?? info.title) as string | undefined;
-    const author = (info.Author ?? info.author) as string | undefined;
-    const creator = (info.Creator ?? info.creator) as string | undefined;
-    const subject = (info.Subject ?? info.subject) as string | undefined;
-    const keywords = (info.Keywords ?? info.keywords) as string | undefined;
-
-    return {
-      title: title || undefined,
-      author: author || creator || undefined,
-      subject: subject || undefined,
-      keywords: typeof keywords === "string" ? keywords : undefined,
-      pageCount: textResult.total,
-      fullText: textResult.text ?? "",
-    };
-  } finally {
-    await parser.destroy();
+    const v = doc.getMetaData(key);
+    return typeof v === "string" && v.length > 0 ? v : undefined;
+  } catch {
+    return undefined;
   }
 }
 
 /** Renders page 1 of a PDF to a PNG data URI (~800px wide). Shared with DOI OA PDF thumbnails. */
 export async function renderPdfFirstPageDataUri(buffer: Buffer): Promise<string | undefined> {
   try {
-    // mupdf is WASM-based — no native bindings, no canvas/Path2D compatibility
-    // issues. It renders directly from the PDF data to a pixmap, then PNG.
     const mupdf = (await import("mupdf")).default;
 
     const doc = mupdf.Document.openDocument(buffer, "application/pdf");
