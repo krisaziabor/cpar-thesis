@@ -341,14 +341,14 @@ export default function HoldsPanel({ currentUserEmail, initialUserEmail }: Holds
     return map;
   }, [allConnectionItems]);
 
-  // My Hold derived
+  // My Hold derived — only saves whose referenced item/connection still exists
   const myHeldItemSaves = useMemo(
-    () => myUserSaves.filter((s) => s.reference_type === "item"),
-    [myUserSaves]
+    () => myUserSaves.filter((s) => s.reference_type === "item" && itemById.has(s.reference_id)),
+    [myUserSaves, itemById]
   );
   const myHeldConnectionSaves = useMemo(
-    () => myUserSaves.filter((s) => s.reference_type === "connection"),
-    [myUserSaves]
+    () => myUserSaves.filter((s) => s.reference_type === "connection" && connectionById.has(s.reference_id)),
+    [myUserSaves, connectionById]
   );
 
   // Per-user saves derived from allSaves (already subscribed to all)
@@ -361,16 +361,28 @@ export default function HoldsPanel({ currentUserEmail, initialUserEmail }: Holds
     return map;
   }, [allSaves]);
 
-  // Everyone's holds
+  // Everyone's holds — only list users who have at least one valid hold.
+  // Defer filtering until items/connections have loaded to avoid a flash of
+  // empty state while data arrives.
   const holdUsers = useMemo<HoldUser[]>(() => {
     const emails = [...new Set(allSaves.map((s) => s.user_email))];
-    return emails
+    const users = emails
       .map((email) => ({
         email,
         name: userNames[email] ?? email.split("@")[0],
       }))
       .sort((a, b) => a.name.localeCompare(b.name));
-  }, [allSaves, userNames]);
+
+    if (itemById.size === 0 && connectionById.size === 0) return users;
+
+    return users.filter((u) =>
+      (savesByEmail[u.email] ?? []).some(
+        (s) =>
+          (s.reference_type === "item" && itemById.has(s.reference_id)) ||
+          (s.reference_type === "connection" && connectionById.has(s.reference_id))
+      )
+    );
+  }, [allSaves, userNames, savesByEmail, itemById, connectionById]);
 
   const filteredUsers = useMemo(() => {
     if (!userSearch.trim()) return holdUsers;
