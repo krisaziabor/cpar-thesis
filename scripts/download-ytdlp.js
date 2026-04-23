@@ -17,14 +17,7 @@ if (process.platform !== "linux") {
   process.exit(0);
 }
 
-const DEST = path.join(
-  __dirname,
-  "..",
-  "node_modules",
-  "yt-dlp-exec",
-  "bin",
-  "yt-dlp"
-);
+const DEST = path.join(__dirname, "..", "bin", "yt-dlp");
 
 const URL =
   process.env.YOUTUBE_DL_HOST ||
