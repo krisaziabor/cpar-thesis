@@ -64,6 +64,10 @@ function resolveYtDlpBinary(): string {
   const envPath = process.env.YOUTUBE_DL_PATH;
   if (envPath && existsSync(envPath)) return envPath;
 
+  // Project-owned binary downloaded by scripts/download-ytdlp.js (Vercel/CI).
+  const projectBin = path.join(process.cwd(), "bin", fileName);
+  if (existsSync(projectBin)) return projectBin;
+
   let sourcePath: string | null = null;
 
   try {
@@ -98,10 +102,8 @@ function resolveYtDlpBinary(): string {
   // can guarantee chmod 755 and execution is permitted.
   if (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME) {
     const tmpBin = path.join(tmpdir(), fileName);
-    if (!existsSync(tmpBin)) {
-      copyFileSync(sourcePath, tmpBin);
-      chmodSync(tmpBin, 0o755);
-    }
+    copyFileSync(sourcePath, tmpBin);
+    chmodSync(tmpBin, 0o755);
     return tmpBin;
   }
 
