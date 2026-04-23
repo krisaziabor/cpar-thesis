@@ -605,7 +605,7 @@ function AddItemPageInner({
     }));
   }
 
-  const canContinueDetails = !!draft.title.trim() && !!draft.creator.trim();
+  const canContinueDetails = !!draft.title.trim() && !!draft.creator.trim() && !!draft.mediaDate.trim();
   const recordingQueue = useMemo<QueueItem[]>(() => queuedItems, [queuedItems]);
   const activeQueueItem = recordingQueue[recordIndex];
   const activeRecording = recordings[recordIndex] ?? { blob: null, existingUrl: null };
@@ -789,7 +789,7 @@ function AddItemPageInner({
 
     if (!nextDraft.title.trim()) nextDraft.title = "Untitled record";
     if (!nextDraft.creator.trim()) nextDraft.creator = "Unknown creator";
-    if (!nextDraft.mediaDate.trim()) nextDraft.mediaDate = inferMediaDate(nextDraft.sourceMetadata) || "Unknown";
+    if (!nextDraft.mediaDate.trim()) nextDraft.mediaDate = inferMediaDate(nextDraft.sourceMetadata) || "";
     if (!nextDraft.link.trim() && nextDraft.url.trim()) nextDraft.link = nextDraft.url.trim();
 
     return toQueueItem(nextDraft);
@@ -2206,7 +2206,7 @@ function AddItemPageInner({
                   </p>
                 </div>
               </Field>
-              <Field label="Original media date">
+              <Field label="Original media date" required>
                 <div className="grid grid-cols-[1fr_auto] gap-2">
                   <input
                     type="text"
