@@ -1279,10 +1279,18 @@ function AddItemPageInner({
         if (shouldMirrorVideo) {
           try {
             const token = await currentUser.getIdToken();
-            const { downloadUrl, thumbnailUrl: posterUrl } = await mirrorVideo(pageUrl, itemId, token);
-            await updateItem(itemId, { media_url: downloadUrl });
+            const { downloadUrl, thumbnailUrl: posterUrl, fallback } = await mirrorVideo(pageUrl, itemId, token);
+            // Fallback path: server couldn't download (e.g. Instagram auth).
+            // Keep the item as a link — don't overwrite media_url with undefined,
+            // just persist any thumbnail we recovered from the source page.
+            if (downloadUrl) {
+              await updateItem(itemId, { media_url: downloadUrl });
+            }
             if (posterUrl && !persistedThumbnail) {
               await updateItem(itemId, { thumbnail_url: posterUrl });
+            }
+            if (fallback) {
+              console.info("[add] video stored as link (download unavailable)");
             }
           } catch {
             // Non-fatal

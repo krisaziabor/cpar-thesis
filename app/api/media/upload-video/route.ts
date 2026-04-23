@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { firebaseStorageMultipartUpload } from "@/lib/server/firebase-storage-multipart";
 import { extractVideoPosterJpeg } from "@/lib/metadata/video-poster";
+import { VideoAuthError, probeMediaPageWithYtDlp } from "@/lib/metadata/video-extract";
 
 export const runtime = "nodejs";
 // Allow up to 5 minutes: video download + Firebase Storage upload can be slow
@@ -83,11 +84,30 @@ export async function POST(request: NextRequest) {
       ext = videoExtFromContentType(contentType);
     } else {
       const { downloadVideo } = await import("@/lib/metadata/video-extract");
-      const downloaded = await downloadVideo(url);
-      videoBuffer = downloaded.buffer;
-      contentType = downloaded.contentType;
-      ext = downloaded.ext;
-      if (downloaded.totalMediaCount) totalMediaCount = downloaded.totalMediaCount;
+      try {
+        const downloaded = await downloadVideo(url);
+        videoBuffer = downloaded.buffer;
+        contentType = downloaded.contentType;
+        ext = downloaded.ext;
+        if (downloaded.totalMediaCount) totalMediaCount = downloaded.totalMediaCount;
+      } catch (err) {
+        // Graceful fallback: when the platform requires auth we can't provide
+        // (expired operator cookies, IG rate-limit on datacenter IP, etc.),
+        // save the item as a link with whatever thumbnail we can grab instead
+        // of hard-failing the upload.
+        if (err instanceof VideoAuthError) {
+          const fallback = await saveAsLink({
+            url,
+            itemId,
+            idToken,
+            bucket,
+            appId,
+            reason: err.message,
+          });
+          return NextResponse.json(fallback);
+        }
+        throw err;
+      }
     }
 
     const storagePath = `media/items/${itemId}.${ext}`;
@@ -131,4 +151,58 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
+}
+
+/**
+ * Fallback when we can't download the video: upload just a poster image
+ * (from the page's public metadata / oEmbed) so the item still has a
+ * thumbnail, and return the original URL as `sourceUrl`. The client stores
+ * the item as a link card instead of a self-hosted file.
+ */
+async function saveAsLink(args: {
+  url: string;
+  itemId: string;
+  idToken: string;
+  bucket: string;
+  appId: string | undefined;
+  reason: string;
+}): Promise<{
+  fallback: true;
+  sourceUrl: string;
+  thumbnailUrl?: string;
+  reason: string;
+}> {
+  const { url, itemId, idToken, bucket, appId, reason } = args;
+
+  let thumbnailUrl: string | undefined;
+  try {
+    const probe = await probeMediaPageWithYtDlp(url);
+    const remoteThumb = probe?.thumbnailUrl;
+    if (remoteThumb) {
+      const res = await fetch(remoteThumb);
+      if (res.ok) {
+        const bytes = Buffer.from(await res.arrayBuffer());
+        const ct = res.headers.get("content-type") ?? "image/jpeg";
+        const thumbPath = `thumbnails/items/${itemId}.jpg`;
+        const upload = await firebaseStorageMultipartUpload({
+          bucket,
+          idToken,
+          storagePath: thumbPath,
+          bytes,
+          contentType: ct,
+          appId,
+        });
+        thumbnailUrl = upload.downloadUrl;
+      }
+    }
+  } catch (err) {
+    console.warn("[upload-video] link-fallback thumbnail skipped:", err);
+  }
+
+  return {
+    fallback: true,
+    sourceUrl: url,
+    ...(thumbnailUrl ? { thumbnailUrl } : {}),
+    reason,
+  };
 }
