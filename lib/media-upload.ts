@@ -115,11 +115,22 @@ export async function uploadBase64Thumbnail(dataUri: string, itemId: string): Pr
 }
 
 export interface MirrorVideoResult {
-  downloadUrl: string;
-  /** Server-generated poster (Firebase Storage) when ffmpeg succeeded. */
+  /** Firebase Storage URL of the downloaded video. Undefined when the server
+   * couldn't download (e.g. Instagram login required) and returned a link
+   * fallback — the caller should store `sourceUrl` as the item's primary URL. */
+  downloadUrl?: string;
+  /** Server-generated poster (Firebase Storage) when ffmpeg succeeded, or
+   * a fetched thumbnail from the source page on fallback. */
   thumbnailUrl?: string;
   /** Set when the source post contained more than one media item; only the first was saved. */
   totalMediaCount?: number;
+  /** True when the server couldn't download the video and returned link-only
+   * metadata (sourceUrl + optional thumbnail). */
+  fallback?: boolean;
+  /** Original URL to display as a link when `fallback` is true. */
+  sourceUrl?: string;
+  /** Human-readable reason the download was skipped (auth, rate-limit, etc.). */
+  reason?: string;
 }
 
 export async function mirrorVideo(
@@ -143,13 +154,19 @@ export async function mirrorVideo(
   }
 
   const data = await res.json() as {
-    downloadUrl: string;
+    downloadUrl?: string;
     thumbnailUrl?: string;
     totalMediaCount?: number;
+    fallback?: boolean;
+    sourceUrl?: string;
+    reason?: string;
   };
   return {
     downloadUrl: data.downloadUrl,
     thumbnailUrl: data.thumbnailUrl,
     totalMediaCount: data.totalMediaCount,
+    fallback: data.fallback,
+    sourceUrl: data.sourceUrl,
+    reason: data.reason,
   };
 }

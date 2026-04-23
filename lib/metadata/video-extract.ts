@@ -102,16 +102,26 @@ function hasCookies(): boolean {
   return Boolean(resolveCookieFile() || process.env.YT_DLP_COOKIES_FROM_BROWSER?.trim());
 }
 
-function authErrorMessage(url: string, stderr: string): string {
-  const host = (() => {
-    try { return new URL(url).hostname.replace(/^www\./, ""); } catch { return "this site"; }
-  })();
-  return (
-    `${host} requires an authenticated session to download. ` +
-    `Export cookies from a logged-in browser (Netscape format) and set ` +
-    `YT_DLP_COOKIES_CONTENT (raw file contents) or YT_DLP_COOKIES_FILE (path). ` +
-    `Original yt-dlp error: ${stderr.slice(0, 200)}`
-  );
+/**
+ * Thrown when a site needs auth (or better cookies) and yt-dlp can't download.
+ * Callers should catch this and fall back to link-only storage.
+ */
+export class VideoAuthError extends Error {
+  readonly host: string;
+  readonly stderr: string;
+  constructor(url: string, stderr: string) {
+    const host = (() => {
+      try { return new URL(url).hostname.replace(/^www\./, ""); } catch { return "this site"; }
+    })();
+    super(
+      `${host} requires an authenticated session to download. ` +
+      `The operator cookies may be missing, expired, or rate-limited. ` +
+      `Original yt-dlp error: ${stderr.slice(0, 200)}`
+    );
+    this.name = "VideoAuthError";
+    this.host = host;
+    this.stderr = stderr;
+  }
 }
 
 function resolveYtDlpBinary(): string {
@@ -370,7 +380,7 @@ export async function downloadVideo(url: string): Promise<DownloadedVideo> {
   const binaryPath = resolveYtDlpBinary();
 
   if (requiresAuth(url) && !hasCookies()) {
-    throw new Error(authErrorMessage(url, "no cookies configured"));
+    throw new VideoAuthError(url, "no cookies configured");
   }
 
   // Probe first to get ext + size without downloading
@@ -394,7 +404,7 @@ export async function downloadVideo(url: string): Promise<DownloadedVideo> {
       ? String((err as { stderr: unknown }).stderr ?? err.message)
       : String(err);
     if (/login required|rate-limit|not available|cookies/i.test(stderr) && requiresAuth(url)) {
-      throw new Error(authErrorMessage(url, stderr));
+      throw new VideoAuthError(url, stderr);
     }
     throw err;
   }
@@ -435,7 +445,7 @@ export async function downloadVideo(url: string): Promise<DownloadedVideo> {
         ? String((err as { stderr: unknown }).stderr ?? err.message)
         : String(err);
       if (/login required|rate-limit|not available|cookies/i.test(stderr) && requiresAuth(url)) {
-        throw new Error(authErrorMessage(url, stderr));
+        throw new VideoAuthError(url, stderr);
       }
       throw err;
     }

@@ -100,10 +100,23 @@ export default function MetadataLab() {
         thumbnailUrl?: string;
         error?: string;
         totalMediaCount?: number;
+        fallback?: boolean;
+        sourceUrl?: string;
+        reason?: string;
       };
       if (!res.ok || data.error) {
         setMediaLabItemId(null);
         setMediaError(data.error ?? `HTTP ${res.status}`);
+        setMediaStatus("error");
+      } else if (data.fallback) {
+        // Server couldn't download (e.g. Instagram login-required). The item
+        // would be saved as a link with just the thumbnail — surface that here.
+        setMediaFileUrl(null);
+        setMediaStoragePath(null);
+        setMediaPosterUrl(data.thumbnailUrl ?? null);
+        setMediaError(
+          `Saved as link (download unavailable): ${data.reason ?? "unknown reason"}`
+        );
         setMediaStatus("error");
       } else {
         setMediaFileUrl(data.downloadUrl ?? null);

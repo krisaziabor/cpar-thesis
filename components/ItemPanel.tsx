@@ -1206,7 +1206,7 @@ export default function ItemPanel({
 
             {/* Transcript / response viewer — flex-1 centered */}
             <div className="relative min-h-0 flex-1">
-              <div className="absolute inset-0 flex items-center justify-center px-6">
+              <div className="absolute inset-0 flex items-center justify-center px-10">
                 <div className="w-full max-w-sm">
                   <AnimatePresence mode="wait" initial={false}>
                     {activeListening.kind === "narrative" ? (
