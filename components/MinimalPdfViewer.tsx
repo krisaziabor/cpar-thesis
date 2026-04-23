@@ -55,11 +55,13 @@ export default function MinimalPdfViewer({ url, title, maxCanvasHeight, maxWidth
       try {
         const pdfjs = await import("pdfjs-dist");
         const pdfjsLib = pdfjs as unknown as {
+          version?: string;
           getDocument?: (source: { data: Uint8Array; disableWorker: boolean }) => {
             promise: Promise<PdfDocumentProxy>;
           };
           GlobalWorkerOptions?: { workerSrc: string };
           default?: {
+            version?: string;
             getDocument?: (source: { data: Uint8Array; disableWorker: boolean }) => {
               promise: Promise<PdfDocumentProxy>;
             };
@@ -69,9 +71,12 @@ export default function MinimalPdfViewer({ url, title, maxCanvasHeight, maxWidth
 
         const globalWorkerOptions =
           pdfjsLib.GlobalWorkerOptions ?? pdfjsLib.default?.GlobalWorkerOptions;
-        if (globalWorkerOptions && !globalWorkerOptions.workerSrc) {
-          globalWorkerOptions.workerSrc =
-            "https://unpkg.com/pdfjs-dist@5.5.207/build/pdf.worker.min.mjs";
+        // Pin the worker URL to the exact installed version. Hardcoding it
+        // produces the "API version X does not match Worker version Y" error
+        // whenever pdfjs-dist is bumped in package.json.
+        const pdfjsVersion = pdfjsLib.version ?? pdfjsLib.default?.version;
+        if (globalWorkerOptions && !globalWorkerOptions.workerSrc && pdfjsVersion) {
+          globalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsVersion}/build/pdf.worker.min.mjs`;
         }
 
         const getDocument =
