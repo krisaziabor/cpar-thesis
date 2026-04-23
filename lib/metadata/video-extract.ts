@@ -59,8 +59,13 @@ function resolveCookieFile(): string | undefined {
     if (materializedCookiePath && existsSync(materializedCookiePath)) {
       return materializedCookiePath;
     }
+    // Chrome-exported cookies.txt often has CRLF line endings and a trailing
+    // newline. yt-dlp's Netscape parser is picky about both — normalize to LF
+    // and ensure exactly one trailing newline to avoid silent auth failures
+    // that look like "cookies are set but login still required".
+    const normalized = content.replace(/\r\n?/g, "\n").replace(/\n*$/, "\n");
     const target = path.join(tmpdir(), "yt-dlp-cookies.txt");
-    writeFileSync(target, content, { mode: 0o600 });
+    writeFileSync(target, normalized, { mode: 0o600 });
     materializedCookiePath = target;
     return target;
   }

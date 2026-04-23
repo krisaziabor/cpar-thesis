@@ -26,7 +26,7 @@ import { DEFAULT_ITEM_TYPES, ensureItemTypeExists, subscribeToItemTypes } from "
 import { hasKanonSave, saveToKanon, subscribeToUserKanon } from "@/lib/kanon";
 import { isDownloadableVideoPageUrl } from "@/lib/metadata/classify";
 import type { MetadataResult, SourceMetadata, SourceType } from "@/lib/metadata/types";
-import { mirrorPreviewAudio, mirrorThumbnail, mirrorVideo, uploadBase64Thumbnail } from "@/lib/media-upload";
+import { deleteScratchUpload, mirrorPreviewAudio, mirrorThumbnail, mirrorVideo, uploadBase64Thumbnail, uploadScratchFile } from "@/lib/media-upload";
 import type { Item, KanonSave } from "@/lib/types";
 import { EASE_OUT, MOTION_DURATION } from "@/lib/motion";
 import { useSuppressFloatingNavWhile } from "@/lib/floating-nav-suppress-context";
@@ -731,12 +731,30 @@ function AddItemPageInner({
     const hasFile = !!sourceDraft.fileFile;
     let nextDraft: ItemDraft = { ...sourceDraft };
 
+    // Vercel caps POST bodies at ~4.5 MB. For files near/over that (PDFs most
+    // commonly), upload to a scratch Storage path first so the server can
+    // fetch by URL instead of receiving the raw bytes.
+    const VERCEL_BODY_LIMIT = 4 * 1024 * 1024;
+    let scratchPath: string | null = null;
+
     try {
       let res: Response;
       if (hasFile && sourceDraft.fileFile) {
-        const fd = new FormData();
-        fd.append("file", sourceDraft.fileFile);
-        res = await fetch("/api/metadata", { method: "POST", body: fd });
+        const file = sourceDraft.fileFile;
+        const ownerKey = user?.email ?? user?.uid ?? "anon";
+        if (file.size > VERCEL_BODY_LIMIT) {
+          const { url, storagePath } = await uploadScratchFile(file, ownerKey);
+          scratchPath = storagePath;
+          res = await fetch("/api/metadata", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ url }),
+          });
+        } else {
+          const fd = new FormData();
+          fd.append("file", file);
+          res = await fetch("/api/metadata", { method: "POST", body: fd });
+        }
       } else {
         res = await fetch("/api/metadata", {
           method: "POST",
@@ -762,6 +780,11 @@ function AddItemPageInner({
       }
     } catch {
       // Non-fatal: keep user-provided source and fallback metadata fields.
+    } finally {
+      // Scratch uploads are only needed for the metadata round-trip; the real
+      // file will be uploaded again to its permanent path when the item is
+      // created. Clean up so they don't pile up in Storage.
+      if (scratchPath) void deleteScratchUpload(scratchPath);
     }
 
     if (!nextDraft.title.trim()) nextDraft.title = "Untitled record";
