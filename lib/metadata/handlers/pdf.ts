@@ -1,3 +1,4 @@
+import Anthropic from "@anthropic-ai/sdk";
 import type { CanonItemMetadata, SourceMetadata } from "../types";
 
 interface PdfData {
@@ -9,6 +10,56 @@ interface PdfData {
   fullText: string;
 }
 
+interface LLMExtracted {
+  title?: string;
+  author?: string;
+}
+
+async function extractMetadataWithLLM(
+  fullText: string,
+  filename: string
+): Promise<LLMExtracted> {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) return {};
+
+  const snippet = fullText.slice(0, 4_000).trim();
+  if (!snippet) return {};
+
+  try {
+    const client = new Anthropic({ apiKey });
+    const response = await client.messages.create({
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 256,
+      system:
+        "You are a bibliographic metadata extractor. Given the opening text of a document, identify its title and author/creator. Respond with ONLY a JSON object — no prose. Omit a field entirely if you cannot determine it confidently. Schema: { \"title\": \"string\", \"author\": \"string\" }",
+      messages: [
+        {
+          role: "user",
+          content: `Filename: ${filename}\n\nDocument text (first ~4000 chars):\n${snippet}`,
+        },
+      ],
+    });
+
+    const raw = response.content[0]?.type === "text" ? response.content[0].text : "";
+    const jsonMatch = raw.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) return {};
+    const parsed = JSON.parse(jsonMatch[0]) as Record<string, unknown>;
+    return {
+      title: typeof parsed.title === "string" && parsed.title.trim() ? parsed.title.trim().slice(0, 300) : undefined,
+      author: typeof parsed.author === "string" && parsed.author.trim() ? parsed.author.trim().slice(0, 200) : undefined,
+    };
+  } catch {
+    return {};
+  }
+}
+
+function looksLikeGarbageTitle(title: string | undefined): boolean {
+  if (!title) return true;
+  if (title.includes("%") || title.includes("firebasestorage") || title.includes("scratch/")) return true;
+  if (title.length > 250) return true;
+  return false;
+}
+
 export async function fetchPdfMetadata(
   buffer: Buffer,
   filename: string
@@ -18,9 +69,18 @@ export async function fetchPdfMetadata(
     renderPdfFirstPageDataUri(buffer),
   ]);
 
-  const title =
-    pdfData.title || filename.replace(/\.pdf$/i, "").replace(/[-_]/g, " ") || "Untitled PDF";
-  const creator = pdfData.author || "Unknown";
+  const rawTitle = looksLikeGarbageTitle(pdfData.title) ? undefined : pdfData.title;
+  const rawAuthor = pdfData.author;
+
+  // Use LLM to fill in missing title/author from the document body text.
+  let llm: LLMExtracted = {};
+  if (!rawTitle || !rawAuthor) {
+    llm = await extractMetadataWithLLM(pdfData.fullText, filename);
+  }
+
+  const filenameTitle = filename.replace(/\.pdf$/i, "").replace(/[-_]/g, " ");
+  const title = rawTitle || llm.title || filenameTitle || "Untitled PDF";
+  const creator = rawAuthor || llm.author || "Unknown";
 
   const tags = pdfData.keywords
     ? pdfData.keywords

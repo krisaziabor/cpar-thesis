@@ -605,7 +605,7 @@ function AddItemPageInner({
     }));
   }
 
-  const canContinueDetails = !!draft.title.trim() && !!draft.creator.trim() && !!draft.mediaDate.trim();
+  const canContinueDetails = !!draft.title.trim() && !!draft.creator.trim();
   const recordingQueue = useMemo<QueueItem[]>(() => queuedItems, [queuedItems]);
   const activeQueueItem = recordingQueue[recordIndex];
   const activeRecording = recordings[recordIndex] ?? { blob: null, existingUrl: null };
@@ -2206,7 +2206,7 @@ function AddItemPageInner({
                   </p>
                 </div>
               </Field>
-              <Field label="Original media date" required>
+              <Field label="Original media date">
                 <div className="grid grid-cols-[1fr_auto] gap-2">
                   <input
                     type="text"

@@ -47,8 +47,6 @@ export default function ItemThumbnailNode({ data }: NodeProps<ItemThumbnailNodeT
   const duration = isFirst ? 0.5 : 0.28;
   const yOffset  = isFirst ? 14 : 6;
   const targetOpacity = isConnectSelecting ? (isSelected ? 1 : 0.5) : 1;
-  const createdAtLabel = formatCreatedAt(item.created_at);
-
   return (
     <motion.div
       className="group cursor-pointer"
@@ -110,7 +108,7 @@ export default function ItemThumbnailNode({ data }: NodeProps<ItemThumbnailNodeT
       {/* Meta/title — always reserves space below, text fades in on hover */}
       <div className="flex flex-col items-start gap-0.5 pt-2.5 px-0.5">
         <p className="font-sans text-[11px] text-zinc-500 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
-          {createdAtLabel}
+          {item.creator}
         </p>
         <p className="font-lector text-[11px] text-zinc-300 leading-tight break-words opacity-0 group-hover:opacity-100 transition-opacity duration-150">
           {item.title}
@@ -118,14 +116,4 @@ export default function ItemThumbnailNode({ data }: NodeProps<ItemThumbnailNodeT
       </div>
     </motion.div>
   );
-}
-
-function formatCreatedAt(createdAt: unknown): string {
-  if (createdAt && typeof createdAt === "object" && "toDate" in createdAt) {
-    return (createdAt as { toDate: () => Date }).toDate().toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-    });
-  }
-  return "";
 }
