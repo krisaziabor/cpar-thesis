@@ -606,6 +606,13 @@ function AddItemPageInner({
   }
 
   const canContinueDetails = !!draft.title.trim() && !!draft.creator.trim() && !!draft.mediaDate.trim();
+  const continueDetailsHint = !draft.title.trim()
+    ? "A title is required."
+    : !draft.creator.trim()
+    ? "An author or creator is required."
+    : !draft.mediaDate.trim()
+    ? "A media date is required to continue."
+    : null;
   const recordingQueue = useMemo<QueueItem[]>(() => queuedItems, [queuedItems]);
   const activeQueueItem = recordingQueue[recordIndex];
   const activeRecording = recordings[recordIndex] ?? { blob: null, existingUrl: null };
@@ -2316,34 +2323,41 @@ function AddItemPageInner({
             </Field>
 
             <div className="flex items-center gap-3 pb-5">
-              <button
-                onClick={() => {
-                  if (!canContinueDetails) return;
-                  setQueuedItems((prev) =>
-                    prev.map((item, idx) =>
-                      idx === detailsIndex
-                        ? {
-                            ...item,
-                            ...toQueueItem(draft),
-                            id: item.id,
-                          }
-                        : item
-                    )
-                  );
-                  if (detailsIndex < queuedItems.length - 1) {
-                    const nextIndex = detailsIndex + 1;
-                    setDetailsIndex(nextIndex);
-                    loadQueuedItemIntoDraft(queuedItems[nextIndex]);
-                    return;
-                  }
-                  setRecordIndex(0);
-                  setStep("record");
-                }}
-                disabled={!canContinueDetails}
-                className="font-sans text-sm text-zinc-100 transition-colors duration-150 ease-[ease] hover:text-white disabled:opacity-40"
-              >
-                {detailsIndex < queuedItems.length - 1 ? "Next record" : "Add narrative"}
-              </button>
+              <div className="group relative">
+                <button
+                  onClick={() => {
+                    if (!canContinueDetails) return;
+                    setQueuedItems((prev) =>
+                      prev.map((item, idx) =>
+                        idx === detailsIndex
+                          ? {
+                              ...item,
+                              ...toQueueItem(draft),
+                              id: item.id,
+                            }
+                          : item
+                      )
+                    );
+                    if (detailsIndex < queuedItems.length - 1) {
+                      const nextIndex = detailsIndex + 1;
+                      setDetailsIndex(nextIndex);
+                      loadQueuedItemIntoDraft(queuedItems[nextIndex]);
+                      return;
+                    }
+                    setRecordIndex(0);
+                    setStep("record");
+                  }}
+                  disabled={!canContinueDetails}
+                  className="font-sans text-sm text-zinc-100 transition-colors duration-150 ease-[ease] hover:text-white disabled:opacity-40"
+                >
+                  {detailsIndex < queuedItems.length - 1 ? "Next record" : "Add narrative"}
+                </button>
+                {continueDetailsHint && (
+                  <div className="pointer-events-none absolute bottom-[calc(100%+6px)] left-0 z-20 w-max max-w-[220px] rounded-md border border-zinc-800 bg-zinc-900/95 px-2.5 py-1.5 text-[11px] text-zinc-300 opacity-0 shadow-[0_8px_20px_rgba(0,0,0,0.45)] transition-opacity duration-150 group-hover:opacity-100">
+                    {continueDetailsHint}
+                  </div>
+                )}
+              </div>
             </div>
           </motion.section>
         )}
