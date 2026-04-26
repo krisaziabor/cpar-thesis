@@ -152,6 +152,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (loading || user) return;
     if (pathname === "/login") return;
     if (pathname === "/installation" || pathname.startsWith("/installation/")) return;
+    if (pathname === "/test-entrance") return;
     if (process.env.NODE_ENV === "development" && pathname === "/onboarding") return;
     router.replace("/login");
   }, [loading, user, pathname, router]);

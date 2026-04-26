@@ -13,6 +13,16 @@
   font-display: swap;
 }
 
+@font-face {
+  font-family: "LectorBold";
+  src: url("/fonts/LectorBold.woff2") format("woff2");
+  /* Must match the file’s OS/2 usWeightClass (700) — a 400 descriptor can
+     cause the face to be skipped and `serif` (e.g. Times) to render instead. */
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
 /* ─── Die Grotesk ─────────────────────────────────────────────────────────── */
 
 @font-face {

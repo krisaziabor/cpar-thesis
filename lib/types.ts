@@ -54,6 +54,10 @@ export interface Item {
   created_at: Timestamp;
   /** Rich metadata extracted at add-time; stored as a map on the item document */
   source_metadata?: SourceMetadata;
+  /** Installation-specific media overrides. Null/absent = use native media. */
+  installationMedia?: InstallationMedia | null;
+  /** When true, this record is included in the gallery three-panel projection. */
+  installationEligible?: boolean;
 }
 
 /** Connection: links 2+ items with required audio description */
@@ -142,6 +146,58 @@ export interface Feedback {
  * Each step is persisted independently so users can resume mid-flow.
  */
 export type OnboardingStep = "accessibility" | "profile_setup" | "media_opt_in" | "book_text" | "contact" | "avatar_colors" | "complete";
+
+// ── Installation media ────────────────────────────────────────────────────────
+
+export interface InstallationPdfPage {
+  pageIndex: number;    // 0-based
+  imageUrl: string;     // Firebase Storage download URL for the rendered PNG
+  storagePath: string;  // We always own these; always cleaned up on removal
+  wordCount: number;
+}
+
+export interface InstallationPdfData {
+  sourceUrl: string;
+  pageCount: number;
+  totalWordCount: number;
+  pages: InstallationPdfPage[];
+  renderedAt: Timestamp;
+}
+
+/** A file assigned to play when this record is active in the installation. */
+export interface InstallationMediaFile {
+  fileUrl: string;
+  fileType: "audio" | "video" | "image" | "pdf";
+  fileName: string;
+  fileSize: number;
+  /** null when referencing an existing URL we don't own (never delete from Storage). */
+  storagePath: string | null;
+  /** true if we uploaded this file to Storage and own it; false if linking to existing URL. */
+  isOwnedFile: boolean;
+  uploadedAt: Timestamp;
+  /** Present when fileType === "pdf". Page images are always owned and cleaned up on removal. */
+  pdfData?: InstallationPdfData;
+}
+
+/** How the panel's visual anchor is sourced. */
+export interface InstallationMediaThumbnail {
+  source: "native" | "custom";
+  /** Only present when source === 'custom' */
+  fileUrl?: string;
+  storagePath?: string;
+  fileName?: string;
+  uploadedAt?: Timestamp;
+}
+
+/**
+ * Installation-specific media overrides for the three-panel projection.
+ * Stored under `installationMedia` on an Item doc. Null until first assignment.
+ * The installation client reads this and falls back to native media when null.
+ */
+export interface InstallationMedia {
+  file: InstallationMediaFile | null;
+  thumbnail: InstallationMediaThumbnail | null;
+}
 
 /** Word-level timestamp for synced audio transcripts. */
 export interface TimedWord {
