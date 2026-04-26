@@ -8,9 +8,9 @@ import type { Item, Connection } from "@/lib/types";
 // ── Tunable constants ─────────────────────────────────────────────────────────
 
 /** Delay between left panel start and center panel start (ms). */
-export const STAGGER_MS = 10_000;
+export const STAGGER_MS = 45_000;
 /** Random ± applied to each stagger delay for organic feel (ms). */
-export const STAGGER_JITTER_MS = 1_500;
+export const STAGGER_JITTER_MS = 5_000;
 /** How long an image holds before the media phase ends (ms). */
 export const IMAGE_HOLD_DURATION_MS = 60_000;
 /** How long a thumbnail-only panel holds after testimony (ms). */
@@ -30,21 +30,22 @@ export const CREATOR_REVEAL_MS = 1_500;
 /** Crossfade duration between PDF pages (ms). */
 export const PDF_PAGE_CROSSFADE_MS = 600;
 /** Seconds spent on each PDF page based on word count — (wordCount / wordsPerMin) * 60. */
-export const PDF_WORDS_PER_MINUTE = 150;
+export const PDF_WORDS_PER_MINUTE = 300;
 /** Minimum seconds to show a PDF page, even if it has very few words. */
-export const PDF_MIN_PAGE_DWELL_S = 3;
+export const PDF_MIN_PAGE_DWELL_S = 2;
 
 // ── Phase types ───────────────────────────────────────────────────────────────
 
 export type PanelPhase =
-  | "idle"            // blank white, waiting
-  | "synergyHolding"  // idle but blocking for synergy sequence
-  | "entrance"        // EntranceAnimation flashing title
-  | "creatorReveal"   // settled title + creator fading in
-  | "testimony"       // word-by-word transcript + audio
-  | "mediaFlash"      // quick title flash before media
-  | "media"           // media playing
-  | "outro";          // brief settle before idle
+  | "idle"              // blank white, waiting
+  | "synergyHolding"    // idle but blocking for synergy sequence
+  | "entrance"          // EntranceAnimation flashing title
+  | "creatorReveal"     // settled title + creator fading in
+  | "testimony"         // word-by-word transcript + audio
+  | "mediaFlash"        // quick title flash before media
+  | "media"             // media playing
+  | "synergyMediaHold"  // dimmed media hold while next synergy panel plays
+  | "outro";            // brief settle before idle
 
 export interface PanelState {
   phase: PanelPhase;
@@ -64,8 +65,10 @@ export interface ConnectionData {
 export type SynergyStatus =
   | "none"             // no synergy pending
   | "waiting"          // detected, panels finishing current records
-  | "sequencing"       // running the sequential playback
-  | "connectionAudio"; // playing the connection audio after all panels complete
+  | "intro"            // sequential title flash before testimonies begin
+  | "testimonies"      // testimonies playing sequentially (entrance → testimony → outro for each)
+  | "media"            // media playing sequentially after all testimonies done
+  | "connectionAudio"; // playing the connection audio after all media done
 
 export interface SynergyState {
   status: SynergyStatus;

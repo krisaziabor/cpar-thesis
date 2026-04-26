@@ -1,7 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { collection, query, where, getDocs, doc, getDoc } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 import type { InstallationMediaFile } from "@/lib/types";
 import {
   IMAGE_HOLD_DURATION_MS,
@@ -14,8 +16,12 @@ import type { InstallationAudio } from "@/lib/installation/audio";
 interface Props {
   file: InstallationMediaFile | null;
   thumbnailUrl: string | null;
+  title: string;
+  creator: string;
+  addedBy: string;
   panelIndex: 0 | 1 | 2;
   audio: InstallationAudio | null;
+  dimmed?: boolean;
   onEnded: () => void;
   onError: () => void;
 }
@@ -23,7 +29,7 @@ interface Props {
 // ── PDF page cycler ───────────────────────────────────────────────────────────
 
 function PdfDisplay({ file, onEnded }: { file: InstallationMediaFile; onEnded: () => void }) {
-  const pages = file.pdfData?.pages ?? [];
+  const pages = useMemo(() => file.pdfData?.pages ?? [], [file]);
   const [pageIdx, setPageIdx] = useState(0);
   const onEndedRef = useRef(onEnded);
   onEndedRef.current = onEnded;
@@ -31,6 +37,7 @@ function PdfDisplay({ file, onEnded }: { file: InstallationMediaFile; onEnded: (
   useEffect(() => {
     if (pages.length === 0) { onEndedRef.current(); return; }
     const dwell = pdfPageDwellMs(pages[pageIdx]?.wordCount ?? 0);
+    console.log(`[Kanon] PDF page ${pageIdx + 1}/${pages.length} | wordCount=${pages[pageIdx]?.wordCount ?? 0} | dwell=${dwell}ms`);
     const timer = setTimeout(() => {
       if (pageIdx < pages.length - 1) {
         setPageIdx((p) => p + 1);
@@ -61,11 +68,117 @@ function PdfDisplay({ file, onEnded }: { file: InstallationMediaFile; onEnded: (
   );
 }
 
+// ── Audio text display (replaces thumbnail for mp3 files) ─────────────────────
+
+function firstNameFallback(nameOrEmail: string): string {
+  if (nameOrEmail.includes("@")) {
+    const local = nameOrEmail.split("@")[0];
+    const first = local.split(/[._-]/)[0];
+    return first.charAt(0).toUpperCase() + first.slice(1).toLowerCase();
+  }
+  return nameOrEmail.split(/\s+/)[0];
+}
+
+function AudioTextDisplay({
+  src,
+  title,
+  creator,
+  addedBy,
+  autoPlay = true,
+  onEnded,
+  onError,
+}: {
+  src: string;
+  title: string;
+  creator: string;
+  addedBy: string;
+  autoPlay?: boolean;
+  onEnded: () => void;
+  onError: () => void;
+}) {
+  const onEndedRef = useRef(onEnded);
+  const onErrorRef = useRef(onError);
+  onEndedRef.current = onEnded;
+  onErrorRef.current = onError;
+
+  const [resolvedName, setResolvedName] = useState(() => firstNameFallback(addedBy));
+
+  useEffect(() => {
+    if (!db || !addedBy) return;
+    let cancelled = false;
+    async function resolve() {
+      if (!db) return;
+      try {
+        if (addedBy.includes("@")) {
+          const snap = await getDocs(query(collection(db, "users"), where("email", "==", addedBy)));
+          if (!cancelled && !snap.empty) {
+            const name = snap.docs[0].data().name as string | undefined;
+            if (name) setResolvedName(name.split(/\s+/)[0]);
+          }
+        } else {
+          const snap = await getDoc(doc(db, "users", addedBy));
+          if (!cancelled && snap.exists()) {
+            const name = snap.data().name as string | undefined;
+            if (name) setResolvedName(name.split(/\s+/)[0]);
+          }
+        }
+      } catch { /* keep fallback */ }
+    }
+    void resolve();
+    return () => { cancelled = true; };
+  }, [addedBy]);
+
+  // Random non-overlapping positions for title, creator, name — computed once on mount
+  const positions = useMemo(() => {
+    const placed: Array<[number, number]> = [];
+    return [title, creator, resolvedName].map(() => {
+      let top: number, left: number, att = 0;
+      do {
+        top = 14 + Math.random() * 58;
+        left = 8 + Math.random() * 55;
+        att++;
+      } while (att < 30 && placed.some(([t, l]) => Math.abs(t - top) < 22 && Math.abs(l - left) < 22));
+      placed.push([top, left]);
+      return { top: `${top.toFixed(1)}%`, left: `${left.toFixed(1)}%` };
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // computed once on mount
+
+  const textStyle: React.CSSProperties = {
+    fontFamily: '"DieGrotesk", sans-serif',
+    fontSize: "clamp(1.1rem, 2vw, 1.6rem)",
+    letterSpacing: "-0.03em",
+    color: "black",
+    whiteSpace: "nowrap",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    maxWidth: "86%",
+    display: "block",
+  };
+
+  return (
+    <div className="relative w-full h-full">
+      {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+      <audio
+        src={src}
+        autoPlay={autoPlay}
+        onEnded={autoPlay ? () => onEndedRef.current() : undefined}
+        onError={() => onErrorRef.current()}
+        className="hidden"
+      />
+      {[title, creator, resolvedName].map((text, i) => (
+        <div key={i} className="absolute" style={positions[i]}>
+          <span style={textStyle}>{text}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 
-export function PanelMedia({ file, thumbnailUrl, panelIndex, audio, onEnded, onError }: Props) {
+export function PanelMedia({ file, thumbnailUrl, title, creator, addedBy, panelIndex, audio, dimmed, onEnded, onError }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const audioRef = useRef<HTMLAudioElement>(null);
   const onEndedRef = useRef(onEnded);
   const onErrorRef = useRef(onError);
   onEndedRef.current = onEnded;
@@ -74,15 +187,14 @@ export function PanelMedia({ file, thumbnailUrl, panelIndex, audio, onEnded, onE
   // ── No media: thumbnail hold ──
   if (!file) {
     if (thumbnailUrl) {
-      return <ThumbnailHold thumbnailUrl={thumbnailUrl} holdMs={THUMBNAIL_ONLY_HOLD_MS} onEnded={onEnded} />;
+      return <ThumbnailHold thumbnailUrl={thumbnailUrl} holdMs={dimmed ? 86_400_000 : THUMBNAIL_ONLY_HOLD_MS} onEnded={dimmed ? () => {} : onEnded} />;
     }
-    // No thumbnail either — shouldn't reach PanelMedia in this case, but be safe
-    setTimeout(onEnded, 100);
+    if (!dimmed) setTimeout(onEnded, 100);
     return null;
   }
 
   if (file.fileType === "pdf") {
-    return <PdfDisplay file={file} onEnded={onEnded} />;
+    return <PdfDisplay file={file} onEnded={dimmed ? () => {} : onEnded} />;
   }
 
   if (file.fileType === "video") {
@@ -95,8 +207,10 @@ export function PanelMedia({ file, thumbnailUrl, panelIndex, audio, onEnded, onE
           className="max-w-[70%] max-h-full object-contain"
           autoPlay
           playsInline
-          onEnded={() => onEndedRef.current()}
-          onError={() => onErrorRef.current()}
+          loop={!!dimmed}
+          muted={!!dimmed}
+          onEnded={dimmed ? undefined : () => onEndedRef.current()}
+          onError={dimmed ? undefined : () => onErrorRef.current()}
         />
       </div>
     );
@@ -104,10 +218,12 @@ export function PanelMedia({ file, thumbnailUrl, panelIndex, audio, onEnded, onE
 
   if (file.fileType === "audio") {
     return (
-      <AudioWithThumbnail
-        audioRef={audioRef}
+      <AudioTextDisplay
         src={file.fileUrl}
-        thumbnailUrl={thumbnailUrl}
+        title={title}
+        creator={creator}
+        addedBy={addedBy}
+        autoPlay={!dimmed}
         onEnded={onEnded}
         onError={onError}
       />
@@ -127,11 +243,11 @@ export function PanelMedia({ file, thumbnailUrl, panelIndex, audio, onEnded, onE
           src={file.fileUrl}
           alt=""
           className="max-w-[70%] max-h-full object-contain"
-          onLoad={() => {
+          onLoad={dimmed ? undefined : () => {
             const t = setTimeout(onEnded, IMAGE_HOLD_DURATION_MS);
             return () => clearTimeout(t);
           }}
-          onError={() => onErrorRef.current()}
+          onError={dimmed ? undefined : () => onErrorRef.current()}
         />
       </motion.div>
     );
@@ -164,65 +280,5 @@ function ThumbnailHold({ thumbnailUrl, holdMs, onEnded }: { thumbnailUrl: string
         className="max-w-[25%] object-contain"
       />
     </motion.div>
-  );
-}
-
-function AudioWithThumbnail({
-  audioRef,
-  src,
-  thumbnailUrl,
-  onEnded,
-  onError,
-}: {
-  audioRef: React.RefObject<HTMLAudioElement | null>;
-  src: string;
-  thumbnailUrl: string | null;
-  onEnded: () => void;
-  onError: () => void;
-}) {
-  const onEndedRef = useRef(onEnded);
-  const onErrorRef = useRef(onError);
-  onEndedRef.current = onEnded;
-  onErrorRef.current = onError;
-
-  // Randomly position thumbnail in one of 4 cells within the panel
-  const cellRef = useRef(Math.floor(Math.random() * 4));
-  const cell = cellRef.current;
-  // 2×2 grid: top-left, top-right, bottom-left, bottom-right
-  const positions = [
-    { top: "15%", left: "10%" },
-    { top: "15%", right: "10%" },
-    { bottom: "15%", left: "10%" },
-    { bottom: "15%", right: "10%" },
-  ] as const;
-  const pos = positions[cell];
-
-  return (
-    <div className="relative w-full h-full">
-      {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
-      <audio
-        ref={audioRef}
-        src={src}
-        autoPlay
-        onEnded={() => onEndedRef.current()}
-        onError={() => onErrorRef.current()}
-        className="hidden"
-      />
-      {thumbnailUrl ? (
-        <motion.div
-          className="absolute"
-          style={{ ...pos, maxWidth: "22%" }}
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.6 }}
-        >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={thumbnailUrl} alt="" className="w-full object-contain" />
-        </motion.div>
-      ) : (
-        // No thumbnail: show title in a cell (handled by panel, this is just the audio)
-        null
-      )}
-    </div>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   collection,
@@ -39,6 +39,8 @@ const PANEL_LABELS = ["left", "center", "right"] as const;
 // render and restart EntranceAnimation's useEffect (which has `resting` as a dep).
 const ENTRANCE_RESTING = { count: 1, sizeRange: [14, 14] } as const;
 const MEDIA_FLASH_RESTING = { count: 0, sizeRange: [14, 14] } as const;
+const SOLO_FLASH_RESTING = { count: 0, sizeRange: [7, 7] } as const;
+const SYNERGY_INTRO_RESTING = { count: 1, sizeRange: [14, 14] } as const;
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 
@@ -54,6 +56,10 @@ export default function InstallationDisplayPage() {
   const started = bootPhase === "running";
   const [showDebug, setShowDebug] = useState(false);
   const [masterTime, setMasterTime] = useState(0);
+  const [showSparseKanon, setShowSparseKanon] = useState(false);
+  const [sparseKanonKey, setSparseKanonKey] = useState(0);
+  const sparseKanonTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [soloFlashKey, setSoloFlashKey] = useState(0);
 
   // ── Panel + synergy state ─────────────────────────────────────────────────
   const [panels, setPanels] = useState<[PanelState, PanelState, PanelState]>(makeInitialPanels());
@@ -164,6 +170,17 @@ export default function InstallationDisplayPage() {
 
   const assignRecord = useCallback(
     (panelIndex: 0 | 1 | 2) => {
+      // Don't start new content while synergy is active (waiting or in-progress)
+      const activeSyn = synergyRef.current;
+      if (activeSyn && activeSyn.status !== "none") {
+        setPanel(panelIndex, (p) =>
+          p.phase === "idle"
+            ? { ...p, phase: "synergyHolding", record: null, phaseKey: p.phaseKey + 1 }
+            : p,
+        );
+        return;
+      }
+
       const bag = bagRef.current;
       if (!bag || bag.total === 0) return;
 
@@ -261,6 +278,65 @@ export default function InstallationDisplayPage() {
     return () => clearInterval(t);
   }, [started]);
 
+  // ── Sparse Kanon: random full-screen flash every 4-8 minutes ─────────────
+
+  const scheduleSparseKanon = useCallback(() => {
+    if (sparseKanonTimerRef.current) clearTimeout(sparseKanonTimerRef.current);
+    const delay = (240 + Math.random() * 240) * 1000; // 4-8 min
+    sparseKanonTimerRef.current = setTimeout(() => {
+      setSparseKanonKey((k) => k + 1);
+      setShowSparseKanon(true);
+    }, delay);
+  }, []);
+
+  useEffect(() => {
+    if (!started) return;
+    scheduleSparseKanon();
+    return () => { if (sparseKanonTimerRef.current) clearTimeout(sparseKanonTimerRef.current); };
+  }, [started, scheduleSparseKanon]);
+
+  // ── Synergy intro: advance through titles, then start testimonies ─────────
+
+  const onIntroTitleComplete = useCallback(() => {
+    const currentSyn = synergyRef.current;
+    if (!currentSyn || currentSyn.status !== "intro") return;
+    const next = currentSyn.nextRecordIdx + 1;
+    if (next < currentSyn.records.length) {
+      log(`Synergy intro: title ${next + 1}/${currentSyn.records.length}`);
+      setSynergyState({ ...currentSyn, nextRecordIdx: next });
+    } else {
+      log("Synergy intro complete — starting testimonies");
+      const firstRecord = currentSyn.records[0];
+      log(`Synergy testimony 1/${currentSyn.records.length}: panel left → "${firstRecord.title}"`);
+      setSynergyState({ ...currentSyn, status: "testimonies", nextRecordIdx: 1, completedCount: 0 });
+      setPanel(0, (p) => ({ phase: "entrance", record: firstRecord, phaseKey: p.phaseKey + 1 }));
+    }
+  }, []);
+
+  // ── Solo flash: loop title when exactly one panel is active ──────────────
+
+  const soloRecord = useMemo(() => {
+    const syn = synergyRef.current;
+    if (syn && syn.status !== "none") return null;
+    if (showSparseKanon) return null;
+    const playing = panels.filter(
+      (p) =>
+        p.record !== null &&
+        p.phase !== "idle" &&
+        p.phase !== "synergyHolding" &&
+        p.phase !== "outro" &&
+        p.phase !== "entrance" &&
+        p.phase !== "mediaFlash",
+    );
+    return playing.length === 1 ? playing[0].record : null;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [panels, showSparseKanon]);
+
+  useEffect(() => {
+    if (soloRecord) setSoloFlashKey((k) => k + 1);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [soloRecord?.id]);
+
   // ── Synergy: fire when all panels are holding ─────────────────────────────
 
   useEffect(() => {
@@ -272,19 +348,8 @@ export default function InstallationDisplayPage() {
     if (!allHolding || synergySentinelRef.current) return;
     synergySentinelRef.current = true;
 
-    log("All panels holding — starting synergy sequence");
-    setSynergyState({ ...syn, status: "sequencing", nextRecordIdx: 0, completedCount: 0 });
-
-    // Assign first synergy record to left panel
-    const firstRecord = syn.records[0];
-    log(`Synergy panel left → "${firstRecord.title}"`);
-    setPanel(0, (p) => ({ phase: "entrance", record: firstRecord, phaseKey: p.phaseKey + 1 }));
-    setSynergyState({
-      ...syn,
-      status: "sequencing",
-      nextRecordIdx: 1,
-      completedCount: 0,
-    });
+    log("All panels holding — starting synergy intro");
+    setSynergyState({ ...syn, status: "intro", nextRecordIdx: 0, completedCount: 0 });
   }, [panels]);
 
   // ── Ducking: update when any panel enters/leaves testimony ────────────────
@@ -309,43 +374,50 @@ export default function InstallationDisplayPage() {
       if (phase === "outro") {
         // Panel goes idle — check if synergy is active
         if (syn && syn.status !== "none") {
+          const panelOrder: Array<0 | 1 | 2> = syn.records.length === 3 ? [0, 2, 1] : [0, 2];
+          setPanel(panelIndex, (p) => ({ ...p, phase: "synergyHolding", record: null, phaseKey: p.phaseKey + 1 }));
+
           if (syn.status === "waiting") {
-            // This panel was still playing — mark as synergyHolding now
-            setPanel(panelIndex, (p) => ({ ...p, phase: "synergyHolding", record: null, phaseKey: p.phaseKey + 1 }));
-          } else if (syn.status === "sequencing") {
-            // A synergy record finished — assign next or play connection audio
+            // This panel was still playing — now holding for synergy
+
+          } else if (syn.status === "testimonies") {
             const newCompleted = syn.completedCount + 1;
-
             if (newCompleted < syn.records.length) {
-              // Assign next synergy record
+              // Assign next testimony
               const nextRecord = syn.records[syn.nextRecordIdx];
-              // Determine which panel to use (cycle through 0→2→1 for L/R/C or L/C/R)
-              const panelOrder: Array<0 | 1 | 2> = syn.records.length === 3
-                ? [0, 2, 1]
-                : [0, 2];
-              const nextPanelIndex = panelOrder[newCompleted];
-
-              log(`Synergy panel ${PANEL_LABELS[nextPanelIndex]} → "${nextRecord.title}"`);
-
-              setSynergyState({
-                ...syn,
-                completedCount: newCompleted,
-                nextRecordIdx: syn.nextRecordIdx + 1,
-              });
-
-              setPanel(panelIndex, (p) => ({ ...p, phase: "synergyHolding", record: null, phaseKey: p.phaseKey + 1 }));
-              setPanel(nextPanelIndex, (p) => ({ phase: "entrance", record: nextRecord, phaseKey: p.phaseKey + 1 }));
+              const nextPanelIdx = panelOrder[newCompleted];
+              log(`Synergy testimony ${newCompleted + 1}/${syn.records.length}: panel ${PANEL_LABELS[nextPanelIdx]} → "${nextRecord.title}"`);
+              setSynergyState({ ...syn, completedCount: newCompleted, nextRecordIdx: syn.nextRecordIdx + 1 });
+              setPanel(nextPanelIdx, (p) => ({ phase: "entrance", record: nextRecord, phaseKey: p.phaseKey + 1 }));
             } else {
-              // All records played — start connection audio
-              log("All synergy records complete — playing connection audio");
-              setSynergyState({ ...syn, status: "connectionAudio", completedCount: newCompleted });
-              setPanel(panelIndex, (p) => ({ ...p, phase: "synergyHolding", record: null, phaseKey: p.phaseKey + 1 }));
-              playConnectionAudio(syn.connectionData.connection.audio_url);
+              // All testimonies done — transition to media stage
+              log("All synergy testimonies complete — starting media stage");
+              const firstMediaIdx = findFirstWithMedia(syn.records, 0);
+              if (firstMediaIdx >= 0) {
+                const mediaPanelIdx = panelOrder[0];
+                log(`Synergy media 1: panel ${PANEL_LABELS[mediaPanelIdx]} → "${syn.records[firstMediaIdx].title}"`);
+                setSynergyState({ ...syn, status: "media", completedCount: 1, nextRecordIdx: firstMediaIdx + 1 });
+                setPanel(mediaPanelIdx, (p) => ({ phase: "mediaFlash", record: syn.records[firstMediaIdx], phaseKey: p.phaseKey + 1 }));
+              } else {
+                log("No media in synergy records — playing connection audio");
+                setSynergyState({ ...syn, status: "connectionAudio" });
+                playConnectionAudio(syn.connectionData.connection.audio_url);
+              }
             }
-          } else {
-            // connectionAudio or already done — just hold
-            setPanel(panelIndex, (p) => ({ ...p, phase: "synergyHolding", record: null, phaseKey: p.phaseKey + 1 }));
+
+          } else if (syn.status === "media") {
+            // Last media panel finished its outro — clear any dimmed-hold panels and start connection audio
+            log("All synergy media complete — playing connection audio");
+            for (let i = 0; i < 3; i++) {
+              if (panelsRef.current[i].phase === "synergyMediaHold") {
+                setPanel(i as 0 | 1 | 2, (prev) => ({ ...prev, phase: "synergyHolding", record: null, phaseKey: prev.phaseKey + 1 }));
+              }
+            }
+            setSynergyState({ ...syn, status: "connectionAudio" });
+            playConnectionAudio(syn.connectionData.connection.audio_url);
+
           }
+          // connectionAudio: panel already set to synergyHolding above
         } else {
           // Normal outro → idle → next record
           setPanel(panelIndex, (p) => ({ ...p, phase: "idle", record: null, phaseKey: p.phaseKey + 1 }));
@@ -354,14 +426,40 @@ export default function InstallationDisplayPage() {
         return;
       }
 
+      // Synergy media: when a panel's media ends, hold it dimmed if more panels remain
+      if (syn && syn.status === "media" && phase === "media") {
+        const panelOrder: Array<0 | 1 | 2> = syn.records.length === 3 ? [0, 2, 1] : [0, 2];
+        const nextMediaIdx = findFirstWithMedia(syn.records, syn.nextRecordIdx);
+        if (nextMediaIdx >= 0 && syn.completedCount < panelOrder.length) {
+          // More media to show — hold this panel dimmed, start next
+          setPanel(panelIndex, (p) => ({ ...p, phase: "synergyMediaHold", phaseKey: p.phaseKey + 1 }));
+          const mediaPanelIdx = panelOrder[syn.completedCount];
+          log(`Synergy media ${syn.completedCount + 1}: panel ${PANEL_LABELS[mediaPanelIdx]} → "${syn.records[nextMediaIdx].title}"`);
+          setSynergyState({ ...syn, completedCount: syn.completedCount + 1, nextRecordIdx: nextMediaIdx + 1 });
+          setPanel(mediaPanelIdx, (p) => ({ phase: "mediaFlash", record: syn.records[nextMediaIdx], phaseKey: p.phaseKey + 1 }));
+        } else {
+          // Last media panel — proceed to outro
+          setPanel(panelIndex, (p) => ({ ...p, phase: "outro", phaseKey: p.phaseKey + 1 }));
+        }
+        return;
+      }
+
+      // Synergy testimonies: force outro after testimony (skip media phases this round)
+      if (syn && syn.status === "testimonies") {
+        if (phase === "testimony") {
+          setPanel(panelIndex, (p) => ({ ...p, phase: "outro", phaseKey: p.phaseKey + 1 }));
+          return;
+        }
+        // No voice recording — also skip to outro from creatorReveal
+        if (phase === "creatorReveal" && !record?.voice_recording_url) {
+          setPanel(panelIndex, (p) => ({ ...p, phase: "outro", phaseKey: p.phaseKey + 1 }));
+          return;
+        }
+      }
+
       // Normal phase transitions
       const nextPhase = computeNextPhase(phase, record);
       setPanel(panelIndex, (p) => ({ ...p, phase: nextPhase, phaseKey: p.phaseKey + 1 }));
-
-      // If testimony ends and there's nothing after it, skip straight to outro
-      if (nextPhase === "outro" && phase === "testimony") {
-        // already handled above
-      }
     },
     [assignRecord],
   );
@@ -470,6 +568,86 @@ export default function InstallationDisplayPage() {
         ))}
       </div>
 
+      {/* Solo flash — loops record title at small size when only one panel is active */}
+      {soloRecord && (
+        <div className="absolute inset-0 z-10 pointer-events-none">
+          <EntranceAnimation
+            text={soloRecord.title}
+            slotCount={3}
+            holdMin={300}
+            holdMax={700}
+            cycleDurationMs={2500}
+            resting={SOLO_FLASH_RESTING}
+            instanceSize={14}
+            color="black"
+            easing="sharp"
+            replayKey={soloFlashKey}
+            onComplete={() => setSoloFlashKey((k) => k + 1)}
+            className="absolute inset-0"
+          />
+        </div>
+      )}
+
+      {/* Synergy intro — sequential full-screen title flashes before testimonies */}
+      <AnimatePresence>
+        {synergy?.status === "intro" && synergy.records[synergy.nextRecordIdx] && (
+          <motion.div
+            key={`synergy-intro-${synergy.nextRecordIdx}`}
+            className="absolute inset-0 pointer-events-none"
+            style={{ zIndex: 20 }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.25 }}
+          >
+            <EntranceAnimation
+              text={synergy.records[synergy.nextRecordIdx].title}
+              slotCount={6}
+              holdMin={500}
+              holdMax={1100}
+              cycleDurationMs={4200}
+              resting={SYNERGY_INTRO_RESTING}
+              color="black"
+              easing="sharp"
+              replayKey={synergy.nextRecordIdx}
+              onComplete={onIntroTitleComplete}
+              className="absolute inset-0"
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Sparse Kanon — occasional full-screen flash (every 4-8 minutes) */}
+      <AnimatePresence>
+        {showSparseKanon && (
+          <motion.div
+            key={`sparse-kanon-${sparseKanonKey}`}
+            className="absolute inset-0 z-10 pointer-events-none"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.3 }}
+          >
+            <EntranceAnimation
+              text="Kanon"
+              slotCount={5}
+              holdMin={300}
+              holdMax={700}
+              cycleDurationMs={2800}
+              resting={ENTRANCE_RESTING}
+              color="black"
+              easing="sharp"
+              replayKey={sparseKanonKey}
+              onComplete={() => {
+                setShowSparseKanon(false);
+                scheduleSparseKanon();
+              }}
+              className="absolute inset-0"
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Global entrance overlay — covers all panels while a record enters */}
       <AnimatePresence>
         {entrancePanelIdx >= 0 && panels[entrancePanelIdx].record && (
@@ -488,6 +666,7 @@ export default function InstallationDisplayPage() {
               holdMax={600}
               cycleDurationMs={2200}
               resting={ENTRANCE_RESTING}
+              color="black"
               easing="sharp"
               replayKey={panels[entrancePanelIdx].phaseKey}
               onComplete={() => handlePhaseComplete(entrancePanelIdx as 0 | 1 | 2, "entrance")}
@@ -515,6 +694,7 @@ export default function InstallationDisplayPage() {
               holdMax={MEDIA_FLASH_DURATION_MS - 100}
               cycleDurationMs={MEDIA_FLASH_DURATION_MS}
               resting={MEDIA_FLASH_RESTING}
+              color="black"
               easing="sharp"
               replayKey={panels[mediaFlashPanelIdx].phaseKey}
               className="absolute inset-0"
@@ -542,6 +722,7 @@ export default function InstallationDisplayPage() {
               holdMax={700}
               cycleDurationMs={2800}
               resting={ENTRANCE_RESTING}
+              color="black"
               easing="sharp"
               onComplete={startRecords}
               className="absolute inset-0"
@@ -592,14 +773,29 @@ export default function InstallationDisplayPage() {
   );
 }
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function findFirstWithMedia(records: Item[], startFrom: number): number {
+  for (let i = startFrom; i < records.length; i++) {
+    if (!!(records[i].installationMedia?.file || records[i].thumbnail_url || records[i].media_url)) {
+      return i;
+    }
+  }
+  return -1;
+}
+
 // ── Phase transition logic ────────────────────────────────────────────────────
 
 function computeNextPhase(completedPhase: PanelPhase, record: Item | null): PanelPhase {
   switch (completedPhase) {
     case "entrance":
       return "creatorReveal";
-    case "creatorReveal":
-      return record?.voice_recording_url ? "testimony" : "mediaFlash";
+    case "creatorReveal": {
+      const url = record?.voice_recording_url;
+      const next = url ? "testimony" : "mediaFlash";
+      console.log(`[Kanon] creatorReveal → ${next} | voice_recording_url: ${url ? `"${url.slice(0, 60)}…"` : "MISSING/EMPTY"}`);
+      return next;
+    }
     case "testimony": {
       const hasMedia = !!(record?.installationMedia?.file);
       const hasThumbnail = !!(record?.thumbnail_url || record?.media_url);

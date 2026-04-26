@@ -31,6 +31,10 @@ export type EntranceAnimationProps = {
   /** Bump to replay from the top. */
   replayKey?: number;
   className?: string;
+  /** Text color for all instances. Defaults to "#FFF". */
+  color?: string;
+  /** Target visual width of each instance as % of container. Defaults to INSTANCE_SIZE (14). */
+  instanceSize?: number;
 };
 
 type ActiveInstance = {
@@ -52,6 +56,8 @@ function EntranceAnimationInner({
   cycleDurationMs = CYCLE_DURATION_MS,
   resting = RESTING,
   easing = "sharp",
+  color = "#FFF",
+  instanceSize = INSTANCE_SIZE,
   className,
 }: EntranceAnimationProps) {
   const [instances, setInstances] = useState<ActiveInstance[]>([]);
@@ -181,8 +187,8 @@ function EntranceAnimationInner({
                       ? '"DieGrotesk", sans-serif'
                       : '"LectorBold", serif',
                   fontWeight: 700,
-                  color: "#FFF",
-                  fontSize: `${fontSizeForWidth(INSTANCE_SIZE, text.length)}cqw`,
+                  color,
+                  fontSize: `${fontSizeForWidth(instanceSize, text.length)}cqw`,
                   lineHeight: 0.9,
                   letterSpacing: "-0.05em",
                   whiteSpace: "nowrap",

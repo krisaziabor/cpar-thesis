@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { RecorderName } from "./RecorderName";
 import { PanelMedia } from "./PanelMedia";
 import { getDisplayThumbnail } from "@/lib/installationMedia";
 import type { InstallationAudio } from "@/lib/installation/audio";
@@ -53,18 +52,42 @@ function TestimonyPlayer({
   onErrorRef.current = onError;
   wordRefs.current.length = words.length;
 
-  // rAF word sync loop
+  // Keep latest words/transcript accessible inside the mount-only effect via refs
+  const wordsRef = useRef(words);
+  wordsRef.current = words;
+  const transcriptRef = useRef(transcript);
+  transcriptRef.current = transcript;
+
+  // Log on mount so we can confirm testimony phase is reached
+  useEffect(() => {
+    console.log(`[Kanon] TestimonyPlayer mounted | url="${audioUrl}" | words=${words.length} | transcript length=${transcript.length}`);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // rAF word sync loop + audio playback — empty deps so this never restarts mid-play.
+  // words/transcript are accessed via refs to stay current without re-running the effect.
   useEffect(() => {
     const el = audioElRef.current;
     if (!el) return;
 
+    let disposed = false;
+    let fallbackTimer: ReturnType<typeof setTimeout> | null = null;
+
+    function finish() {
+      if (disposed) return;
+      cancelAnimationFrame(rafRef.current);
+      if (fallbackTimer) clearTimeout(fallbackTimer);
+      onFinishedRef.current();
+    }
+
     function tick() {
       if (!el || el.paused) return;
       const t = el.currentTime;
-      for (let i = 0; i < words.length; i++) {
+      const ws = wordsRef.current;
+      for (let i = 0; i < ws.length; i++) {
         const span = wordRefs.current[i];
         if (!span) continue;
-        const { start, end } = words[i];
+        const { start, end } = ws[i];
         if (t >= start && t < end) {
           span.dataset.state = "active";
         } else if (t >= end) {
@@ -77,25 +100,50 @@ function TestimonyPlayer({
     }
 
     el.addEventListener("ended", () => {
-      cancelAnimationFrame(rafRef.current);
-      onFinishedRef.current();
+      console.log(`[Kanon] Audio ended naturally | currentTime=${el.currentTime?.toFixed(1)}s | duration=${el.duration?.toFixed(1)}s`);
+      finish();
     });
-    el.addEventListener("error", () => {
+    el.addEventListener("pause", () => {
+      if (!disposed && !el.ended) {
+        console.log(`[Kanon] Audio paused | currentTime=${el.currentTime?.toFixed(1)}s`);
+      }
+    });
+    el.addEventListener("stalled", () => {
+      if (disposed) return;
+      console.log(`[Kanon] Audio stalled | currentTime=${el.currentTime?.toFixed(1)}s — retrying play()`);
+      void el.play().catch(() => {});
+    });
+    el.addEventListener("waiting", () => {
+      if (!disposed) console.log(`[Kanon] Audio waiting (buffering) | currentTime=${el.currentTime?.toFixed(1)}s`);
+    });
+    el.addEventListener("error", (e) => {
+      if (disposed) return;
+      console.error("[Kanon] Audio element error:", e, `currentTime=${el.currentTime?.toFixed(1)}s`);
       cancelAnimationFrame(rafRef.current);
-      onErrorRef.current();
+      if (fallbackTimer) clearTimeout(fallbackTimer);
+      const readMs = Math.max(12000, transcriptRef.current.length * 55);
+      fallbackTimer = setTimeout(() => { if (!disposed) onFinishedRef.current(); }, readMs);
     });
 
     void el.play().then(() => {
+      if (disposed) { el.pause(); return; }
+      console.log("[Kanon] Audio play() succeeded");
       rafRef.current = requestAnimationFrame(tick);
-    }).catch(() => {
-      onErrorRef.current();
+    }).catch((err) => {
+      if (disposed) return;
+      console.error("[Kanon] Audio play() rejected:", err);
+      const readMs = Math.max(12000, transcriptRef.current.length * 55);
+      fallbackTimer = setTimeout(() => { if (!disposed) onFinishedRef.current(); }, readMs);
     });
 
     return () => {
+      disposed = true;
       cancelAnimationFrame(rafRef.current);
+      if (fallbackTimer) clearTimeout(fallbackTimer);
       el.pause();
     };
-  }, [words]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const hasWords = words.length > 0;
 
@@ -106,19 +154,19 @@ function TestimonyPlayer({
 
       {/* Transcript display */}
       <div
-        className="absolute inset-0 overflow-hidden"
+        className="absolute inset-x-0 top-0 bottom-0 overflow-hidden flex flex-col items-center px-6"
         style={{
-          maskImage: "linear-gradient(to bottom, black 55%, transparent 100%)",
-          WebkitMaskImage: "linear-gradient(to bottom, black 55%, transparent 100%)",
+          maskImage: "linear-gradient(to bottom, transparent 2%, black 10%, black 76%, transparent 97%)",
+          WebkitMaskImage: "linear-gradient(to bottom, transparent 2%, black 10%, black 76%, transparent 97%)",
         }}
       >
-        <div className="p-8 pt-16">
+        <div className="pt-20 pb-32 w-full max-w-[88%]">
           {hasWords ? (
             <p
-              className="leading-relaxed text-zinc-800"
+              className="leading-relaxed text-zinc-800 text-left"
               style={{
                 fontFamily: '"Lector", serif',
-                fontSize: "clamp(0.95rem, 1.8vw, 1.35rem)",
+                fontSize: "clamp(0.72rem, 1.3vw, 0.92rem)",
               }}
             >
               {words.map((w, i) => (
@@ -127,9 +175,6 @@ function TestimonyPlayer({
                   ref={(el) => { wordRefs.current[i] = el; }}
                   data-state="pending"
                   className="transition-none"
-                  style={{
-                    // CSS data-state driven opacity
-                  }}
                 >
                   {w.word}{" "}
                 </span>
@@ -137,10 +182,10 @@ function TestimonyPlayer({
             </p>
           ) : (
             <motion.p
-              className="text-zinc-800 leading-relaxed"
+              className="text-zinc-800 leading-relaxed text-center"
               style={{
                 fontFamily: '"Lector", serif',
-                fontSize: "clamp(0.95rem, 1.8vw, 1.35rem)",
+                fontSize: "clamp(0.72rem, 1.3vw, 0.92rem)",
               }}
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -154,9 +199,9 @@ function TestimonyPlayer({
 
       {/* Word state styling */}
       <style>{`
-        span[data-state="pending"] { opacity: 0.15; }
+        span[data-state="pending"] { opacity: 0.22; }
         span[data-state="active"]  { opacity: 1; }
-        span[data-state="spoken"]  { opacity: 0.45; }
+        span[data-state="spoken"]  { opacity: 0.82; }
       `}</style>
     </div>
   );
@@ -187,6 +232,14 @@ export function Panel({ panelState, panelIndex, audio, onPhaseComplete }: Props)
       const t = setTimeout(() => onPhaseCompleteRef.current(panelIndex, "outro"), OUTRO_DURATION_MS);
       return () => clearTimeout(t);
     }
+  }, [phase, phaseKey, panelIndex]);
+
+  // Auto-advance testimony when the record has no audio (static transcript)
+  useEffect(() => {
+    if (phase !== "testimony" || !record || record.voice_recording_url) return;
+    const readMs = Math.max(8000, (record.transcript?.length ?? 0) * 50);
+    const t = setTimeout(() => onPhaseCompleteRef.current(panelIndex, "testimony"), readMs);
+    return () => clearTimeout(t);
   }, [phase, phaseKey, panelIndex]);
 
   const thumbnailUrl = record ? getDisplayThumbnail(record) : null;
@@ -228,9 +281,9 @@ export function Panel({ panelState, panelIndex, audio, onPhaseComplete }: Props)
                     style={{
                       ...l.title,
                       fontFamily: '"LectorBold", serif',
-                      fontSize: "clamp(1.4rem, 3.5vw, 3rem)",
-                      letterSpacing: "-0.05em",
-                      lineHeight: 0.95,
+                      fontSize: "clamp(0.8rem, 1.6vw, 1.25rem)",
+                      letterSpacing: "-0.04em",
+                      lineHeight: 1.0,
                       color: "black",
                     }}
                   >
@@ -240,11 +293,10 @@ export function Panel({ panelState, panelIndex, audio, onPhaseComplete }: Props)
                     className="absolute max-w-[85%]"
                     style={{
                       ...l.creator,
-                      fontFamily: '"DieGrotesk", sans-serif',
-                      fontWeight: 700,
-                      fontSize: "clamp(0.9rem, 2.2vw, 1.8rem)",
-                      letterSpacing: "-0.05em",
-                      lineHeight: 0.95,
+                      fontFamily: '"LectorBold", serif',
+                      fontSize: "clamp(0.8rem, 1.6vw, 1.25rem)",
+                      letterSpacing: "-0.04em",
+                      lineHeight: 1.0,
                       color: "black",
                     }}
                   >
@@ -266,50 +318,25 @@ export function Panel({ panelState, panelIndex, audio, onPhaseComplete }: Props)
             exit={{ opacity: 0 }}
             transition={{ duration: 0.3 }}
           >
-            {/* Title */}
-            <div className="absolute top-8 left-8 right-8">
-              <p
-                className="text-black leading-tight"
-                style={{
-                  fontFamily: '"LectorBold", serif',
-                  fontSize: "clamp(1rem, 2.2vw, 1.8rem)",
-                  letterSpacing: "-0.04em",
-                  opacity: 0.7,
-                }}
-              >
-                {record.title}
-              </p>
-            </div>
-
             {/* Transcript */}
             {record.voice_recording_url ? (
-              <div className="absolute inset-0 pt-20">
+              <div className="absolute inset-0">
                 <TestimonyPlayer
                   audioUrl={record.voice_recording_url}
                   words={record.timed_transcript ?? []}
                   transcript={record.transcript}
                   panelIndex={panelIndex}
                   audio={audio}
-                  onFinished={() => {
-                    const go = hasThumbnailOnly || hasMedia ? "mediaFlash" : "outro";
-                    onPhaseCompleteRef.current(panelIndex, "testimony");
-                  }}
+                  onFinished={() => onPhaseCompleteRef.current(panelIndex, "testimony")}
                   onError={() => onPhaseCompleteRef.current(panelIndex, "testimony")}
                 />
               </div>
             ) : (
               // No audio — show static transcript and advance after a brief delay
-              <div className="absolute inset-0 pt-20 p-8 overflow-hidden">
+              <div className="absolute inset-0 p-8 overflow-hidden">
                 <p className="text-zinc-800 leading-relaxed" style={{ fontFamily: '"Lector", serif', fontSize: "clamp(0.95rem, 1.8vw, 1.35rem)" }}>
                   {record.transcript}
                 </p>
-              </div>
-            )}
-
-            {/* Recorder name */}
-            {record.added_by && (
-              <div className="absolute bottom-8 left-8">
-                <RecorderName name={record.added_by} />
               </div>
             )}
           </motion.div>
@@ -331,12 +358,39 @@ export function Panel({ panelState, panelIndex, audio, onPhaseComplete }: Props)
               <PanelMedia
                 file={record.installationMedia?.file ?? null}
                 thumbnailUrl={thumbnailUrl}
+                title={record.title}
+                creator={record.creator}
+                addedBy={record.added_by ?? ""}
                 panelIndex={panelIndex}
                 audio={audio}
                 onEnded={() => onPhaseCompleteRef.current(panelIndex, "media")}
                 onError={() => setMediaError(true)}
               />
             )}
+          </motion.div>
+        )}
+
+        {/* SYNERGY MEDIA HOLD — dimmed media persists while next panel plays */}
+        {phase === "synergyMediaHold" && record && (
+          <motion.div
+            key={`synergyhold-${phaseKey}`}
+            className="absolute inset-0"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 0.28 }}
+            transition={{ duration: 0.8 }}
+          >
+            <PanelMedia
+              file={record.installationMedia?.file ?? null}
+              thumbnailUrl={thumbnailUrl}
+              title={record.title}
+              creator={record.creator}
+              addedBy={record.added_by ?? ""}
+              panelIndex={panelIndex}
+              audio={audio}
+              dimmed
+              onEnded={() => {}}
+              onError={() => {}}
+            />
           </motion.div>
         )}
 
