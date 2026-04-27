@@ -563,6 +563,7 @@ export default function OnboardingPage() {
                     onPlayStart={handleRevealPlayStart}
                     onFinished={() => setRevealListened(true)}
                     lightControls
+                    autoPlay
                   />
                 )}
               </motion.div>
@@ -676,6 +677,7 @@ export default function OnboardingPage() {
                           audioUrl={transcript.audio_url}
                           words={transcript.words}
                           onFinished={markListened}
+                          autoPlay={colorStep > 0}
                         />
                       ) : (
                         <p className="font-sans text-sm leading-relaxed text-zinc-400">

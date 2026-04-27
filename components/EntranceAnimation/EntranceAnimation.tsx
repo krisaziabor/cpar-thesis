@@ -35,6 +35,8 @@ export type EntranceAnimationProps = {
   color?: string;
   /** Target visual width of each instance as % of container. Defaults to INSTANCE_SIZE (14). */
   instanceSize?: number;
+  /** Lock all instances to a single font instead of randomly mixing. */
+  fontOverride?: FontChoice;
 };
 
 type ActiveInstance = {
@@ -58,6 +60,7 @@ function EntranceAnimationInner({
   easing = "sharp",
   color = "#FFF",
   instanceSize = INSTANCE_SIZE,
+  fontOverride,
   className,
 }: EntranceAnimationProps) {
   const [instances, setInstances] = useState<ActiveInstance[]>([]);
@@ -102,7 +105,7 @@ function EntranceAnimationInner({
 
       const occupied = instancesRef.current.map(i => i.cellIdx);
       const cellIdx = pickCell(occupied);
-      const font: FontChoice = Math.random() < 0.5 ? "LectorBold" : "DieGrotesk";
+      const font: FontChoice = fontOverride ?? (Math.random() < 0.5 ? "LectorBold" : "DieGrotesk");
       const id = ++idRef.current;
 
       setInstances(prev => [...prev, { id, cellIdx, font }]);

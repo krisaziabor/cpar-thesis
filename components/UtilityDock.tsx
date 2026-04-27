@@ -26,6 +26,8 @@ export default function UtilityDock() {
     "friend";
   const userInitial = displayName.charAt(0).toUpperCase();
 
+  const fromInstallation = searchParams.get("from") === "installation";
+
   if (
     !user ||
     pathname === "/login" ||
@@ -33,6 +35,7 @@ export default function UtilityDock() {
     pathname === "/admin" ||
     pathname === "/installation" ||
     pathname.startsWith("/installation/") ||
+    (pathname === "/colophon" && fromInstallation) ||
     isLabPathname(pathname)
   )
     return null;
