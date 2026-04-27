@@ -682,12 +682,15 @@ export default function ItemPanel({
   onListeningChange,
   onFullScreenReady,
   onMediaFullscreenChange,
+  installationMode = false,
 }: {
   itemId: string;
   onListeningChange?: (playing: boolean) => void;
   onFullScreenReady?: (trigger: () => void) => void;
   /** Fired when the media lightbox opens or closes so the shell can adjust Escape behavior. */
   onMediaFullscreenChange?: (expanded: boolean) => void;
+  /** When true, Respond, Add-to-Hold, and Connect are disabled (installation experience). */
+  installationMode?: boolean;
 }) {
   const { user } = useAuth();
   const router = useRouter();
@@ -1091,13 +1094,15 @@ export default function ItemPanel({
                         <button
                           key={conn.id}
                           type="button"
-                          onClick={() =>
+                          onClick={() => {
+                            if (installationMode) return;
                             navigatePanel(
                               `/?connection=${encodeURIComponent(conn.id)}`,
                               "Narrative"
-                            )
-                          }
-                          className="relative w-full overflow-hidden rounded-lg border border-white/10 text-left transition-colors duration-150 ease-out hover:border-white/20 hover:bg-zinc-900/30"
+                            );
+                          }}
+                          disabled={installationMode}
+                          className="relative w-full overflow-hidden rounded-lg border border-white/10 text-left transition-colors duration-150 ease-out hover:border-white/20 hover:bg-zinc-900/30 disabled:cursor-default disabled:hover:border-white/10 disabled:hover:bg-transparent"
                         >
                           <ConnectionItemsPreview
                             items={connectionItemIdsToPreview(conn.itemIds, allItems)}
@@ -1125,14 +1130,16 @@ export default function ItemPanel({
             {/* Connect + Add to Hold — pinned at bottom of left pane */}
             <div className="shrink-0 border-t border-white/10 px-6 pb-6 pt-4">
               <div className="flex items-center gap-2">
-                <Link
-                  href={`/?panel=connect&connectPanel=1&connectSelect=1&connectIds=${encodeURIComponent(itemId)}&connectReturnItem=${encodeURIComponent(itemId)}`}
-                  className="flex items-center rounded-full bg-zinc-100 px-4 py-1.5 font-sans text-xs text-zinc-900 transition-colors hover:bg-white"
-                >
-                  Connect
-                </Link>
+                {!installationMode && (
+                  <Link
+                    href={`/?panel=connect&connectPanel=1&connectSelect=1&connectIds=${encodeURIComponent(itemId)}&connectReturnItem=${encodeURIComponent(itemId)}`}
+                    className="flex items-center rounded-full bg-zinc-100 px-4 py-1.5 font-sans text-xs text-zinc-900 transition-colors hover:bg-white"
+                  >
+                    Connect
+                  </Link>
+                )}
                 <button
-                  disabled={savingKanon}
+                  disabled={savingKanon || installationMode}
                   onClick={async () => {
                     if (!user?.email) return;
                     setSavingKanon(true);
@@ -1219,12 +1226,12 @@ export default function ItemPanel({
                       >
                         <div
                           ref={transcriptScrollRef}
-                          onScroll={updateTranscriptMask}
+                          onScroll={item.timed_transcript?.length ? updateTranscriptMask : undefined}
                           className="max-h-[52vh] overflow-y-auto scrollbar-hide"
-                          style={{
+                          style={item.timed_transcript?.length ? {
                             WebkitMaskImage: TRANSCRIPT_MASK_INITIAL,
                             maskImage: TRANSCRIPT_MASK_INITIAL,
-                          }}
+                          } : undefined}
                         >
                           {item.timed_transcript?.length ? (
                             <SyncedTranscript
@@ -1327,7 +1334,8 @@ export default function ItemPanel({
               <button
                 type="button"
                 onClick={goToRespond}
-                className="inline-flex items-center rounded-full bg-zinc-100 px-4 py-1.5 font-sans text-xs text-zinc-900 transition-colors duration-150 ease-out hover:bg-white"
+                disabled={installationMode}
+                className="inline-flex items-center rounded-full bg-zinc-100 px-4 py-1.5 font-sans text-xs text-zinc-900 transition-colors duration-150 ease-out hover:bg-white disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-zinc-100"
               >
                 Respond
               </button>
@@ -1499,21 +1507,24 @@ export default function ItemPanel({
                 {/* Actions */}
                 {item.voice_recording_url ? (
                   <div className="flex items-center gap-2">
-                    <Link
-                      href={`/?panel=connect&connectPanel=1&connectSelect=1&connectIds=${encodeURIComponent(itemId)}&connectReturnItem=${encodeURIComponent(itemId)}`}
-                      className="flex items-center rounded-full bg-zinc-100 px-4 py-1.5 font-sans text-xs text-zinc-900 transition-colors hover:bg-white"
-                    >
-                      Connect
-                    </Link>
+                    {!installationMode && (
+                      <Link
+                        href={`/?panel=connect&connectPanel=1&connectSelect=1&connectIds=${encodeURIComponent(itemId)}&connectReturnItem=${encodeURIComponent(itemId)}`}
+                        className="flex items-center rounded-full bg-zinc-100 px-4 py-1.5 font-sans text-xs text-zinc-900 transition-colors hover:bg-white"
+                      >
+                        Connect
+                      </Link>
+                    )}
                     <button
                       type="button"
                       onClick={goToRespond}
-                      className="flex items-center gap-1.5 rounded-full border border-zinc-600 bg-zinc-900 px-4 py-1.5 font-sans text-xs text-zinc-100 transition-colors hover:border-zinc-500 hover:bg-zinc-800"
+                      disabled={installationMode}
+                      className="flex items-center gap-1.5 rounded-full border border-zinc-600 bg-zinc-900 px-4 py-1.5 font-sans text-xs text-zinc-100 transition-colors hover:border-zinc-500 hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-zinc-600 disabled:hover:bg-zinc-900"
                     >
                       Respond
                     </button>
                     <button
-                      disabled={savingKanon}
+                      disabled={savingKanon || installationMode}
                       onClick={async () => {
                         if (!user?.email) return;
                         setSavingKanon(true);
@@ -1616,13 +1627,15 @@ export default function ItemPanel({
                             <button
                               key={conn.id}
                               type="button"
-                              onClick={() =>
+                              onClick={() => {
+                                if (installationMode) return;
                                 navigatePanel(
                                   `/?connection=${encodeURIComponent(conn.id)}`,
                                   item.title
-                                )
-                              }
-                              className="relative block w-full overflow-hidden rounded-xl text-left transition-opacity duration-150 ease-out hover:opacity-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/25"
+                                );
+                              }}
+                              disabled={installationMode}
+                              className="relative block w-full overflow-hidden rounded-xl text-left transition-opacity duration-150 ease-out hover:opacity-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/25 disabled:cursor-default disabled:hover:opacity-100"
                             >
                               <ConnectionItemsPreview
                                 items={connectionItemIdsToPreview(conn.itemIds, allItems)}

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { useRouter } from "next/navigation";
 import { ReactFlow, type Edge, type Node, type NodeTypes } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
@@ -15,8 +16,15 @@ import ColorWheel from "@/components/ColorWheel";
 import FirstTimeIntroOverlay from "@/components/FirstTimeIntroOverlay";
 import SyncedTranscript from "@/components/SyncedTranscript";
 import GradientSVG from "@/components/GradientSVG";
-import RecordingWave from "@/components/RecordingWave";
-import { EASE_OUT } from "@/lib/motion";
+import RightPanel from "@/components/RightPanel";
+import ItemPanel from "@/components/ItemPanel";
+import { EASE_OUT, MOTION_DURATION } from "@/lib/motion";
+import { useNavStatus } from "@/lib/nav-status-context";
+import RecordingInterface, { type RecordingStackItem } from "@/components/RecordingInterface";
+import Image from "next/image";
+
+const IDLE_TIMEOUT_MS = 2 * 60 * 1000;
+const FADE_OUT_MS = 700;
 
 const NODE_TYPES: NodeTypes = { itemThumbnail: ItemThumbnailNode };
 
@@ -194,12 +202,13 @@ const driftKeyframes = `
 }
 `;
 
-type Phase = "color" | "reveal" | "intro" | "graph";
+type Phase = "color" | "reveal" | "graph";
 
 export default function InstallationPage() {
   const shouldReduceMotion = useReducedMotion();
   const isMobile = useIsMobileViewport();
   const ambient = isMobile ? AMBIENT_MOBILE : { ...AMBIENT, drift: true };
+  const router = useRouter();
 
   const [phase, setPhase] = useState<Phase>("color");
   const [picked, setPicked] = useState<[string | null, string | null, string | null]>([
@@ -219,11 +228,24 @@ export default function InstallationPage() {
   const [authed, setAuthed] = useState(false);
 
   const [recordOpen, setRecordOpen] = useState(false);
-  const [recording, setRecording] = useState(false);
-  const [analyser, setAnalyser] = useState<AnalyserNode | null>(null);
-  const recorderRef = useRef<MediaRecorder | null>(null);
-  const streamRef = useRef<MediaStream | null>(null);
-  const audioCtxRef = useRef<AudioContext | null>(null);
+  const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
+
+  const [selectMode, setSelectMode] = useState(false);
+  const [panelItemId, setPanelItemId] = useState<string | null>(null);
+  const [fadingOut, setFadingOut] = useState(false);
+  const [isNarrativePlaying, setIsNarrativePlaying] = useState(false);
+  const [showIntroCard, setShowIntroCard] = useState(false);
+
+  // Reset listening state whenever the panel changes items so it never opens wide incorrectly.
+  useEffect(() => {
+    setIsNarrativePlaying(false);
+  }, [panelItemId]);
+  const { startProgress: startNavProgress } = useNavStatus();
+
+  const selectedItems = useMemo(
+    () => items.filter((i) => selectedIds.has(i.id)),
+    [items, selectedIds]
+  );
 
   const allPicked = picked.every((c) => c !== null);
   const colors = (allPicked ? picked : ["#000", "#000", "#000"]) as [
@@ -306,38 +328,6 @@ export default function InstallationPage() {
     });
   }
 
-  async function startRecording() {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      streamRef.current = stream;
-      const AC = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-      const ctx = new AC();
-      audioCtxRef.current = ctx;
-      const src = ctx.createMediaStreamSource(stream);
-      const an = ctx.createAnalyser();
-      an.fftSize = 2048;
-      src.connect(an);
-      setAnalyser(an);
-      const mr = new MediaRecorder(stream);
-      recorderRef.current = mr;
-      mr.start();
-      setRecording(true);
-    } catch (err) {
-      console.warn("[installation] mic denied", err);
-    }
-  }
-
-  function stopRecording() {
-    recorderRef.current?.stop();
-    streamRef.current?.getTracks().forEach((t) => t.stop());
-    audioCtxRef.current?.close().catch(() => {});
-    recorderRef.current = null;
-    streamRef.current = null;
-    audioCtxRef.current = null;
-    setAnalyser(null);
-    setRecording(false);
-  }
-
   function confirmConnection() {
     const ids = Array.from(selectedIds);
     const stamp = Date.now();
@@ -353,15 +343,35 @@ export default function InstallationPage() {
     setEdges((prev) => [...prev, ...newEdges]);
     setSelectedIds(new Set());
     setRecordOpen(false);
+    setSelectMode(false);
+    setPanelItemId(null);
+
+    const thumbs = selectedItems.flatMap((i) => i.thumbnail_url ? [i.thumbnail_url] : []);
+    const { resolve } = startNavProgress({
+      id: `inst-conn-${stamp}`,
+      text: "Filing connection",
+      thumbnails: thumbs.length > 0 ? thumbs : undefined,
+      showProgress: true,
+      durationMs: 1800,
+    });
+
+    window.setTimeout(() => {
+      resolve("Connection filed");
+      window.setTimeout(() => {
+        setFadingOut(true);
+        window.setTimeout(() => {
+          router.push("/colophon?from=installation");
+        }, FADE_OUT_MS);
+      }, 2000);
+    }, 700);
   }
 
   function closeRecord() {
-    if (recording) stopRecording();
+    setAudioBlob(null);
     setRecordOpen(false);
   }
 
-  function restart() {
-    if (recording) stopRecording();
+  const restart = useCallback(() => {
     setPicked([null, null, null]);
     setColorStep(0);
     setRevealStage(0);
@@ -370,8 +380,41 @@ export default function InstallationPage() {
     setSelectedIds(new Set());
     setEdges([]);
     setRecordOpen(false);
+    setSelectMode(false);
+    setPanelItemId(null);
+    setFadingOut(false);
+    setShowIntroCard(false);
+    setAudioBlob(null);
     setPhase("color");
-  }
+  }, []);
+
+  // 2-minute idle timer — restart back to first color question.
+  // Only fires if the user has already started (picked at least one color or moved past color phase).
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (fadingOut) return;
+    if (phase === "color" && !picked[0]) return;
+    let timer: ReturnType<typeof setTimeout>;
+    const reset = () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        restart();
+      }, IDLE_TIMEOUT_MS);
+    };
+    const events: (keyof WindowEventMap)[] = [
+      "mousemove",
+      "mousedown",
+      "keydown",
+      "touchstart",
+      "wheel",
+    ];
+    events.forEach((e) => window.addEventListener(e, reset, { passive: true }));
+    reset();
+    return () => {
+      clearTimeout(timer);
+      events.forEach((e) => window.removeEventListener(e, reset));
+    };
+  }, [restart, fadingOut, phase, picked]);
 
   const nodes = useMemo<Node[]>(() => {
     const published = items.filter((i) => !!i.voice_recording_url);
@@ -386,20 +429,42 @@ export default function InstallationPage() {
         item,
         isFirst: false,
         index: i,
-        isSelected: selectedIds.has(item.id),
-        isConnectSelecting: true,
+        isSelected: selectMode && selectedIds.has(item.id),
+        isConnectSelecting: selectMode,
       },
       draggable: false,
       selectable: false,
       focusable: false,
     }));
-  }, [items, selectedIds]);
+  }, [items, selectedIds, selectMode]);
 
   const canConnect = selectedIds.size >= 2;
   const showAmbient = phase === "reveal";
 
+  function handleNodeClick(_: React.MouseEvent, node: Node) {
+    if (selectMode) {
+      toggleSelect(node.id);
+    } else {
+      setPanelItemId(node.id);
+    }
+  }
+
+  function enterSelectMode() {
+    setPanelItemId(null);
+    setSelectMode(true);
+  }
+
+  function cancelSelectMode() {
+    setSelectMode(false);
+    setSelectedIds(new Set());
+  }
+
   return (
-    <div className="relative h-dvh w-full overflow-hidden bg-black">
+    <motion.div
+      className="relative h-dvh w-full overflow-hidden bg-black"
+      animate={{ opacity: fadingOut ? 0 : 1 }}
+      transition={{ duration: FADE_OUT_MS / 1000, ease: EASE_OUT }}
+    >
       <style>{driftKeyframes}</style>
 
       {/* Ambient gradient reveal */}
@@ -476,7 +541,7 @@ export default function InstallationPage() {
       <button
         type="button"
         onClick={restart}
-        className="fixed right-6 top-6 z-[70] rounded-md border border-zinc-800 bg-zinc-950/80 px-3 py-1.5 font-sans text-xs text-zinc-300 shadow-[0_4px_16px_rgba(0,0,0,0.5)] backdrop-blur transition-colors hover:bg-zinc-900 hover:text-white"
+        className="fixed right-6 top-6 z-[70] rounded-md bg-zinc-900 px-3 py-1.5 font-sans text-xs text-white shadow-[0_4px_16px_rgba(0,0,0,0.4)] transition-colors hover:bg-zinc-800"
         aria-label="Restart installation"
       >
         Restart
@@ -536,6 +601,7 @@ export default function InstallationPage() {
                           audioUrl={transcript.audio_url}
                           words={transcript.words}
                           onFinished={markListened}
+                          autoPlay={colorStep > 0}
                         />
                       ) : (
                         <p className="font-sans text-sm leading-relaxed text-zinc-400">
@@ -579,6 +645,7 @@ export default function InstallationPage() {
                   onPlayStart={handleRevealPlayStart}
                   onFinished={() => setRevealListened(true)}
                   lightControls
+                  autoPlay
                 />
               )}
               <AnimatePresence>
@@ -590,7 +657,7 @@ export default function InstallationPage() {
                     className="mt-4"
                   >
                     <button
-                      onClick={() => setPhase("intro")}
+                      onClick={() => { setPhase("graph"); setShowIntroCard(true); }}
                       className="font-sans text-xs text-white/70 transition-opacity hover:text-white/90"
                     >
                       Enter Kanon
@@ -603,112 +670,349 @@ export default function InstallationPage() {
         )}
       </AnimatePresence>
 
-      <FirstTimeIntroOverlay
-        variant="fullscreen"
-        open={phase === "intro"}
-        onClose={() => setPhase("graph")}
-      />
-
       {/* Graph phase */}
-      {phase === "graph" && (
-        <div className="absolute inset-0">
-          <ReactFlow
-            nodes={nodes}
-            edges={edges}
-            nodeTypes={NODE_TYPES}
-            nodesDraggable={false}
-            nodesConnectable={false}
-            elementsSelectable={false}
-            zoomOnScroll={false}
-            zoomOnPinch
-            zoomOnDoubleClick={false}
-            panOnDrag
-            panOnScroll
-            fitView
-            fitViewOptions={{ padding: 0.6, minZoom: 0.95 }}
-            onNodeClick={(_, node) => toggleSelect(node.id)}
-            style={{ background: "#000000" }}
-            proOptions={{ hideAttribution: true }}
-          />
-          <AnimatePresence>
-            {canConnect && !recordOpen && (
+      <AnimatePresence>
+        {phase === "graph" && (
+          <motion.div
+            key="graph"
+            className="absolute inset-0"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 1.2, ease: EASE_OUT }}
+          >
+            <ReactFlow
+              nodes={nodes}
+              edges={edges}
+              nodeTypes={NODE_TYPES}
+              nodesDraggable={false}
+              nodesConnectable={false}
+              elementsSelectable={false}
+              zoomOnScroll={false}
+              zoomOnPinch
+              zoomOnDoubleClick={false}
+              panOnDrag
+              panOnScroll
+              fitView
+              fitViewOptions={{ padding: 0.6, minZoom: 0.95 }}
+              onNodeClick={handleNodeClick}
+              style={{ background: "#000000" }}
+              proOptions={{ hideAttribution: true }}
+            />
+
+            {/* Dim backdrop for intro card walkthrough */}
+            <AnimatePresence>
+              {showIntroCard && (
+                <motion.div
+                  key="intro-card-backdrop"
+                  className="absolute inset-0 z-[75] bg-black/75"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.35 }}
+                />
+              )}
+            </AnimatePresence>
+
+            {/* Side card walkthrough — same component as home page, card variant */}
+            <FirstTimeIntroOverlay
+              variant="card"
+              open={showIntroCard}
+              onClose={() => setShowIntroCard(false)}
+            />
+
+            {/* Backdrop + side panel for an item */}
+            <AnimatePresence>
+              {panelItemId && (
+                <>
+                  <motion.div
+                    key="panel-backdrop"
+                    className="absolute inset-0 z-40 bg-black/50 backdrop-blur-sm"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.25 }}
+                    onClick={() => setPanelItemId(null)}
+                  />
+                  <RightPanel
+                    key="installation-item-panel"
+                    onClose={() => setPanelItemId(null)}
+                    wide={isNarrativePlaying}
+                    wideWidth={1100}
+                    disableBodyScroll={isNarrativePlaying}
+                  >
+                    <ItemPanel
+                      key={panelItemId}
+                      itemId={panelItemId}
+                      onListeningChange={setIsNarrativePlaying}
+                      installationMode
+                    />
+                  </RightPanel>
+                </>
+              )}
+            </AnimatePresence>
+
+            {/* Custom installation floating nav */}
+            <InstallationFloatingNav
+              selectMode={selectMode}
+              selectedCount={selectedIds.size}
+              canConnect={canConnect}
+              onEnterSelect={enterSelectMode}
+              onCancelSelect={cancelSelectMode}
+              onConfirmConnect={() => setRecordOpen(true)}
+              shouldReduceMotion={!!shouldReduceMotion}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Recording panel — wide RightPanel using existing RecordingInterface */}
+      <AnimatePresence>
+        {recordOpen && (
+          <RightPanel
+            key="install-record-panel"
+            onClose={closeRecord}
+            disableBodyScroll
+            wide
+            wideWidth={900}
+          >
+            <RecordingInterface
+              item={{
+                title: selectedItems[0]?.title ?? "Connection",
+                creator: selectedItems[0]?.creator ?? "",
+                mediaDate: "",
+                thumbnailUrl: selectedItems[0]?.thumbnail_url ?? null,
+                index: 0,
+                total: 1,
+              }}
+              colors={colors}
+              stackItems={selectedItems.map<RecordingStackItem>((i) => ({
+                title: i.title,
+                thumbnailUrl: i.thumbnail_url ?? null,
+                creator: i.creator || undefined,
+              }))}
+              heading="Record connection"
+              onRecorded={(blob) => setAudioBlob(blob)}
+              onReRecord={() => setAudioBlob(null)}
+              hasRecording={audioBlob !== null}
+              destination="library"
+              isLast
+              canAdvance={audioBlob !== null}
+              onSkip={() => {}}
+              onNext={() => {}}
+              onSubmit={confirmConnection}
+            />
+          </RightPanel>
+        )}
+      </AnimatePresence>
+    </motion.div>
+  );
+}
+
+/* ── Nav status helpers (mirrors FloatingNav.tsx) ──────────────────────────── */
+
+function ThumbnailCycler({ thumbnails }: { thumbnails: string[] }) {
+  const [index, setIndex] = useState(0);
+  const shouldReduceMotion = useReducedMotion();
+  useEffect(() => {
+    if (thumbnails.length <= 1) return;
+    const id = setInterval(() => setIndex((p) => (p + 1) % thumbnails.length), 1200);
+    return () => clearInterval(id);
+  }, [thumbnails.length]);
+  return (
+    <div className="relative h-7 w-7 flex-shrink-0 overflow-hidden rounded-[4px]">
+      <AnimatePresence mode="popLayout">
+        <motion.div
+          key={`${thumbnails[index]}-${index}`}
+          initial={shouldReduceMotion ? false : { opacity: 0, scale: 0.92 }}
+          animate={{ opacity: 1, scale: 1 }}
+          exit={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, scale: 1.05 }}
+          transition={{ duration: 0.3, ease: EASE_OUT }}
+          className="absolute inset-0"
+        >
+          <Image src={thumbnails[index]!} alt="" fill className="object-cover" sizes="28px" unoptimized />
+        </motion.div>
+      </AnimatePresence>
+    </div>
+  );
+}
+
+function MorphingText({ text, entranceDelay = 0 }: { text: string; entranceDelay?: number }) {
+  const shouldReduceMotion = useReducedMotion();
+  if (shouldReduceMotion) {
+    return (
+      <span className="whitespace-nowrap font-lector text-sm text-zinc-300">{text}</span>
+    );
+  }
+  return (
+    <span className="whitespace-nowrap font-lector text-sm text-zinc-300">
+      <AnimatePresence mode="popLayout">
+        {text.split("").map((char, i) => (
+          <motion.span
+            key={`${i}-${char}-${text}`}
+            initial={{ opacity: 0, filter: "blur(2px)" }}
+            animate={{
+              opacity: 1,
+              filter: "blur(0px)",
+              transition: { type: "spring", stiffness: 350, damping: 55, delay: entranceDelay + i * 0.015 },
+            }}
+            exit={{ opacity: 0, filter: "blur(2px)", transition: { type: "spring", stiffness: 500, damping: 55 } }}
+            className="inline-block"
+          >
+            {char === " " ? " " : char}
+          </motion.span>
+        ))}
+      </AnimatePresence>
+    </span>
+  );
+}
+
+interface InstallationFloatingNavProps {
+  selectMode: boolean;
+  selectedCount: number;
+  canConnect: boolean;
+  onEnterSelect: () => void;
+  onCancelSelect: () => void;
+  onConfirmConnect: () => void;
+  shouldReduceMotion: boolean;
+}
+
+function InstallationFloatingNav({
+  selectMode,
+  selectedCount,
+  canConnect,
+  onEnterSelect,
+  onCancelSelect,
+  onConfirmConnect,
+  shouldReduceMotion,
+}: InstallationFloatingNavProps) {
+  const { currentMessage } = useNavStatus();
+  const greyClass =
+    "min-h-[44px] cursor-not-allowed px-4 py-2.5 text-sm text-zinc-600";
+  const showStatus = !!currentMessage;
+
+  return (
+    <motion.div
+      initial={shouldReduceMotion ? false : { opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3, ease: EASE_OUT }}
+      className="fixed left-1/2 z-50 -translate-x-1/2"
+      style={{ bottom: "calc(1.5rem + env(safe-area-inset-bottom, 0px))" }}
+    >
+      <motion.div
+        layout
+        transition={{ layout: { duration: MOTION_DURATION.fast, ease: EASE_OUT } }}
+        className="relative overflow-hidden rounded-md shadow-[0_4px_24px_rgba(0,0,0,0.5)]"
+      >
+        {/* Progress border when filing — matches FloatingNav exactly */}
+        <AnimatePresence>
+          {showStatus && currentMessage.showProgress && (
+            <motion.div
+              key={`border-${currentMessage.id}`}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1, transition: { duration: 0.15, ease: EASE_OUT, delay: MOTION_DURATION.fast + 0.04 } }}
+              exit={{ opacity: 0, transition: { duration: 0.4, ease: EASE_OUT } }}
+              className="pointer-events-none absolute inset-0 z-10 rounded-md"
+              style={{
+                padding: "1px",
+                background: `conic-gradient(from var(--border-angle), transparent 0deg, rgba(255,255,255,0.9) 40deg, transparent 80deg)`,
+                mask: "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
+                maskComposite: "exclude",
+                WebkitMask: "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
+                WebkitMaskComposite: "xor",
+                animation: "nav-border-loop 1.4s linear infinite",
+              } as React.CSSProperties}
+            />
+          )}
+        </AnimatePresence>
+
+        <div className="overflow-hidden rounded-md border border-zinc-800 bg-zinc-950">
+          <AnimatePresence initial={false} mode="wait">
+            {showStatus ? (
               <motion.div
-                key="connect-cta"
-                initial={shouldReduceMotion ? false : { opacity: 0, y: 12 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: 12 }}
-                transition={{ duration: 0.25, ease: EASE_OUT }}
-                className="fixed bottom-6 left-1/2 z-[60] -translate-x-1/2"
+                key={`status-${currentMessage.id}`}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1, transition: { duration: MOTION_DURATION.fast, ease: EASE_OUT, delay: MOTION_DURATION.fast + 0.04 } }}
+                exit={{ opacity: 0, transition: { duration: MOTION_DURATION.fast, ease: EASE_OUT } }}
+                className="flex items-center gap-2.5 px-4 py-2.5"
               >
-                <button
-                  type="button"
-                  onClick={() => setRecordOpen(true)}
-                  className="rounded-full border border-zinc-700 bg-zinc-950 px-5 py-2.5 font-sans text-sm text-zinc-100 shadow-[0_8px_24px_rgba(0,0,0,0.6)] transition-colors hover:bg-zinc-900"
-                >
-                  Connect {selectedIds.size} record{selectedIds.size === 1 ? "" : "s"}
-                </button>
+                {currentMessage.thumbnails && currentMessage.thumbnails.length > 0 && (
+                  <ThumbnailCycler thumbnails={currentMessage.thumbnails} />
+                )}
+                <MorphingText text={currentMessage.text} entranceDelay={MOTION_DURATION.fast + 0.04} />
+              </motion.div>
+            ) : (
+              <motion.div
+                key="nav-buttons"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1, transition: { duration: 0.15, ease: EASE_OUT } }}
+                exit={{ opacity: 0, transition: { duration: 0.15, ease: EASE_OUT } }}
+              >
+                <AnimatePresence initial={false}>
+                  {selectMode && (
+                    <motion.div
+                      key="select-strip"
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: "auto", opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={{ duration: MOTION_DURATION.standard, ease: EASE_OUT }}
+                      className="overflow-hidden border-b border-zinc-800"
+                    >
+                      <div className="flex flex-col gap-2 px-4 py-3 font-sans">
+                        <p className="text-xs text-zinc-400">
+                          Select records in the graph to connect them.
+                        </p>
+                        <span className="text-xs text-zinc-500">
+                          {selectedCount} selected
+                        </span>
+                        <div className="flex items-center justify-between gap-2">
+                          <button
+                            onClick={onCancelSelect}
+                            className="-mx-1 px-1 py-2 text-xs text-zinc-500 transition-colors hover:text-zinc-200"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            onClick={onConfirmConnect}
+                            disabled={!canConnect}
+                            className="rounded border border-zinc-700 px-2.5 py-2 text-xs text-zinc-300 transition-colors hover:border-zinc-500 hover:text-zinc-100 disabled:opacity-40"
+                          >
+                            Confirm
+                          </button>
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+                <div className="flex items-stretch divide-x divide-zinc-800 font-lector">
+                  <button type="button" disabled className={greyClass}>
+                    Add
+                  </button>
+                  <button
+                    type="button"
+                    onClick={selectMode ? onCancelSelect : onEnterSelect}
+                    className={`min-h-[44px] px-4 py-2.5 text-sm transition-colors hover:bg-zinc-900 hover:text-zinc-50 ${
+                      selectMode ? "font-medium text-zinc-300" : "text-zinc-400"
+                    }`}
+                  >
+                    Connect
+                  </button>
+                  <button type="button" disabled className={greyClass}>
+                    Search
+                  </button>
+                  <button type="button" disabled className={greyClass}>
+                    Hold
+                  </button>
+                  <button type="button" disabled className={greyClass}>
+                    Activity
+                  </button>
+                </div>
               </motion.div>
             )}
           </AnimatePresence>
         </div>
-      )}
-
-      {/* Recording overlay */}
-      <AnimatePresence>
-        {recordOpen && (
-          <motion.div
-            key="record-overlay"
-            className="fixed inset-0 z-[80] flex flex-col items-center justify-center bg-black/90 backdrop-blur-md"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.25, ease: EASE_OUT }}
-          >
-            <button
-              type="button"
-              onClick={closeRecord}
-              className="absolute right-6 top-6 font-sans text-xs text-white/50 transition-colors hover:text-white/90"
-            >
-              Cancel
-            </button>
-            <div className="flex w-[min(720px,calc(100vw-3rem))] flex-col items-center gap-8">
-              <p className="font-lector text-xl tracking-tight text-white/90">
-                Share why these {selectedIds.size} records belong together.
-              </p>
-              <div className="relative h-64 w-full overflow-hidden rounded-2xl border border-white/10 bg-black">
-                <RecordingWave analyser={analyser} colors={colors} active={recording} />
-              </div>
-              <div className="flex items-center gap-6">
-                {!recording ? (
-                  <button
-                    type="button"
-                    onClick={() => void startRecording()}
-                    className="rounded-full border border-white/30 bg-white/10 px-5 py-2.5 font-sans text-sm text-white transition-colors hover:bg-white/20"
-                  >
-                    Start recording
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={stopRecording}
-                    className="rounded-full border border-red-400/70 bg-red-500/20 px-5 py-2.5 font-sans text-sm text-red-200 transition-colors hover:bg-red-500/30"
-                  >
-                    Stop
-                  </button>
-                )}
-                <button
-                  type="button"
-                  onClick={confirmConnection}
-                  disabled={recording}
-                  className="rounded-full bg-white px-5 py-2.5 font-sans text-sm text-black transition-colors hover:bg-white/90 disabled:opacity-40"
-                >
-                  Connect
-                </button>
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }

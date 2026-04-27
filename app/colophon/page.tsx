@@ -1,9 +1,35 @@
 "use client";
 
+import { Suspense, useEffect } from "react";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import ViewportScrollFades from "@/components/ViewportScrollFades";
 
-export default function ColophonPage() {
+const IDLE_MS = 2 * 60 * 1000;
+
+function ColophonContent() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const fromInstallation = searchParams.get("from") === "installation";
+  const linkLabel = fromInstallation ? "Restart" : "Re-enter Kanon";
+  const linkHref = fromInstallation ? "/installation" : "/";
+
+  useEffect(() => {
+    if (!fromInstallation) return;
+    let timer: ReturnType<typeof setTimeout>;
+    const reset = () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => router.push("/installation"), IDLE_MS);
+    };
+    const events: (keyof WindowEventMap)[] = ["mousemove", "mousedown", "keydown", "touchstart", "wheel"];
+    events.forEach((e) => window.addEventListener(e, reset, { passive: true }));
+    reset();
+    return () => {
+      clearTimeout(timer);
+      events.forEach((e) => window.removeEventListener(e, reset));
+    };
+  }, [fromInstallation, router]);
+
   return (
     <div className="min-h-screen bg-black text-zinc-200">
       <ViewportScrollFades top bottom={false} />
@@ -51,10 +77,10 @@ export default function ColophonPage() {
 
             <div className="w-full">
               <Link
-                href="/"
+                href={linkHref}
                 className="inline-block font-lector text-sm tracking-tight text-white/90 transition-colors hover:text-white"
               >
-                Re-enter Kanon
+                {linkLabel}
               </Link>
             </div>
           </div>
@@ -62,5 +88,13 @@ export default function ColophonPage() {
         </div>
       </main>
     </div>
+  );
+}
+
+export default function ColophonPage() {
+  return (
+    <Suspense fallback={null}>
+      <ColophonContent />
+    </Suspense>
   );
 }

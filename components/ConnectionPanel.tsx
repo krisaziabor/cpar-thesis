@@ -101,8 +101,11 @@ function buildPseudoTimedWords(transcript: string, duration: number): TimedWord[
 
 export default function ConnectionPanel({
   connectionId,
+  installationMode = false,
 }: {
   connectionId: string;
+  /** When true, Respond and Add-to-Hold are disabled (installation experience). */
+  installationMode?: boolean;
 }) {
   const { user } = useAuth();
   const router = useRouter();
@@ -639,13 +642,14 @@ export default function ConnectionPanel({
           <button
             type="button"
             onClick={goToRespond}
-            className="inline-flex items-center rounded-full bg-zinc-100 px-4 py-1.5 font-sans text-xs text-zinc-900 transition-colors duration-150 ease-out hover:bg-white"
+            disabled={installationMode}
+            className="inline-flex items-center rounded-full bg-zinc-100 px-4 py-1.5 font-sans text-xs text-zinc-900 transition-colors duration-150 ease-out hover:bg-white disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-zinc-100"
           >
             Respond
           </button>
           <button
             type="button"
-            disabled={savingKanon}
+            disabled={savingKanon || installationMode}
             onClick={async () => {
               if (!user?.email) return;
               setSavingKanon(true);
