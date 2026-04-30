@@ -330,23 +330,6 @@ function HomeInner() {
     };
   }, [panelItemId]);
 
-  // 2-minute idle timer — redirect to installation start.
-  useEffect(() => {
-    const IDLE_MS = 2 * 60 * 1000;
-    let timer: ReturnType<typeof setTimeout>;
-    const reset = () => {
-      clearTimeout(timer);
-      timer = setTimeout(() => router.push("/installation"), IDLE_MS);
-    };
-    const events: (keyof WindowEventMap)[] = ["mousemove", "mousedown", "keydown", "touchstart", "wheel"];
-    events.forEach((e) => window.addEventListener(e, reset, { passive: true }));
-    reset();
-    return () => {
-      clearTimeout(timer);
-      events.forEach((e) => window.removeEventListener(e, reset));
-    };
-  }, [router]);
-
   const nodes = useMemo<Node[]>(() => {
     if (shuffleSeed == null) return [];
 

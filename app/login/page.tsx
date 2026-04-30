@@ -30,16 +30,7 @@ export default function LoginPage() {
   const { user, loading, authError } = useAuth();
   const router = useRouter();
   const shouldReduceMotion = useReducedMotion();
-  const [stage, setStage] = useState<Stage>(() => {
-    if (
-      auth &&
-      typeof window !== "undefined" &&
-      isSignInWithEmailLink(auth, window.location.href)
-    ) {
-      return "verifying";
-    }
-    return "gate";
-  });
+  const [stage, setStage] = useState<Stage>("gate");
   const [emailInput, setEmailInput] = useState("");
   const [gatedEmail, setGatedEmail] = useState("");
   const [gatedFirstName, setGatedFirstName] = useState<string | null>(null);
@@ -78,13 +69,13 @@ export default function LoginPage() {
     if (!auth || typeof window === "undefined") return;
     if (!isSignInWithEmailLink(auth, window.location.href)) return;
 
+    setStage("verifying");
+
     const storedEmail = localStorage.getItem(EMAIL_STORAGE_KEY);
 
     if (!storedEmail) {
-      Promise.resolve().then(() => {
-        setLocalError("Could not find your email. Please request a new sign-in link.");
-        setStage("gate");
-      });
+      setLocalError("Could not find your email. Please request a new sign-in link.");
+      setStage("gate");
       return;
     }
 
@@ -193,7 +184,10 @@ export default function LoginPage() {
       const res = await fetch("/api/auth/send-magic-link", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: gatedEmail }),
+        body: JSON.stringify({
+          email: gatedEmail,
+          origin: typeof window !== "undefined" ? window.location.origin : undefined,
+        }),
       });
       const data = (await res.json().catch(() => ({}))) as { error?: string };
       if (!res.ok) {

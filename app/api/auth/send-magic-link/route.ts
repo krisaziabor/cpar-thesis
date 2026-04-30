@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { render } from "@react-email/render";
 import { Resend } from "resend";
 import SignInLinkEmail from "@/emails/sign-in-link";
-import { getAppOrigin, getEmailAssetOrigin } from "@/lib/app-origin";
+import { getEmailAssetOrigin, resolveContinueOrigin } from "@/lib/app-origin";
 import { getAdminAuth, getAdminDb } from "@/lib/firebase-admin";
 
 export const runtime = "nodejs";
@@ -31,6 +31,9 @@ export async function POST(req: Request) {
   if (typeof email !== "string" || !isValidEmail(email.trim())) {
     return NextResponse.json({ error: "A valid email is required." }, { status: 400 });
   }
+
+  const clientOrigin =
+    typeof body === "object" && body && "origin" in body ? (body as { origin: unknown }).origin : null;
 
   const normalized = email.trim().toLowerCase();
 
@@ -62,7 +65,7 @@ export async function POST(req: Request) {
   }
 
   const isNewUser = !inWhitelist;
-  const continueUrl = `${getAppOrigin()}/login`;
+  const continueUrl = `${resolveContinueOrigin(clientOrigin)}/login`;
 
   let signInUrl: string;
   try {
