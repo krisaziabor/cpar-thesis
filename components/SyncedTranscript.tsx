@@ -109,6 +109,7 @@ const SyncedTranscript = forwardRef<SyncedTranscriptHandle, SyncedTranscriptProp
     const audioCtxRef = useRef<AudioContext | null>(null);
 
     const [playing, setPlaying] = useState(false);
+    const [autoplayBlocked, setAutoplayBlocked] = useState(false);
 
     wordRefs.current.length = words.length;
 
@@ -228,10 +229,15 @@ const SyncedTranscript = forwardRef<SyncedTranscriptHandle, SyncedTranscriptProp
         // Analyser is wired up in background — gradient animates once ready.
         void audio.play().then(() => {
           setPlaying(true);
+          setAutoplayBlocked(false);
           onPlayStart?.();
           rafRef.current = requestAnimationFrame(tick);
           void setupAnalyser();
-        }).catch(() => {});
+        }).catch(() => {
+          // Browser blocked autoplay (Safari private, incognito w/o gesture, etc.).
+          // Surface a fallback so the user can tap to start.
+          setAutoplayBlocked(true);
+        });
       }, 80);
       return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -244,6 +250,7 @@ const SyncedTranscript = forwardRef<SyncedTranscriptHandle, SyncedTranscriptProp
       if (!audio || !audio.paused) return;
       void audio.play().then(() => {
         setPlaying(true);
+        setAutoplayBlocked(false);
         onPlayStart?.();
         rafRef.current = requestAnimationFrame(tick);
         void setupAnalyser();
@@ -306,22 +313,32 @@ const SyncedTranscript = forwardRef<SyncedTranscriptHandle, SyncedTranscriptProp
           ))}
         </p>
 
-        {!hideControls && (
-          <div className="mt-3 flex gap-3">
+        {(!hideControls || autoplayBlocked) && (
+          <div className="mt-3 flex items-center gap-3">
             <button
               onClick={togglePlay}
-              className={`font-sans text-xs transition-colors ${lightControls ? "text-white/40 hover:text-white/70" : "text-zinc-500 hover:text-zinc-300"}`}
-              aria-label={playing ? "Pause" : "Play"}
+              className={`font-sans text-xs transition-colors ${
+                autoplayBlocked
+                  ? lightControls
+                    ? "text-white/90 underline underline-offset-4"
+                    : "text-zinc-200 underline underline-offset-4"
+                  : lightControls
+                    ? "text-white/40 hover:text-white/70"
+                    : "text-zinc-500 hover:text-zinc-300"
+              }`}
+              aria-label={playing ? "Pause" : autoplayBlocked ? "Tap to play" : "Play"}
             >
-              {playing ? "Pause" : "Play"}
+              {playing ? "Pause" : autoplayBlocked ? "Tap to play" : "Play"}
             </button>
-            <button
-              onClick={restart}
-              className={`font-sans text-xs transition-colors ${lightControls ? "text-white/40 hover:text-white/70" : "text-zinc-500 hover:text-zinc-300"}`}
-              aria-label="Restart"
-            >
-              Restart
-            </button>
+            {!hideControls && (
+              <button
+                onClick={restart}
+                className={`font-sans text-xs transition-colors ${lightControls ? "text-white/40 hover:text-white/70" : "text-zinc-500 hover:text-zinc-300"}`}
+                aria-label="Restart"
+              >
+                Restart
+              </button>
+            )}
           </div>
         )}
       </div>
