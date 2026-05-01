@@ -23,7 +23,7 @@ import { useNavStatus } from "@/lib/nav-status-context";
 import RecordingInterface, { type RecordingStackItem } from "@/components/RecordingInterface";
 import Image from "next/image";
 
-const IDLE_TIMEOUT_MS = 2 * 60 * 1000;
+const IDLE_TIMEOUT_MS = 5 * 60 * 1000;
 const FADE_OUT_MS = 700;
 
 const NODE_TYPES: NodeTypes = { itemThumbnail: ItemThumbnailNode };
@@ -202,7 +202,7 @@ const driftKeyframes = `
 }
 `;
 
-type Phase = "color" | "reveal" | "graph";
+type Phase = "colophon" | "color" | "reveal" | "graph";
 
 export default function InstallationPage() {
   const shouldReduceMotion = useReducedMotion();
@@ -210,7 +210,7 @@ export default function InstallationPage() {
   const ambient = isMobile ? AMBIENT_MOBILE : { ...AMBIENT, drift: true };
   const router = useRouter();
 
-  const [phase, setPhase] = useState<Phase>("color");
+  const [phase, setPhase] = useState<Phase>("colophon");
   const [picked, setPicked] = useState<[string | null, string | null, string | null]>([
     null,
     null,
@@ -228,7 +228,17 @@ export default function InstallationPage() {
   const [authed, setAuthed] = useState(false);
 
   const [recordOpen, setRecordOpen] = useState(false);
+  const [recordFullScreen, setRecordFullScreen] = useState(false);
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
+  const [viewportWidth, setViewportWidth] = useState<number>(
+    typeof window !== "undefined" ? window.innerWidth : 1200,
+  );
+
+  useEffect(() => {
+    const onResize = () => setViewportWidth(window.innerWidth);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
 
   const [selectMode, setSelectMode] = useState(false);
   const [panelItemId, setPanelItemId] = useState<string | null>(null);
@@ -359,8 +369,11 @@ export default function InstallationPage() {
       resolve("Connection filed");
       window.setTimeout(() => {
         setFadingOut(true);
+        // Wait for the screen to finish fading to black, hold briefly, then mount
+        // the colophon and fade it in — never crossfade with the graph.
         window.setTimeout(() => {
-          router.push("/colophon?from=installation");
+          resetState();
+          window.setTimeout(() => setFadingOut(false), 250);
         }, FADE_OUT_MS);
       }, 2000);
     }, 700);
@@ -369,9 +382,10 @@ export default function InstallationPage() {
   function closeRecord() {
     setAudioBlob(null);
     setRecordOpen(false);
+    setRecordFullScreen(false);
   }
 
-  const restart = useCallback(() => {
+  const resetState = useCallback(() => {
     setPicked([null, null, null]);
     setColorStep(0);
     setRevealStage(0);
@@ -380,19 +394,25 @@ export default function InstallationPage() {
     setSelectedIds(new Set());
     setEdges([]);
     setRecordOpen(false);
+    setRecordFullScreen(false);
     setSelectMode(false);
     setPanelItemId(null);
-    setFadingOut(false);
     setShowIntroCard(false);
     setAudioBlob(null);
-    setPhase("color");
+    setPhase("colophon");
   }, []);
 
-  // 2-minute idle timer — restart back to first color question.
+  const restart = useCallback(() => {
+    resetState();
+    setFadingOut(false);
+  }, [resetState]);
+
+  // 5-minute idle timer — restart back to the colophon screen.
   // Only fires if the user has already started (picked at least one color or moved past color phase).
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (fadingOut) return;
+    if (phase === "colophon") return;
     if (phase === "color" && !picked[0]) return;
     let timer: ReturnType<typeof setTimeout>;
     const reset = () => {
@@ -537,20 +557,74 @@ export default function InstallationPage() {
         )}
       </AnimatePresence>
 
-      {/* Restart — always visible */}
-      <button
-        type="button"
-        onClick={restart}
-        className="fixed right-6 top-6 z-[70] rounded-md bg-zinc-900 px-3 py-1.5 font-sans text-xs text-white shadow-[0_4px_16px_rgba(0,0,0,0.4)] transition-colors hover:bg-zinc-800"
-        aria-label="Restart installation"
-      >
-        Restart
-      </button>
+      {/* Restart — hidden on the colophon entry screen */}
+      {phase !== "colophon" && (
+        <button
+          type="button"
+          onClick={restart}
+          className="fixed right-6 top-6 z-[70] rounded-md bg-zinc-900 px-3 py-1.5 font-sans text-xs text-white shadow-[0_4px_16px_rgba(0,0,0,0.4)] transition-colors hover:bg-zinc-800"
+          aria-label="Restart installation"
+        >
+          Restart
+        </button>
+      )}
 
       {/* Header */}
       <div className="pointer-events-none fixed left-0 right-0 top-6 z-20 flex flex-col items-center">
         <h1 className="font-lector text-2xl tracking-tight text-white/90">Kanon</h1>
       </div>
+
+      {/* Colophon entry phase */}
+      <AnimatePresence mode="wait">
+        {phase === "colophon" && (
+          <motion.div
+            key="colophon"
+            initial={shouldReduceMotion ? false : { opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, transition: { duration: 0.3, ease: EASE } }}
+            transition={{ duration: 0.25 }}
+            className="fixed inset-0 z-10 overflow-y-auto text-zinc-200"
+          >
+            <main className="mx-auto w-full max-w-4xl px-6 pb-24 pt-24">
+              <div className="grid min-h-[calc(100dvh-6rem)] w-full grid-cols-1 grid-rows-[minmax(0,1fr)_auto_minmax(0,1fr)]">
+                <div className="min-h-0" aria-hidden />
+                <div className="mx-auto flex w-full max-w-3xl flex-col gap-8">
+                  <section className="w-full space-y-8">
+                    <p className="whitespace-pre-line font-lector text-sm leading-relaxed text-zinc-400">
+                      {
+                        "A social network, library, installation, book, and practice.\nIn partial fulfillment of the requirements for the degree of Bachelor of Arts in Computing and the Arts at Yale University.\nWork of Kristopher Aziabor."
+                      }
+                    </p>
+                    <p className="text-sm leading-6 text-zinc-400">
+                      Social media platforms optimize for viral reach and algorithmic engagement, minimizing
+                      the possibility of intimate knowledge-sharing within close communities. Influential apps
+                      like Instagram and TikTok strip content of personal context and make any act of
+                      communication or sharing a performance that can be tracked and compared through likes,
+                      views, and followers.
+                      <br />
+                      <br />
+                      I propose an alternative. Kanon seeks to bring people together by pushing the work we
+                      create, the media we consume, and the theory we treasure into one space where
+                      everything can be connected through solely voice.
+                    </p>
+                  </section>
+
+                  <div className="w-full">
+                    <button
+                      type="button"
+                      onClick={() => setPhase("color")}
+                      className="inline-block font-lector text-sm tracking-tight text-white/90 transition-colors hover:text-white"
+                    >
+                      Begin
+                    </button>
+                  </div>
+                </div>
+                <div className="min-h-0" aria-hidden />
+              </div>
+            </main>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Color phase */}
       <AnimatePresence mode="wait">
@@ -601,7 +675,7 @@ export default function InstallationPage() {
                           audioUrl={transcript.audio_url}
                           words={transcript.words}
                           onFinished={markListened}
-                          autoPlay={colorStep > 0}
+                          autoPlay
                         />
                       ) : (
                         <p className="font-sans text-sm leading-relaxed text-zinc-400">
@@ -700,23 +774,9 @@ export default function InstallationPage() {
               proOptions={{ hideAttribution: true }}
             />
 
-            {/* Dim backdrop for intro card walkthrough */}
-            <AnimatePresence>
-              {showIntroCard && (
-                <motion.div
-                  key="intro-card-backdrop"
-                  className="absolute inset-0 z-[75] bg-black/75"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  transition={{ duration: 0.35 }}
-                />
-              )}
-            </AnimatePresence>
-
-            {/* Side card walkthrough — same component as home page, card variant */}
+            {/* Fullscreen walkthrough — better visibility than the corner card variant */}
             <FirstTimeIntroOverlay
-              variant="card"
+              variant="fullscreen"
               open={showIntroCard}
               onClose={() => setShowIntroCard(false)}
             />
@@ -774,7 +834,8 @@ export default function InstallationPage() {
             onClose={closeRecord}
             disableBodyScroll
             wide
-            wideWidth={900}
+            wideWidth={recordFullScreen ? Math.max(900, viewportWidth - 32) : 900}
+            onFullScreen={() => setRecordFullScreen((v) => !v)}
           >
             <RecordingInterface
               item={{

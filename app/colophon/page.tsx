@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import ViewportScrollFades from "@/components/ViewportScrollFades";
 
-const IDLE_MS = 2 * 60 * 1000;
+const IDLE_MS = 5 * 60 * 1000;
 
 function ColophonContent() {
   const searchParams = useSearchParams();
